@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WidgetBoard</title>
+  <link rel="stylesheet" href="default-theme.css" />
+  <style id="user-theme"></style>
+  <link rel="stylesheet" href="base.css" />
+</head>
+<body>
+  <div id="board"></div>
+
+  <!-- edit-mode bar -->
+  <div id="editbar" data-hit hidden>
+    <span data-i18n="edit.hint"></span>
+    <button id="edit-done" data-i18n="edit.done"></button>
+  </div>
+
+  <!-- theme panel -->
+  <div id="theme-panel" data-hit hidden>
+    <h3 data-i18n="theme.title"></h3>
+    <label><span data-i18n="theme.surface"></span> <input type="color" data-var="--c1" /></label>
+    <label><span data-i18n="theme.accent"></span> <input type="color" data-var="--c2" /></label>
+    <label><span data-i18n="theme.text"></span> <input type="color" data-var="--c3" /></label>
+    <label><span data-i18n="font.family"></span> <input id="theme-font" list="font-list" /></label>
+    <label><span data-i18n="font.size"></span> <input type="range" min="10" max="24" data-var="--font-size" data-unit="px" /></label>
+    <label><span data-i18n="theme.radius"></span> <input type="range" min="0" max="32" data-var="--radius" data-unit="px" /></label>
+    <label><span data-i18n="theme.outline"></span> <input type="range" min="0" max="6" data-var="--line-width" data-unit="px" /></label>
+    <label><span data-i18n="theme.opacity"></span> <input type="range" min="0" max="1" step="0.02" data-var="--widget-opacity" /></label>
+    <label><span data-i18n="theme.cell"></span> <input type="range" min="48" max="160" step="4" data-var="--cell" data-unit="px" /></label>
+    <div class="ai">
+      <button id="theme-ai-copy" data-i18n="ai.copy"></button>
+      <button id="theme-ai-paste" class="primary" data-i18n="ai.paste"></button>
+      <button id="theme-undo" data-i18n="ai.undo" hidden></button>
+    </div>
+    <div class="row">
+      <button id="theme-file" data-i18n="theme.open_file"></button>
+      <button id="theme-close" data-i18n="theme.close"></button>
+    </div>
+  </div>
+
+  <!-- paste a theme from an AI -->
+  <div id="paste-panel" data-hit hidden>
+    <h3 data-i18n="ai.paste_title"></h3>
+    <p data-i18n="ai.paste_help"></p>
+    <textarea id="paste-text" spellcheck="false"></textarea>
+    <div id="paste-result"></div>
+    <div class="row">
+      <button id="paste-cancel" data-i18n="theme.close"></button>
+      <button id="paste-apply" class="primary" data-i18n="ai.apply"></button>
+    </div>
+  </div>
+
+  <!-- per-widget font panel (right-click → 글꼴) -->
+  <div id="font-panel" data-hit hidden role="dialog" aria-labelledby="fp-title">
+    <h3 id="fp-title" data-i18n="look.title"></h3>
+    <label><span data-i18n="font.family"></span> <input id="fp-family" list="font-list" /></label>
+    <label><span data-i18n="font.size"></span> <span><input id="fp-size" type="range" min="9" max="36" /> <output id="fp-size-out"></output></span></label>
+    <p class="sub" data-i18n="look.colors"></p>
+    <label data-col="c1"><span data-i18n="theme.surface"></span> <span><input type="color" /> <button class="mini" data-i18n-title="look.reset_one">↺</button></span></label>
+    <label data-col="c2"><span data-i18n="theme.accent"></span> <span><input type="color" /> <button class="mini" data-i18n-title="look.reset_one">↺</button></span></label>
+    <label data-col="c3"><span data-i18n="theme.text"></span> <span><input type="color" /> <button class="mini" data-i18n-title="look.reset_one">↺</button></span></label>
+    <label data-col="opacity"><span data-i18n="theme.opacity"></span> <span><input type="range" min="0" max="1" step="0.05" /> <button class="mini" data-i18n-title="look.reset_one">↺</button></span></label>
+    <p class="sub" data-i18n="look.frame"></p>
+    <label><span data-i18n="look.frame_kind"></span>
+      <select id="fp-frame">
+        <option value="" data-i18n="look.frame.default"></option>
+        <option value="none" data-i18n="look.frame.none"></option>
+        <option value="corners" data-i18n="look.frame.corners"></option>
+        <option value="double" data-i18n="look.frame.double"></option>
+        <option value="stitch" data-i18n="look.frame.stitch"></option>
+        <option value="dots" data-i18n="look.frame.dots"></option>
+        <option value="ornate" data-i18n="look.frame.ornate"></option>
+        <option value="pixel" data-i18n="look.frame.pixel"></option>
+        <option value="tape" data-i18n="look.frame.tape"></option>
+        <option value="custom" data-i18n="look.frame.custom"></option>
+      </select></label>
+    <label data-col="frame"><span data-i18n="look.frame_color"></span> <span><input type="color" /> <button class="mini" data-i18n-title="look.reset_one">↺</button></span></label>
+    <button id="fp-svg" data-i18n="look.svg"></button>
+    <div class="row">
+      <button id="fp-reset" data-i18n="look.reset"></button>
+      <button id="fp-close" data-i18n="theme.close"></button>
+    </div>
+  </div>
+  <datalist id="font-list"></datalist>
+
+  <!-- settings: layout, behaviour, accessibility -->
+  <div id="settings-panel" data-hit hidden role="dialog" aria-labelledby="settings-title">
+    <h3 id="settings-title" data-i18n="set.title"></h3>
+    <fieldset>
+      <legend data-i18n="set.layout"></legend>
+      <label><span data-i18n="set.header"></span>
+        <select data-ui="header">
+          <option value="hover" data-i18n="set.header.hover"></option>
+          <option value="always" data-i18n="set.header.always"></option>
+          <option value="hidden" data-i18n="set.header.hidden"></option>
+        </select></label>
+      <label><span data-i18n="set.density"></span>
+        <select data-ui="density">
+          <option value="compact" data-i18n="set.density.compact"></option>
+          <option value="normal" data-i18n="set.density.normal"></option>
+          <option value="roomy" data-i18n="set.density.roomy"></option>
+        </select></label>
+      <label class="chk"><input type="checkbox" data-ui="lockLayout" /><span data-i18n="set.lock"></span></label>
+      <label><span data-i18n="set.frame"></span>
+        <select data-ui="frame">
+          <option value="none" data-i18n="look.frame.none"></option>
+          <option value="corners" data-i18n="look.frame.corners"></option>
+          <option value="double" data-i18n="look.frame.double"></option>
+          <option value="stitch" data-i18n="look.frame.stitch"></option>
+          <option value="dots" data-i18n="look.frame.dots"></option>
+          <option value="ornate" data-i18n="look.frame.ornate"></option>
+          <option value="pixel" data-i18n="look.frame.pixel"></option>
+          <option value="tape" data-i18n="look.frame.tape"></option>
+        </select></label>
+      <button id="settings-layouts" data-i18n="lay.open"></button>
+    </fieldset>
+    <fieldset>
+      <legend data-i18n="set.behavior"></legend>
+      <label><span data-i18n="set.week"></span>
+        <select data-ui="weekStart">
+          <option value="default" data-i18n="set.week.default"></option>
+          <option value="sun" data-i18n="set.week.sun"></option>
+          <option value="mon" data-i18n="set.week.mon"></option>
+        </select></label>
+      <label class="chk"><input type="checkbox" id="set-autostart" /><span data-i18n="set.autostart"></span></label>
+      <label class="chk"><input type="checkbox" data-ui="timerSound" /><span data-i18n="set.sound"></span></label>
+      <label><span data-i18n="set.volume"></span><input type="range" min="0" max="100" step="5" data-ui="timerVolume" /></label>
+      <label><span data-i18n="set.rings"></span>
+        <select data-ui="timerRings"><option value="1">1</option><option value="3">3</option><option value="10">10</option><option value="30">30</option></select></label>
+      <h4 data-i18n="upd.title"></h4>
+      <label><span data-i18n="upd.check"></span>
+        <select id="set-update">
+          <option value="weekly" data-i18n="upd.weekly"></option>
+          <option value="daily" data-i18n="upd.daily"></option>
+          <option value="off" data-i18n="set.off"></option>
+        </select></label>
+      <p class="hint" id="update-status" aria-live="polite"></p>
+      <div class="row">
+        <button id="update-now" data-i18n="upd.now"></button>
+        <button id="update-apply" class="primary" hidden></button>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend data-i18n="set.access"></legend>
+      <p class="hint" data-i18n="set.access_note"></p>
+
+      <h4 data-i18n="set.g.motor"></h4>
+      <label><span data-i18n="set.hotkey"></span>
+        <select data-ui="hotkey">
+          <option value="" data-i18n="set.off"></option>
+          <option value="Ctrl+Alt+W">Ctrl + Alt + W</option>
+          <option value="Ctrl+Alt+Space">Ctrl + Alt + Space</option>
+          <option value="Ctrl+Shift+F12">Ctrl + Shift + F12</option>
+        </select></label>
+      <label><span data-i18n="set.dwell"></span>
+        <select data-ui="dwellMs">
+          <option value="0" data-i18n="set.off"></option>
+          <option value="400" data-i18n="set.dwell.short"></option>
+          <option value="800" data-i18n="set.dwell.mid"></option>
+          <option value="1500" data-i18n="set.dwell.long"></option>
+        </select></label>
+      <label class="chk"><input type="checkbox" data-ui="clickDrag" /><span data-i18n="set.clickdrag"></span></label>
+      <label class="chk"><input type="checkbox" data-ui="bigTargets" /><span data-i18n="set.big"></span></label>
+      <label class="chk"><input type="checkbox" data-ui="showControls" /><span data-i18n="set.controls"></span></label>
+
+      <h4 data-i18n="set.g.vision"></h4>
+      <label><span data-i18n="set.zoom"></span>
+        <select data-ui="zoom">
+          <option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option>
+          <option value="1.75">175%</option><option value="2">200%</option>
+        </select></label>
+      <label class="chk"><input type="checkbox" data-ui="highContrast" /><span data-i18n="set.hc"></span></label>
+      <label class="chk"><input type="checkbox" data-ui="wideText" /><span data-i18n="set.wide"></span></label>
+      <button id="settings-overview" data-i18n="set.overview"></button>
+
+      <h4 data-i18n="set.g.hearing"></h4>
+      <label class="chk"><input type="checkbox" data-ui="flashAlert" /><span data-i18n="set.flash"></span></label>
+      <label class="chk"><input type="checkbox" data-ui="notifyAlert" /><span data-i18n="set.notify"></span></label>
+      <label class="chk"><input type="checkbox" data-ui="soundCaptions" /><span data-i18n="set.captions"></span></label>
+
+      <h4 data-i18n="set.g.color"></h4>
+      <label class="chk"><input type="checkbox" data-ui="cvd" /><span data-i18n="set.cvd"></span></label>
+
+      <h4 data-i18n="set.g.cognitive"></h4>
+      <label class="chk"><input type="checkbox" data-ui="showHints" /><span data-i18n="set.hints"></span></label>
+      <label><span data-i18n="set.readable"></span>
+        <select data-ui="readableFont">
+          <option value="none" data-i18n="set.readable.none"></option>
+          <option value="atkinson">Atkinson Hyperlegible</option>
+          <option value="lexend">Lexend</option>
+          <option value="opendyslexic">OpenDyslexic</option>
+        </select></label>
+      <label class="chk"><input type="checkbox" data-ui="shortLines" /><span data-i18n="set.short"></span></label>
+      <label><span data-i18n="set.remind"></span><input type="time" data-ui="reminderTime" /></label>
+      <p class="hint" data-i18n="set.keys"></p>
+    </fieldset>
+    <div class="row">
+      <button id="settings-file" data-i18n="set.open_file"></button>
+      <button id="settings-close" data-i18n="theme.close"></button>
+    </div>
+  </div>
+
+  <!-- layouts: 업무용 / 공부용 presets + saved arrangements -->
+  <div id="layouts-panel" data-hit hidden role="dialog" aria-labelledby="lay-title">
+    <h3 id="lay-title" data-i18n="lay.title"></h3>
+    <p class="hint" data-i18n="lay.help"></p>
+    <p class="sub" data-i18n="lay.builtin"></p>
+    <div class="presets">
+      <button data-preset="work"><b data-i18n="lay.work"></b><small data-i18n="lay.work_desc"></small></button>
+      <button data-preset="study"><b data-i18n="lay.study"></b><small data-i18n="lay.study_desc"></small></button>
+    </div>
+    <p class="sub" data-i18n="lay.saved"></p>
+    <ul id="layout-list"></ul>
+    <div class="row"><input id="layout-name" data-i18n-placeholder="lay.name" maxlength="40" /><button id="layout-save" data-i18n="lay.save"></button></div>
+    <div class="row">
+      <button id="layout-undo" data-i18n="lay.undo" hidden></button>
+      <button id="layouts-close" data-i18n="theme.close"></button>
+    </div>
+  </div>
+
+  <!-- text overview of every widget (screen readers, low vision) -->
+  <div id="overview-panel" data-hit hidden role="dialog" aria-labelledby="ov-title">
+    <h3 id="ov-title" data-i18n="ov.title"></h3>
+    <ul id="overview-list"></ul>
+    <div class="row"><button id="overview-close" data-i18n="theme.close"></button></div>
+  </div>
+
+  <div id="focusbar" data-hit hidden><span data-i18n="focus.on"></span> <button id="focus-exit" data-i18n="focus.exit"></button></div>
+  <div id="kbdbar" data-hit hidden role="status"><span data-i18n="kbd.on"></span></div>
+  <div id="flash" hidden aria-hidden="true"><b></b></div>
+
+  <div id="toast" data-hit role="status" aria-live="polite" hidden></div>
+  <div id="sr" class="sr-only" role="status" aria-live="polite"></div>
+  <input type="file" id="file-picker" accept="image/*" hidden />
+  <script type="module" src="app.js"></script>
+</body>
+</html>

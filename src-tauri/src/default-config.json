@@ -1,0 +1,35 @@
+{
+  "_help": "WidgetBoard 설정. 저장하면 바로 적용됩니다. timer.presets: time은 분 단위 숫자(\"25\") 또는 \"1:30\"(1분 30초), \"1:00:00\"(1시간). label이 비어 있으면 자동으로 표시합니다. holidays.country: \"KR\" 또는 \"none\". holidays.add: {\"2026-06-03\": \"임시공휴일\"} 처럼 날짜를 추가, holidays.remove: [\"2026-05-01\"] 처럼 제외. checklist.weekStart: \"mon\"(월요일 시작) 또는 \"sun\". update.check: \"weekly\"(매주, 기본) · \"daily\"(매일) · \"off\"(끔). update.url: 새 버전 정보(latest.json) 주소 — 비워 두면 앱에 들어 있는 주소를 씁니다.",
+  "update": {
+    "check": "weekly",
+    "url": ""
+  },
+  "timer": {
+    "presets": [
+      {
+        "label": "",
+        "time": "1"
+      },
+      {
+        "label": "",
+        "time": "5"
+      },
+      {
+        "label": "",
+        "time": "10"
+      },
+      {
+        "label": "",
+        "time": "25"
+      }
+    ]
+  },
+  "holidays": {
+    "country": "KR",
+    "add": {},
+    "remove": []
+  },
+  "checklist": {
+    "weekStart": "mon"
+  }
+}
