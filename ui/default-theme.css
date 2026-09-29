@@ -1,0 +1,38 @@
+/* WidgetBoard theme — edit freely, paste one from an AI, or share it. Saved changes apply instantly.
+   Contract (v1): only CSS custom properties, in :root { } and optional [data-widget="type"] { } blocks.
+   Widget types: checklist calendar dday diary memo nowplaying timer stopwatch image */
+:root {
+  /* the three main colours */
+  --c1: #1e1f22;            /* surface (widget background) */
+  --c2: #5865f2;            /* accent  (buttons, highlights, progress) */
+  --c3: #f2f3f5;            /* text */
+  --on-accent: #ffffff;     /* text/icons drawn ON the accent colour */
+
+  /* meaning colours */
+  --hol: color-mix(in srgb, #ff5c6c 85%, var(--c3));   /* Sundays & holidays */
+  --sat: color-mix(in srgb, #5c9dff 80%, var(--c3));   /* Saturdays */
+  --danger: #d9534f;        /* destructive confirm, invalid drop */
+
+  /* lines / outlines */
+  --line-width: 1px;
+  --line-style: solid;      /* solid | dashed | dotted | double */
+  --line-color: color-mix(in srgb, var(--c2) 55%, transparent);
+
+  /* shape & depth */
+  --radius: 14px;
+  --widget-opacity: 0.82;   /* 0 = see-through, 1 = solid */
+  --shadow: none;           /* e.g. 0 6px 20px rgb(0 0 0 / .35) */
+  /* --widget-bg: linear-gradient(...);   optional: replaces the plain surface (gradients allowed) */
+  /* --frame-color: #c9a227;              optional: colour of frame decorations (default = accent) */
+
+  /* type */
+  --font: "Segoe UI Variable", "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+  --font-size: 14px;        /* base text size; widget text scales from it */
+
+  /* grid (changing these moves widgets) */
+  --cell: 80px;
+  --gap: 10px;
+}
+
+/* example per-widget override */
+[data-widget="timer"] { --radius: 18px; }
