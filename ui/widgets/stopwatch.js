@@ -2,15 +2,20 @@
 // Stores start timestamps (not ticks): it stays exact through sleep, and keeps running while the app is closed.
 //   session — this run (reset with ↺ when stopped); laps belong to the session
 //   total   — every second ever counted; only "reset total" (click twice) clears it
-const p2 = (n) => String(n).padStart(2, '0');
+const p2 = (n) => String(n).padStart(2, "0");
 function fmtSession(ms) {
   const t = Math.floor(ms / 100); // tenths
-  const h = Math.floor(t / 36000), m = Math.floor((t % 36000) / 600), s = Math.floor((t % 600) / 10), d = t % 10;
+  const h = Math.floor(t / 36000),
+    m = Math.floor((t % 36000) / 600),
+    s = Math.floor((t % 600) / 10),
+    d = t % 10;
   return h ? `${h}:${p2(m)}:${p2(s)}` : `${p2(m)}:${p2(s)}.${d}`;
 }
 function fmtTotal(ms) {
   const t = Math.floor(ms / 1000);
-  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+  const h = Math.floor(t / 3600),
+    m = Math.floor((t % 3600) / 60),
+    s = t % 60;
   return `${h}:${p2(m)}:${p2(s)}`;
 }
 
@@ -45,14 +50,17 @@ export default {
     const num = (v) => (Number.isFinite(+v) && +v >= 0 ? +v : 0);
     s.elapsed = num(s.elapsed);
     s.total = num(s.total);
-    s.startedAt = s.startedAt && num(s.startedAt) <= Date.now() ? num(s.startedAt) : null;
-    s.laps = Array.isArray(s.laps) ? s.laps.filter((l) => l && Number.isFinite(l.at)).slice(0, 99) : [];
+    s.startedAt =
+      s.startedAt && num(s.startedAt) <= Date.now() ? num(s.startedAt) : null;
+    s.laps = Array.isArray(s.laps)
+      ? s.laps.filter((l) => l && Number.isFinite(l.at)).slice(0, 99)
+      : [];
 
     root.innerHTML = `
       <div class="sw">
         <div class="sw-main"></div>
-        <div class="sw-total" title="${t('sw.total_hint')}">${t('sw.total')} <b></b>
-          <button data-a="reset-total" title="${t('sw.reset_total')}">↺</button></div>
+        <div class="sw-total" title="${t("sw.total_hint")}">${t("sw.total")} <b></b>
+          <button data-a="reset-total" title="${t("sw.reset_total")}">↺</button></div>
         <div class="sw-ctrl">
           <button class="primary" data-a="go"></button>
           <button data-a="lap"></button>
@@ -67,26 +75,29 @@ export default {
     let confirmTimer = null;
 
     function render() {
-      const main = q('.sw-main');
+      const main = q(".sw-main");
       main.textContent = fmtSession(session());
-      main.style.setProperty('--len', Math.max(7, main.textContent.length));
-      q('.sw-total b').textContent = fmtTotal(total());
-      box.classList.toggle('running', !!s.startedAt);
-      const go = q('[data-a=go]');
-      const k = s.startedAt ? 'sw.stop' : session() ? 'sw.resume' : 'sw.start';
-      go.innerHTML = `<span class="ico">${s.startedAt ? '❚❚' : '▶'}</span><span class="lbl">${t(k)}</span>`;
+      main.style.setProperty("--len", Math.max(7, main.textContent.length));
+      q(".sw-total b").textContent = fmtTotal(total());
+      box.classList.toggle("running", !!s.startedAt);
+      const go = q("[data-a=go]");
+      const k = s.startedAt ? "sw.stop" : session() ? "sw.resume" : "sw.start";
+      go.innerHTML = `<span class="ico">${s.startedAt ? "❚❚" : "▶"}</span><span class="lbl">${t(k)}</span>`;
       go.title = t(k);
-      const lap = q('[data-a=lap]');
-      const lk = s.startedAt ? 'sw.lap' : 'sw.reset';
-      lap.innerHTML = `<span class="ico">${s.startedAt ? '⚑' : '↺'}</span><span class="lbl">${t(lk)}</span>`;
+      const lap = q("[data-a=lap]");
+      const lk = s.startedAt ? "sw.lap" : "sw.reset";
+      lap.innerHTML = `<span class="ico">${s.startedAt ? "⚑" : "↺"}</span><span class="lbl">${t(lk)}</span>`;
       lap.title = t(lk);
       lap.disabled = !s.startedAt && !session();
     }
     function renderLaps() {
-      q('.sw-laps').hidden = !s.laps.length; // keeps the clock centred until there are laps
-      q('.sw-laps').innerHTML = s.laps
-        .map((l) => `<div><span>#${l.n}</span><span>+${fmtSession(l.split)}</span><span>${fmtSession(l.at)}</span></div>`)
-        .join('');
+      q(".sw-laps").hidden = !s.laps.length; // keeps the clock centred until there are laps
+      q(".sw-laps").innerHTML = s.laps
+        .map(
+          (l) =>
+            `<div><span>#${l.n}</span><span>+${fmtSession(l.split)}</span><span>${fmtSession(l.at)}</span></div>`,
+        )
+        .join("");
     }
 
     let tick;
@@ -110,13 +121,17 @@ export default {
       render();
     }
 
-    box.addEventListener('click', (e) => {
-      const a = e.target.closest('[data-a]')?.dataset.a;
-      if (a === 'go') s.startedAt ? stop() : start();
-      if (a === 'lap') {
+    box.addEventListener("click", (e) => {
+      const a = e.target.closest("[data-a]")?.dataset.a;
+      if (a === "go") s.startedAt ? stop() : start();
+      if (a === "lap") {
         if (s.startedAt) {
           const at = session();
-          s.laps.unshift({ n: (s.laps[0]?.n ?? 0) + 1, at, split: at - (s.laps[0]?.at ?? 0) });
+          s.laps.unshift({
+            n: (s.laps[0]?.n ?? 0) + 1,
+            at,
+            split: at - (s.laps[0]?.at ?? 0),
+          });
           s.laps = s.laps.slice(0, 99);
         } else {
           s.elapsed = 0;
@@ -126,23 +141,23 @@ export default {
         renderLaps();
         render();
       }
-      if (a === 'reset-total') {
+      if (a === "reset-total") {
         // two clicks within 3 s: the total can represent months of counting
-        const btn = e.target.closest('button');
+        const btn = e.target.closest("button");
         if (!confirmTimer) {
-          btn.classList.add('confirm');
-          btn.textContent = t('sw.sure');
+          btn.classList.add("confirm");
+          btn.textContent = t("sw.sure");
           confirmTimer = setTimeout(() => {
             confirmTimer = null;
-            btn.classList.remove('confirm');
-            btn.textContent = '↺';
+            btn.classList.remove("confirm");
+            btn.textContent = "↺";
           }, 3000);
           return;
         }
         clearTimeout(confirmTimer);
         confirmTimer = null;
-        btn.classList.remove('confirm');
-        btn.textContent = '↺';
+        btn.classList.remove("confirm");
+        btn.textContent = "↺";
         s.total = 0;
         if (s.startedAt) {
           // keep the current run going, but count the total from now
@@ -160,7 +175,10 @@ export default {
     return {
       destroy: () => (clearInterval(tick), clearTimeout(confirmTimer)),
       summary: () =>
-        t(s.startedAt ? 'sum.sw_running' : 'sum.sw_stopped', { now: fmtTotal(session()), total: fmtTotal(total()) }),
+        t(s.startedAt ? "sum.sw_running" : "sum.sw_stopped", {
+          now: fmtTotal(session()),
+          total: fmtTotal(total()),
+        }),
     };
   },
 };

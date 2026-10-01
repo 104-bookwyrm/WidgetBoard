@@ -1,7 +1,7 @@
 // Diary: one page per day (diary/YYYY-MM-DD.md). ‹ › flick between days that have pages
 // (› ends at today); click the date to jump anywhere. Arrow keys stay with the text cursor.
 // A horizontal touchpad swipe over the widget also flicks pages.
-import { ymd, parseYmd } from '../util.js';
+import { ymd, parseYmd } from "../util.js";
 
 export default {
   size: { w: 4, h: 4 },
@@ -30,19 +30,19 @@ export default {
     root.innerHTML = `
       <div class="dy">
         <div class="dy-head">
-          <button data-a="prev" title="${t('diary.prev')}">‹</button>
-          <button class="dy-date" data-a="pick" title="${t('diary.pick')}"></button>
-          <button data-a="next" title="${t('diary.next')}">›</button>
-          <button data-a="today">${t('diary.today')}</button>
-          <input type="date" class="dy-picker" tabindex="-1" aria-hidden="true" aria-label="${t('diary.pick')}">
+          <button data-a="prev" title="${t("diary.prev")}">‹</button>
+          <button class="dy-date" data-a="pick" title="${t("diary.pick")}"></button>
+          <button data-a="next" title="${t("diary.next")}">›</button>
+          <button data-a="today">${t("diary.today")}</button>
+          <input type="date" class="dy-picker" tabindex="-1" aria-hidden="true" aria-label="${t("diary.pick")}">
         </div>
-        <textarea class="dy-text" spellcheck="false" placeholder="${t('diary.placeholder')}"></textarea>
+        <textarea class="dy-text" spellcheck="false" placeholder="${t("diary.placeholder")}"></textarea>
         <div class="dy-foot"><span class="dy-status"></span><span class="dy-count"></span></div>
       </div>`;
     const box = root.firstElementChild;
     const q = (c) => box.querySelector(c);
-    const ta = q('.dy-text');
-    const picker = q('.dy-picker');
+    const ta = q(".dy-text");
+    const picker = q(".dy-picker");
 
     let date = ymd();
     let dates = [];
@@ -50,17 +50,23 @@ export default {
     let saveTimer;
 
     const prevDate = () => dates.filter((d) => d < date).at(-1) ?? null;
-    const nextDate = () => dates.find((d) => d > date) ?? (date < ymd() ? ymd() : null);
+    const nextDate = () =>
+      dates.find((d) => d > date) ?? (date < ymd() ? ymd() : null);
 
     function renderHead() {
-      const label = new Intl.DateTimeFormat(lang, { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' }).format(parseYmd(date));
-      q('.dy-date').textContent = label;
-      q('[data-a=prev]').disabled = !prevDate();
-      q('[data-a=next]').disabled = !nextDate();
-      q('[data-a=today]').disabled = date === ymd();
-      q('.dy-count').textContent = t('diary.chars', { n: ta.value.length });
+      const label = new Intl.DateTimeFormat(lang, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        weekday: "short",
+      }).format(parseYmd(date));
+      q(".dy-date").textContent = label;
+      q("[data-a=prev]").disabled = !prevDate();
+      q("[data-a=next]").disabled = !nextDate();
+      q("[data-a=today]").disabled = date === ymd();
+      q(".dy-count").textContent = t("diary.chars", { n: ta.value.length });
     }
-    const status = (k) => (q('.dy-status').textContent = k ? t(k) : '');
+    const status = (k) => (q(".dy-status").textContent = k ? t(k) : "");
 
     async function flush() {
       if (!dirty) return;
@@ -71,13 +77,13 @@ export default {
         await api.diary.set(date, text);
       } catch {
         dirty = true; // keep the text; try again on the next edit / blur
-        status('diary.save_failed');
+        status("diary.save_failed");
         return;
       }
       const has = dates.includes(date);
       if (text.trim() && !has) dates = [...dates, date].sort();
       if (!text.trim() && has) dates = dates.filter((d) => d !== date);
-      status('diary.saved');
+      status("diary.saved");
       renderHead();
     }
     async function open(d, dir = 0) {
@@ -85,52 +91,73 @@ export default {
       await flush();
       date = d;
       ta.value = await api.diary.get(d);
-      status('');
+      status("");
       renderHead();
-      if (dir && !api.reduceMotion) ta.animate([{ transform: `translateX(${dir * 18}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 170, easing: 'ease-out' });
+      if (dir && !api.reduceMotion)
+        ta.animate(
+          [
+            { transform: `translateX(${dir * 18}px)`, opacity: 0 },
+            { transform: "none", opacity: 1 },
+          ],
+          { duration: 170, easing: "ease-out" },
+        );
     }
 
-    ta.addEventListener('input', () => {
+    ta.addEventListener("input", () => {
       dirty = true;
-      status('diary.saving');
-      q('.dy-count').textContent = t('diary.chars', { n: ta.value.length });
+      status("diary.saving");
+      q(".dy-count").textContent = t("diary.chars", { n: ta.value.length });
       clearTimeout(saveTimer);
       saveTimer = setTimeout(flush, 700);
     });
-    ta.addEventListener('blur', flush);
+    ta.addEventListener("blur", flush);
 
-    q('.dy-head').onclick = (e) => {
-      const a = e.target.closest('button')?.dataset.a;
-      if (a === 'prev') open(prevDate(), -1);
-      if (a === 'next') open(nextDate(), 1);
-      if (a === 'today') open(ymd(), 1);
-      if (a === 'pick') {
+    q(".dy-head").onclick = (e) => {
+      const a = e.target.closest("button")?.dataset.a;
+      if (a === "prev") open(prevDate(), -1);
+      if (a === "next") open(nextDate(), 1);
+      if (a === "today") open(ymd(), 1);
+      if (a === "pick") {
         picker.value = date;
-        try { picker.showPicker(); } catch { picker.focus(); }
+        try {
+          picker.showPicker();
+        } catch {
+          picker.focus();
+        }
       }
     };
-    picker.onchange = () => picker.value && open(picker.value, picker.value < date ? -1 : 1);
+    picker.onchange = () =>
+      picker.value && open(picker.value, picker.value < date ? -1 : 1);
 
     // horizontal touchpad swipe flicks pages
     let swipeLock = 0;
-    box.addEventListener('wheel', (e) => {
-      if (Math.abs(e.deltaX) < 25 || Math.abs(e.deltaX) < Math.abs(e.deltaY) * 1.5) return;
-      e.preventDefault();
-      if (Date.now() < swipeLock) return;
-      swipeLock = Date.now() + 600;
-      e.deltaX > 0 ? open(nextDate(), 1) : open(prevDate(), -1);
-    }, { passive: false });
+    box.addEventListener(
+      "wheel",
+      (e) => {
+        if (
+          Math.abs(e.deltaX) < 25 ||
+          Math.abs(e.deltaX) < Math.abs(e.deltaY) * 1.5
+        )
+          return;
+        e.preventDefault();
+        if (Date.now() < swipeLock) return;
+        swipeLock = Date.now() + 600;
+        e.deltaX > 0 ? open(nextDate(), 1) : open(prevDate(), -1);
+      },
+      { passive: false },
+    );
 
     // another diary widget (or monitor) changed a page
-    api.onStore('diary', async (p) => {
+    api.onStore("diary", async (p) => {
       dates = await api.diary.dates();
-      if (p.date === date && document.activeElement !== ta && !dirty) ta.value = await api.diary.get(date);
+      if (p.date === date && document.activeElement !== ta && !dirty)
+        ta.value = await api.diary.get(date);
       renderHead();
     });
 
     let day = ymd();
     const tick = setInterval(() => {
-      if (ymd() !== day) (day = ymd()), renderHead();
+      if (ymd() !== day) ((day = ymd()), renderHead());
     }, 60000);
 
     (async () => {
@@ -143,8 +170,11 @@ export default {
         flush();
       },
       summary: () => {
-        const txt = ta.value.trim().replace(/\s+/g, ' ');
-        return t('sum.diary', { date, n: txt.length }) + (txt ? ' — ' + txt.slice(0, 100) + (txt.length > 100 ? '…' : '') : '');
+        const txt = ta.value.trim().replace(/\s+/g, " ");
+        return (
+          t("sum.diary", { date, n: txt.length }) +
+          (txt ? " — " + txt.slice(0, 100) + (txt.length > 100 ? "…" : "") : "")
+        );
       },
     };
   },

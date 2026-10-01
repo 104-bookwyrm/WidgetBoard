@@ -5,15 +5,22 @@
 //  • 이번 달 (month)— monthly recurring tasks: tick once per month, unticked again on the 1st
 // Items are shared by every checklist widget (data/checklist.json); each widget remembers its own tab.
 // Week start: Monday by default, config.json → "checklist": { "weekStart": "sun" } for Sunday.
-import { esc, ymd, parseYmd, addDays, uid, deferWhileEditing } from '../util.js';
+import {
+  esc,
+  ymd,
+  parseYmd,
+  addDays,
+  uid,
+  deferWhileEditing,
+} from "../util.js";
 
-const TABS = ['today', 'week', 'month'];
-const REPEAT_OF_TAB = { week: 'weekly', month: 'monthly' };
+const TABS = ["today", "week", "month"];
+const REPEAT_OF_TAB = { week: "weekly", month: "monthly" };
 
 export default {
   size: { w: 3, h: 4 },
   min: { w: 2, h: 2 },
-  defaults: { sync: true, hideDone: false, tab: 'today' },
+  defaults: { sync: true, hideDone: false, tab: "today" },
   css: `
     .ck { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
       display: flex; flex-direction: column; gap: 6px; }
@@ -51,13 +58,13 @@ export default {
     const { t, lang } = api;
     s.sync = s.sync !== false;
     s.hideDone = !!s.hideDone;
-    if (!TABS.includes(s.tab)) s.tab = 'today';
+    if (!TABS.includes(s.tab)) s.tab = "today";
     let items = [];
     let events = [];
 
     root.innerHTML = `
       <div class="ck">
-        <div class="ck-tabs">${TABS.map((k) => `<button data-tab="${k}"></button>`).join('')}</div>
+        <div class="ck-tabs">${TABS.map((k) => `<button data-tab="${k}"></button>`).join("")}</div>
         <div class="ck-head">
           <span class="ck-date"></span><span class="ck-count"></span>
           <button class="ck-sync" data-a="sync">📅</button>
@@ -69,106 +76,150 @@ export default {
     const box = root.firstElementChild;
     const q = (c) => box.querySelector(c);
     const today = () => ymd();
-    const fmt = (opts, d) => new Intl.DateTimeFormat(lang, opts).format(parseYmd(d));
+    const fmt = (opts, d) =>
+      new Intl.DateTimeFormat(lang, opts).format(parseYmd(d));
 
     // ---- periods ----
-    const weekStart = () => ((api.config?.ui?.weekStart ?? api.config?.checklist?.weekStart) === 'sun' ? 0 : 1);
+    const weekStart = () =>
+      (api.config?.ui?.weekStart ?? api.config?.checklist?.weekStart) === "sun"
+        ? 0
+        : 1;
     function weekFirstDay(d) {
       const back = (parseYmd(d).getDay() - weekStart() + 7) % 7;
       return addDays(d, -back);
     }
     const periodKey = (repeat, d = today()) =>
-      repeat === 'daily' ? d : repeat === 'weekly' ? 'W' + weekFirstDay(d) : repeat === 'monthly' ? d.slice(0, 7) : null;
-    const isDone = (i) => (i.repeat ? (i.doneKeys || []).includes(periodKey(i.repeat)) : !!i.done);
+      repeat === "daily"
+        ? d
+        : repeat === "weekly"
+          ? "W" + weekFirstDay(d)
+          : repeat === "monthly"
+            ? d.slice(0, 7)
+            : null;
+    const isDone = (i) =>
+      i.repeat ? (i.doneKeys || []).includes(periodKey(i.repeat)) : !!i.done;
 
     /** Older files: `repeat: true` + `doneDates` meant daily. */
     function normalize(i) {
-      const it = { ...i, id: i.id || uid(), title: String(i.title).slice(0, 300) };
-      if (it.repeat === true) it.repeat = 'daily';
-      if (!['daily', 'weekly', 'monthly'].includes(it.repeat)) it.repeat = null;
-      if (it.repeat) it.doneKeys = Array.isArray(it.doneKeys) ? it.doneKeys : Array.isArray(it.doneDates) ? it.doneDates : [];
+      const it = {
+        ...i,
+        id: i.id || uid(),
+        title: String(i.title).slice(0, 300),
+      };
+      if (it.repeat === true) it.repeat = "daily";
+      if (!["daily", "weekly", "monthly"].includes(it.repeat)) it.repeat = null;
+      if (it.repeat)
+        it.doneKeys = Array.isArray(it.doneKeys)
+          ? it.doneKeys
+          : Array.isArray(it.doneDates)
+            ? it.doneDates
+            : [];
       delete it.doneDates;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(it.date || '')) it.date = today();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(it.date || "")) it.date = today();
       return it;
     }
 
     // ---- rows per tab ----
     function rowsFor(tab) {
       const d = today();
-      if (tab === 'today') {
+      if (tab === "today") {
         const cal = s.sync
-          ? events.filter((e) => e.date === d)
-              .sort((a, b) => (a.time ? 0 : 1) - (b.time ? 0 : 1) || (a.time || '').localeCompare(b.time || ''))
-              .map((e) => ({ kind: 'cal', item: e, done: !!e.done }))
+          ? events
+              .filter((e) => e.date === d)
+              .sort(
+                (a, b) =>
+                  (a.time ? 0 : 1) - (b.time ? 0 : 1) ||
+                  (a.time || "").localeCompare(b.time || ""),
+              )
+              .map((e) => ({ kind: "cal", item: e, done: !!e.done }))
           : [];
         const own = items
-          .filter((i) => i.repeat === 'daily' || (!i.repeat && (i.date === d || i.doneOn === d || (!i.done && i.date < d))))
-          .map((i) => ({ kind: 'own', item: i, done: isDone(i) }));
+          .filter(
+            (i) =>
+              i.repeat === "daily" ||
+              (!i.repeat &&
+                (i.date === d || i.doneOn === d || (!i.done && i.date < d))),
+          )
+          .map((i) => ({ kind: "own", item: i, done: isDone(i) }));
         return [...cal, ...own];
       }
-      return items.filter((i) => i.repeat === REPEAT_OF_TAB[tab]).map((i) => ({ kind: 'own', item: i, done: isDone(i) }));
+      return items
+        .filter((i) => i.repeat === REPEAT_OF_TAB[tab])
+        .map((i) => ({ kind: "own", item: i, done: isDone(i) }));
     }
     function periodLabel(tab) {
       const d = today();
-      if (tab === 'today') return fmt({ month: 'long', day: 'numeric', weekday: 'short' }, d);
-      if (tab === 'week') {
+      if (tab === "today")
+        return fmt({ month: "long", day: "numeric", weekday: "short" }, d);
+      if (tab === "week") {
         const a = weekFirstDay(d);
-        return `${fmt({ month: 'numeric', day: 'numeric' }, a)} – ${fmt({ month: 'numeric', day: 'numeric' }, addDays(a, 6))}`;
+        return `${fmt({ month: "numeric", day: "numeric" }, a)} – ${fmt({ month: "numeric", day: "numeric" }, addDays(a, 6))}`;
       }
-      return fmt({ year: 'numeric', month: 'long' }, d);
+      return fmt({ year: "numeric", month: "long" }, d);
     }
 
     function render() {
       const d = today();
-      for (const b of box.querySelectorAll('[data-tab]')) {
+      for (const b of box.querySelectorAll("[data-tab]")) {
         const r = rowsFor(b.dataset.tab);
         const n = r.filter((x) => x.done).length;
-        b.classList.toggle('on', b.dataset.tab === s.tab);
-        b.innerHTML = `${esc(t('ck.tab.' + b.dataset.tab))}${r.length ? ` <small>${n}/${r.length}</small>` : ''}`;
-        b.title = t('ck.tab_hint.' + b.dataset.tab);
+        b.classList.toggle("on", b.dataset.tab === s.tab);
+        b.innerHTML = `${esc(t("ck.tab." + b.dataset.tab))}${r.length ? ` <small>${n}/${r.length}</small>` : ""}`;
+        b.title = t("ck.tab_hint." + b.dataset.tab);
       }
       const rows = rowsFor(s.tab);
       const done = rows.filter((r) => r.done).length;
-      q('.ck-date').textContent = periodLabel(s.tab);
-      q('.ck-count').textContent = rows.length ? `${done}/${rows.length}` : '';
-      q('.ck-bar i').style.width = rows.length ? `${(done / rows.length) * 100}%` : '0';
-      const sync = q('.ck-sync');
-      sync.hidden = s.tab !== 'today';
-      sync.classList.toggle('on', s.sync);
-      sync.title = t(s.sync ? 'ck.sync_on' : 'ck.sync_off');
-      q('.ck-add').placeholder = t('ck.add.' + s.tab);
+      q(".ck-date").textContent = periodLabel(s.tab);
+      q(".ck-count").textContent = rows.length ? `${done}/${rows.length}` : "";
+      q(".ck-bar i").style.width = rows.length
+        ? `${(done / rows.length) * 100}%`
+        : "0";
+      const sync = q(".ck-sync");
+      sync.hidden = s.tab !== "today";
+      sync.classList.toggle("on", s.sync);
+      sync.title = t(s.sync ? "ck.sync_on" : "ck.sync_off");
+      q(".ck-add").placeholder = t("ck.add." + s.tab);
 
       const shown = s.hideDone ? rows.filter((r) => !r.done) : rows;
-      q('.ck-list').innerHTML =
-        shown.map(({ kind, item, done }) => {
-          if (kind === 'cal')
-            return `<div class="ck-row ck-cal ${done ? 'done' : ''}" data-cal="${esc(item.id)}" title="${esc(t('ck.from_calendar'))}">
-              <input type="checkbox" ${done ? 'checked' : ''}>
-              ${item.time ? `<span class="ck-time">${esc(item.time)}</span>` : ''}
+      q(".ck-list").innerHTML =
+        shown
+          .map(({ kind, item, done }) => {
+            if (kind === "cal")
+              return `<div class="ck-row ck-cal ${done ? "done" : ""}" data-cal="${esc(item.id)}" title="${esc(t("ck.from_calendar"))}">
+              <input type="checkbox" ${done ? "checked" : ""}>
+              ${item.time ? `<span class="ck-time">${esc(item.time)}</span>` : ""}
               <span class="ck-title">${esc(item.title)}</span></div>`;
-          const carried = !item.repeat && item.date < d;
-          const repeatBtn = s.tab === 'today'
-            ? `<button class="ck-btn ${item.repeat ? 'on' : ''}" data-a="repeat" title="${esc(t(item.repeat ? 'ck.repeat_off' : 'ck.repeat_on'))}">🔁</button>`
-            : '';
-          return `<div class="ck-row ${done ? 'done' : ''}" data-id="${esc(item.id)}">
-              <input type="checkbox" ${done ? 'checked' : ''}>
-              <span class="ck-title" title="${esc(item.title)} — ${esc(t('cal.edit_hint'))}">${esc(item.title)}</span>
-              ${carried ? `<span class="ck-meta" title="${esc(t('ck.carried'))}">↪ ${esc(fmt({ month: 'numeric', day: 'numeric' }, item.date))}</span>` : ''}
+            const carried = !item.repeat && item.date < d;
+            const repeatBtn =
+              s.tab === "today"
+                ? `<button class="ck-btn ${item.repeat ? "on" : ""}" data-a="repeat" title="${esc(t(item.repeat ? "ck.repeat_off" : "ck.repeat_on"))}">🔁</button>`
+                : "";
+            return `<div class="ck-row ${done ? "done" : ""}" data-id="${esc(item.id)}">
+              <input type="checkbox" ${done ? "checked" : ""}>
+              <span class="ck-title" title="${esc(item.title)} — ${esc(t("cal.edit_hint"))}">${esc(item.title)}</span>
+              ${carried ? `<span class="ck-meta" title="${esc(t("ck.carried"))}">↪ ${esc(fmt({ month: "numeric", day: "numeric" }, item.date))}</span>` : ""}
               ${repeatBtn}
-              <button class="ck-btn" data-a="del" title="${esc(t('dday.delete'))}">✕</button></div>`;
-        }).join('') +
-        (!rows.length ? `<div class="ck-empty">${esc(t('ck.empty.' + s.tab))}</div>` : '') +
-        (rows.length && done === rows.length ? `<div class="ck-alldone">${esc(t('ck.all_done.' + s.tab))}</div>` : '');
+              <button class="ck-btn" data-a="del" title="${esc(t("dday.delete"))}">✕</button></div>`;
+          })
+          .join("") +
+        (!rows.length
+          ? `<div class="ck-empty">${esc(t("ck.empty." + s.tab))}</div>`
+          : "") +
+        (rows.length && done === rows.length
+          ? `<div class="ck-alldone">${esc(t("ck.all_done." + s.tab))}</div>`
+          : "");
     }
 
     // ---- saving / interaction ----
-    const saveItems = () => api.store.set('checklist', items).catch(() => {});
-    const saveEvents = () => api.store.set('events', events).catch(() => {});
-    const own = (el) => items.find((i) => i.id === el.closest('[data-id]')?.dataset.id);
-    const cal = (el) => events.find((e) => e.id === el.closest('[data-cal]')?.dataset.cal);
+    const saveItems = () => api.store.set("checklist", items).catch(() => {});
+    const saveEvents = () => api.store.set("events", events).catch(() => {});
+    const own = (el) =>
+      items.find((i) => i.id === el.closest("[data-id]")?.dataset.id);
+    const cal = (el) =>
+      events.find((e) => e.id === el.closest("[data-cal]")?.dataset.cal);
 
-    box.addEventListener('change', (e) => {
-      if (e.target.type !== 'checkbox') return;
+    box.addEventListener("change", (e) => {
+      if (e.target.type !== "checkbox") return;
       const on = e.target.checked;
       const ev = cal(e.target);
       if (ev) {
@@ -190,27 +241,27 @@ export default {
       saveItems();
       render();
     });
-    box.addEventListener('click', (e) => {
-      const tab = e.target.closest('[data-tab]')?.dataset.tab;
+    box.addEventListener("click", (e) => {
+      const tab = e.target.closest("[data-tab]")?.dataset.tab;
       if (tab) {
         s.tab = tab;
         api.save();
         return render();
       }
-      const a = e.target.closest('[data-a]')?.dataset.a;
-      if (a === 'sync') {
+      const a = e.target.closest("[data-a]")?.dataset.a;
+      if (a === "sync") {
         s.sync = !s.sync;
         api.save();
         return render();
       }
       const it = own(e.target);
       if (!it) return;
-      if (a === 'del') {
+      if (a === "del") {
         items = items.filter((x) => x !== it);
         saveItems();
         render();
       }
-      if (a === 'repeat') {
+      if (a === "repeat") {
         // one-off <-> daily
         if (it.repeat) {
           it.done = isDone(it);
@@ -220,7 +271,7 @@ export default {
           delete it.doneKeys;
         } else {
           it.doneKeys = it.done ? [today()] : [];
-          it.repeat = 'daily';
+          it.repeat = "daily";
           delete it.done;
           delete it.doneOn;
         }
@@ -228,18 +279,18 @@ export default {
         render();
       }
     });
-    box.addEventListener('keydown', (e) => {
-      if (e.key !== 'F2') return;
-      const span = e.target.closest('.ck-row')?.querySelector('.ck-title');
+    box.addEventListener("keydown", (e) => {
+      if (e.key !== "F2") return;
+      const span = e.target.closest(".ck-row")?.querySelector(".ck-title");
       if (span) {
         e.preventDefault();
-        span.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+        span.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
       }
     });
-    box.addEventListener('dblclick', (e) => {
-      const span = e.target.closest('.ck-title');
+    box.addEventListener("dblclick", (e) => {
+      const span = e.target.closest(".ck-title");
       const it = span && own(span);
-      if (!it || span.querySelector('input')) return;
+      if (!it || span.querySelector("input")) return;
       span.innerHTML = `<input value="${esc(it.title)}">`;
       const inp = span.firstChild;
       inp.focus();
@@ -256,21 +307,25 @@ export default {
         render();
       };
       inp.onkeydown = (k) => {
-        if (k.key === 'Enter') commit(true);
-        if (k.key === 'Escape') {
+        if (k.key === "Enter") commit(true);
+        if (k.key === "Escape") {
           k.stopPropagation();
           commit(false);
         }
       };
       inp.onblur = () => commit(true);
     });
-    q('.ck-add').addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
+    q(".ck-add").addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
       const title = e.target.value.trim().slice(0, 300);
       if (!title) return;
       const repeat = REPEAT_OF_TAB[s.tab] ?? null;
-      items.push(repeat ? { id: uid(), title, date: today(), repeat, doneKeys: [] } : { id: uid(), title, date: today(), done: false, repeat: null });
-      e.target.value = '';
+      items.push(
+        repeat
+          ? { id: uid(), title, date: today(), repeat, doneKeys: [] }
+          : { id: uid(), title, date: today(), done: false, repeat: null },
+      );
+      e.target.value = "";
       saveItems();
       render();
     });
@@ -278,42 +333,61 @@ export default {
     // ---- data ----
     const renderLater = deferWhileEditing(box, render);
     async function loadItems() {
-      const d = await api.store.get('checklist').catch(() => null);
-      items = Array.isArray(d) ? d.filter((i) => i && typeof i === 'object' && typeof i.title === 'string').map(normalize) : [];
+      const d = await api.store.get("checklist").catch(() => null);
+      items = Array.isArray(d)
+        ? d
+            .filter(
+              (i) => i && typeof i === "object" && typeof i.title === "string",
+            )
+            .map(normalize)
+        : [];
       renderLater();
     }
     async function loadEvents() {
-      const d = await api.store.get('events').catch(() => null);
-      events = Array.isArray(d) ? d.filter((e) => e && typeof e.date === 'string') : [];
+      const d = await api.store.get("events").catch(() => null);
+      events = Array.isArray(d)
+        ? d.filter((e) => e && typeof e.date === "string")
+        : [];
       renderLater();
     }
-    api.onStore('checklist', loadItems);
-    api.onStore('events', loadEvents);
+    api.onStore("checklist", loadItems);
+    api.onStore("events", loadEvents);
     api.onConfig(renderLater); // week start may change
 
     let day = today();
     const tick = setInterval(() => {
-      if (today() !== day) (day = today()), renderLater(); // new day / week / month: recurring items untick
+      if (today() !== day) ((day = today()), renderLater()); // new day / week / month: recurring items untick
     }, 60000);
     render();
     loadItems();
     loadEvents();
 
-    const menuToggle = (k, on, off) => ({ text: t(s[k] ? on : off), action: () => ((s[k] = !s[k]), api.save(), render()) });
+    const menuToggle = (k, on, off) => ({
+      text: t(s[k] ? on : off),
+      action: () => ((s[k] = !s[k]), api.save(), render()),
+    });
     return {
       destroy: () => clearInterval(tick),
       summary: () => {
-        const r = rowsFor('today');
+        const r = rowsFor("today");
         const left = r.filter((x) => !x.done);
-        if (!r.length) return t('sum.ck_empty');
-        return t('sum.ck', { done: r.length - left.length, n: r.length }) +
-          (left.length ? ' — ' + left.slice(0, 6).map((x) => x.item.title).join(', ') : '');
+        if (!r.length) return t("sum.ck_empty");
+        return (
+          t("sum.ck", { done: r.length - left.length, n: r.length }) +
+          (left.length
+            ? " — " +
+              left
+                .slice(0, 6)
+                .map((x) => x.item.title)
+                .join(", ")
+            : "")
+        );
       },
       menu: () => [
-        menuToggle('sync', 'ck.menu_sync_off', 'ck.menu_sync_on'),
-        menuToggle('hideDone', 'ck.menu_show_done', 'ck.menu_hide_done'),
+        menuToggle("sync", "ck.menu_sync_off", "ck.menu_sync_on"),
+        menuToggle("hideDone", "ck.menu_show_done", "ck.menu_hide_done"),
         {
-          text: t('ck.menu_clear_done'),
+          text: t("ck.menu_clear_done"),
           action: () => {
             items = items.filter((i) => i.repeat || !i.done);
             saveItems();

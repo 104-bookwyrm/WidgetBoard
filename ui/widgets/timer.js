@@ -1,15 +1,17 @@
 // Timer widget. Stores the end timestamp (not ticks), so it stays correct across sleep/restart.
 const fmt = (ms) => {
   const t = Math.ceil(ms / 1000);
-  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-  const p = (n) => String(n).padStart(2, '0');
+  const h = Math.floor(t / 3600),
+    m = Math.floor((t % 3600) / 60),
+    s = t % 60;
+  const p = (n) => String(n).padStart(2, "0");
   return h ? `${h}:${p(m)}:${p(s)}` : `${p(m)}:${p(s)}`;
 };
 // "25" = 25 min, "1:30" = 1 min 30 s, "1:00:00" = 1 h
 const parse = (str) => {
   str = str.trim();
   if (/^\d+(\.\d+)?$/.test(str)) return parseFloat(str) * 60000 || null;
-  const parts = str.split(':').map(Number);
+  const parts = str.split(":").map(Number);
   if (!str || parts.some(isNaN)) return null;
   if (parts.length > 3 || parts.some((v) => v < 0)) return null;
   const ms = parts.reduce((acc, v) => acc * 60 + v, 0) * 1000;
@@ -24,7 +26,8 @@ function beep(volume = 0.6) {
     audio ??= new AudioContext();
     const t = audio.currentTime;
     for (const d of [0, 0.18, 0.36]) {
-      const o = audio.createOscillator(), g = audio.createGain();
+      const o = audio.createOscillator(),
+        g = audio.createGain();
       o.frequency.value = 880;
       g.gain.setValueAtTime(0.0001, t + d);
       g.gain.exponentialRampToValueAtTime(0.42 * volume, t + d + 0.01);
@@ -37,7 +40,7 @@ function beep(volume = 0.6) {
 }
 
 export default {
-  title: 'Timer',
+  title: "Timer",
   size: { w: 3, h: 2 },
   min: { w: 2, h: 2 },
   defaults: { duration: 300000, remaining: 300000, endAt: null },
@@ -68,17 +71,22 @@ export default {
     const { t } = api;
     root.innerHTML = `
       <div class="timer">
-        <div class="t-display" title="${t('timer.hint')}"></div>
+        <div class="t-display" title="${t("timer.hint")}"></div>
         <div class="t-presets"></div>
         <div class="t-cap" role="status" hidden></div>
-        <div class="t-ctrl"><button class="primary" data-a="go"></button><button data-a="reset" title="${t('timer.reset')}"><span class="ico">↺</span><span class="lbl">${t('timer.reset')}</span></button></div>
+        <div class="t-ctrl"><button class="primary" data-a="go"></button><button data-a="reset" title="${t("timer.reset")}"><span class="ico">↺</span><span class="lbl">${t("timer.reset")}</span></button></div>
       </div>`;
     const box = root.firstElementChild;
-    const disp = box.querySelector('.t-display');
-    const go = box.querySelector('[data-a=go]');
-    let tick, ringTimer, editing = false;
+    const disp = box.querySelector(".t-display");
+    const go = box.querySelector("[data-a=go]");
+    let tick,
+      ringTimer,
+      editing = false;
     const ui = () => api.config?.ui ?? {};
-    const volume = () => (ui().timerSound === false ? 0 : Math.min(Math.max((ui().timerVolume ?? 60) / 100, 0), 1));
+    const volume = () =>
+      ui().timerSound === false
+        ? 0
+        : Math.min(Math.max((ui().timerVolume ?? 60) / 100, 0), 1);
     const rings = () => Math.min(Math.max(ui().timerRings ?? 10, 1), 60);
 
     // repair odd saved values (hand-edited layout.json etc.)
@@ -86,16 +94,21 @@ export default {
     s.duration = Math.min(num(s.duration, 300000) || 300000, 99 * 3600000);
     s.remaining = Math.min(num(s.remaining, s.duration), s.duration);
     s.endAt = s.endAt ? num(s.endAt, null) : null;
-    const left = () => (s.endAt ? Math.max(0, s.endAt - Date.now()) : s.remaining);
+    const left = () =>
+      s.endAt ? Math.max(0, s.endAt - Date.now()) : s.remaining;
     function render() {
       if (!editing) {
         disp.textContent = fmt(left());
-        disp.style.setProperty('--len', Math.max(5, disp.textContent.length));
+        disp.style.setProperty("--len", Math.max(5, disp.textContent.length));
       }
-      const k = s.endAt ? 'timer.pause' : s.remaining > 0 && s.remaining < s.duration ? 'timer.resume' : 'timer.start';
-      go.innerHTML = `<span class="ico">${s.endAt ? '❚❚' : '▶'}</span><span class="lbl">${t(k)}</span>`;
+      const k = s.endAt
+        ? "timer.pause"
+        : s.remaining > 0 && s.remaining < s.duration
+          ? "timer.resume"
+          : "timer.start";
+      go.innerHTML = `<span class="ico">${s.endAt ? "❚❚" : "▶"}</span><span class="lbl">${t(k)}</span>`;
       go.title = t(k);
-      box.classList.toggle('running', !!s.endAt);
+      box.classList.toggle("running", !!s.endAt);
     }
     function run() {
       clearInterval(tick);
@@ -108,28 +121,33 @@ export default {
       s.remaining = 0;
       api.save();
       render();
-      box.classList.add('ringing');
+      box.classList.add("ringing");
       if (sound) {
-        api.alert?.(t('timer.done'), fmt(s.duration));
+        api.alert?.(t("timer.done"), fmt(s.duration));
         const ring = (n) => {
           beep(volume());
           caption(n);
         };
         let n = 0;
         ring(1);
-        ringTimer = setInterval(() => (++n >= rings() ? stopRing() : ring(n + 1)), 1500);
+        ringTimer = setInterval(
+          () => (++n >= rings() ? stopRing() : ring(n + 1)),
+          1500,
+        );
       }
     }
     // Sound captions (Settings → 청각): say on screen what the speaker is doing
-    const cap = box.querySelector('.t-cap');
+    const cap = box.querySelector(".t-cap");
     function caption(n) {
       if (!ui().soundCaptions) return (cap.hidden = true);
-      cap.textContent = volume() ? t('timer.caption', { n, total: rings() }) : t('timer.caption_muted');
+      cap.textContent = volume()
+        ? t("timer.caption", { n, total: rings() })
+        : t("timer.caption_muted");
       cap.hidden = false;
     }
     function stopRing() {
       clearInterval(ringTimer);
-      box.classList.remove('ringing');
+      box.classList.remove("ringing");
       cap.hidden = true;
     }
     function start() {
@@ -157,36 +175,52 @@ export default {
       render();
     }
 
-    box.addEventListener('pointerdown', stopRing);
+    box.addEventListener("pointerdown", stopRing);
     go.onclick = () => (s.endAt ? pause() : start());
-    box.querySelector('[data-a=reset]').onclick = () => setDuration(s.duration);
+    box.querySelector("[data-a=reset]").onclick = () => setDuration(s.duration);
     // Presets come from config.json (timer.presets: [{ label, time }]); label may be empty.
-    const DEFAULT_PRESETS = [{ time: '1' }, { time: '5' }, { time: '10' }, { time: '25' }];
-    const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const DEFAULT_PRESETS = [
+      { time: "1" },
+      { time: "5" },
+      { time: "10" },
+      { time: "25" },
+    ];
+    const esc = (x) =>
+      String(x).replace(
+        /[&<>"]/g,
+        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+      );
     function renderPresets() {
       const list = api.config?.timer?.presets;
-      box.querySelector('.t-presets').innerHTML = (Array.isArray(list) ? list : DEFAULT_PRESETS)
+      box.querySelector(".t-presets").innerHTML = (
+        Array.isArray(list) ? list : DEFAULT_PRESETS
+      )
         .map((p) => {
-          const ms = parse(String(p?.time ?? ''));
-          if (!ms) return '';
-          const label = p.label || (ms % 60000 === 0 ? t('timer.min', { n: ms / 60000 }) : fmt(ms));
+          const ms = parse(String(p?.time ?? ""));
+          if (!ms) return "";
+          const label =
+            p.label ||
+            (ms % 60000 === 0 ? t("timer.min", { n: ms / 60000 }) : fmt(ms));
           return `<button data-ms="${ms}">${esc(label)}</button>`;
         })
-        .join('');
+        .join("");
     }
     renderPresets();
     api.onConfig(renderPresets);
-    api.wheelScrollX?.(box.querySelector('.t-presets'));
-    box.querySelector('.t-presets').onclick = (e) => {
-      const ms = +e.target.closest('button')?.dataset.ms;
+    api.wheelScrollX?.(box.querySelector(".t-presets"));
+    box.querySelector(".t-presets").onclick = (e) => {
+      const ms = +e.target.closest("button")?.dataset.ms;
       if (ms) setDuration(ms);
     };
-    disp.addEventListener('wheel', (e) => {
+    disp.addEventListener("wheel", (e) => {
       if (s.endAt) return;
       e.preventDefault();
-      setDuration(Math.round(s.duration / 60000) * 60000 + (e.deltaY < 0 ? 60000 : -60000));
+      setDuration(
+        Math.round(s.duration / 60000) * 60000 +
+          (e.deltaY < 0 ? 60000 : -60000),
+      );
     });
-    disp.addEventListener('click', () => {
+    disp.addEventListener("click", () => {
       if (s.endAt || editing) return;
       editing = true;
       disp.innerHTML = `<input value="${fmt(s.remaining || s.duration)}">`;
@@ -199,11 +233,14 @@ export default {
         const ms = commit ? parse(inp.value) : null;
         ms ? setDuration(ms) : render();
       };
-      inp.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') done(true);
-        if (e.key === 'Escape') { e.stopPropagation(); done(false); }
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") done(true);
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          done(false);
+        }
       });
-      inp.addEventListener('blur', () => done(true));
+      inp.addEventListener("blur", () => done(true));
     });
 
     // Finished while the app was closed/asleep: show it, no sound.
@@ -211,12 +248,18 @@ export default {
     run();
     render();
     return {
-      destroy() { clearInterval(tick); clearInterval(ringTimer); },
+      destroy() {
+        clearInterval(tick);
+        clearInterval(ringTimer);
+      },
       summary: () =>
-        s.endAt ? t('sum.timer_running', { left: fmt(left()) })
-        : box.classList.contains('ringing') || s.remaining === 0 ? t('sum.timer_done')
-        : s.remaining < s.duration ? t('sum.timer_paused', { left: fmt(s.remaining) })
-        : t('sum.timer_idle', { dur: fmt(s.duration) }),
+        s.endAt
+          ? t("sum.timer_running", { left: fmt(left()) })
+          : box.classList.contains("ringing") || s.remaining === 0
+            ? t("sum.timer_done")
+            : s.remaining < s.duration
+              ? t("sum.timer_paused", { left: fmt(s.remaining) })
+              : t("sum.timer_idle", { dur: fmt(s.duration) }),
     };
   },
 };

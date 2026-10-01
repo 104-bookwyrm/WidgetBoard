@@ -11,8 +11,8 @@ async function fetchLocale(code) {
 }
 
 export async function loadLang(code) {
-  fallback = await fetchLocale('en');
-  strings = code === 'en' ? fallback : await fetchLocale(code);
+  fallback = await fetchLocale("en");
+  strings = code === "en" ? fallback : await fetchLocale(code);
   document.documentElement.lang = code;
   applyStatic();
 }
@@ -26,7 +26,10 @@ export function t(key, vars = {}) {
 
 /** Fill every element that has data-i18n="key". */
 export function applyStatic(root = document) {
-  for (const el of root.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
-  for (const el of root.querySelectorAll('[data-i18n-title]')) el.title = t(el.dataset.i18nTitle);
-  for (const el of root.querySelectorAll('[data-i18n-placeholder]')) el.placeholder = t(el.dataset.i18nPlaceholder);
+  for (const el of root.querySelectorAll("[data-i18n]"))
+    el.textContent = t(el.dataset.i18n);
+  for (const el of root.querySelectorAll("[data-i18n-title]"))
+    el.title = t(el.dataset.i18nTitle);
+  for (const el of root.querySelectorAll("[data-i18n-placeholder]"))
+    el.placeholder = t(el.dataset.i18nPlaceholder);
 }

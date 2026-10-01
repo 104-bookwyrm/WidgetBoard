@@ -1,20 +1,39 @@
 // Now Playing: whatever Windows' media controls report — YouTube in Chrome/Edge/Whale/Firefox, Spotify,
 // the Media Player app… Title, channel/artist, artwork, progress, and ⏮ ⏯ ⏭. Click the bar to jump.
 // ⇄ switches between sources when several are open (e.g. a YouTube tab and Spotify).
-const p2 = (n) => String(n).padStart(2, '0');
+const p2 = (n) => String(n).padStart(2, "0");
 const clock = (sec) => {
   sec = Math.max(0, Math.floor(sec));
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = sec % 60;
+  const h = Math.floor(sec / 3600),
+    m = Math.floor((sec % 3600) / 60),
+    x = sec % 60;
   return h ? `${h}:${p2(m)}:${p2(x)}` : `${m}:${p2(x)}`;
 };
 function sourceName(id) {
-  const s = String(id || '').toLowerCase();
-  const known = [['chrome', 'Chrome'], ['msedge', 'Edge'], ['whale', 'Whale'], ['firefox', 'Firefox'], ['opera', 'Opera'],
-    ['brave', 'Brave'], ['spotify', 'Spotify'], ['zunemusic', 'Media Player'], ['vlc', 'VLC'], ['melon', 'Melon'],
-    ['genie', 'genie'], ['bugs', 'Bugs'], ['flo', 'FLO'], ['youtube', 'YouTube']];
+  const s = String(id || "").toLowerCase();
+  const known = [
+    ["chrome", "Chrome"],
+    ["msedge", "Edge"],
+    ["whale", "Whale"],
+    ["firefox", "Firefox"],
+    ["opera", "Opera"],
+    ["brave", "Brave"],
+    ["spotify", "Spotify"],
+    ["zunemusic", "Media Player"],
+    ["vlc", "VLC"],
+    ["melon", "Melon"],
+    ["genie", "genie"],
+    ["bugs", "Bugs"],
+    ["flo", "FLO"],
+    ["youtube", "YouTube"],
+  ];
   const hit = known.find(([k]) => s.includes(k));
   if (hit) return hit[1];
-  return (String(id || '').split(/[\\\\/!]/).pop() || '').replace(/\.exe$/i, '');
+  return (
+    String(id || "")
+      .split(/[\\\\/!]/)
+      .pop() || ""
+  ).replace(/\.exe$/i, "");
 }
 
 export default {
@@ -74,9 +93,12 @@ export default {
     const position = () => {
       if (!m.duration) return 0;
       let p = m.position || 0;
-      if (m.status === 'playing') {
+      if (m.status === "playing") {
         // the player reports position "as of" updatedAt; extrapolate from there
-        const base = m.updatedAt > 0 && m.updatedAt <= Date.now() + 2000 ? m.updatedAt : receivedAt;
+        const base =
+          m.updatedAt > 0 && m.updatedAt <= Date.now() + 2000
+            ? m.updatedAt
+            : receivedAt;
         p += (Date.now() - base) / 1000;
       }
       return Math.min(Math.max(p, 0), m.duration);
@@ -85,67 +107,77 @@ export default {
     function build() {
       clearInterval(tick);
       if (!m.has) {
-        box.innerHTML = `<div class="np-empty">🎵 ${t('np.none')}<small>${t(m.unsupported ? 'np.unsupported' : 'np.hint')}</small></div>`;
+        box.innerHTML = `<div class="np-empty">🎵 ${t("np.none")}<small>${t(m.unsupported ? "np.unsupported" : "np.hint")}</small></div>`;
         return;
       }
       const src = sourceName(m.source);
-      const sub = [m.artist, src].filter(Boolean).join(' · ');
+      const sub = [m.artist, src].filter(Boolean).join(" · ");
       box.innerHTML = `
-        ${m.thumb ? `<div class="np-bg"></div>` : ''}
-        <div class="np-art">${m.thumb ? `<img alt="">` : '🎵'}</div>
+        ${m.thumb ? `<div class="np-bg"></div>` : ""}
+        <div class="np-art">${m.thumb ? `<img alt="">` : "🎵"}</div>
         <div class="np-info">
           <div class="np-title"></div>
           <div class="np-sub"></div>
-          ${m.duration ? `<div class="np-prog"><span class="np-cur"></span><div class="np-bar ${m.canSeek ? '' : 'noseek'}"><i></i></div><span>${clock(m.duration)}</span></div>` : ''}
+          ${m.duration ? `<div class="np-prog"><span class="np-cur"></span><div class="np-bar ${m.canSeek ? "" : "noseek"}"><i></i></div><span>${clock(m.duration)}</span></div>` : ""}
           <div class="np-ctrl">
-            <button data-a="prev" title="${t('np.prev')}" ${m.canPrev ? '' : 'disabled'}>⏮</button>
-            <button data-a="playpause" title="${t(m.status === 'playing' ? 'np.pause' : 'np.play')}" ${m.canPlayPause ? '' : 'disabled'}>${m.status === 'playing' ? '❚❚' : '▶'}</button>
-            <button data-a="next" title="${t('np.next')}" ${m.canNext ? '' : 'disabled'}>⏭</button>
-            ${m.sessions > 1 ? `<button data-a="cycle" title="${t('np.cycle', { n: m.sessions })}">⇄ ${m.sessions}</button>` : ''}
+            <button data-a="prev" title="${t("np.prev")}" ${m.canPrev ? "" : "disabled"}>⏮</button>
+            <button data-a="playpause" title="${t(m.status === "playing" ? "np.pause" : "np.play")}" ${m.canPlayPause ? "" : "disabled"}>${m.status === "playing" ? "❚❚" : "▶"}</button>
+            <button data-a="next" title="${t("np.next")}" ${m.canNext ? "" : "disabled"}>⏭</button>
+            ${m.sessions > 1 ? `<button data-a="cycle" title="${t("np.cycle", { n: m.sessions })}">⇄ ${m.sessions}</button>` : ""}
           </div>
         </div>`;
-      const title = box.querySelector('.np-title');
-      title.textContent = m.title || t('np.untitled');
-      title.title = [m.title, m.artist, m.album, src].filter(Boolean).join('\n');
-      box.querySelector('.np-sub').textContent = sub;
+      const title = box.querySelector(".np-title");
+      title.textContent = m.title || t("np.untitled");
+      title.title = [m.title, m.artist, m.album, src]
+        .filter(Boolean)
+        .join("\n");
+      box.querySelector(".np-sub").textContent = sub;
       if (m.thumb) {
-        const img = box.querySelector('.np-art img');
+        const img = box.querySelector(".np-art img");
         img.onload = () => {
           // keep the artwork's own shape (square album art, 16:9 video thumbnails)
           const ar = img.naturalWidth / img.naturalHeight;
-          box.querySelector('.np-art').style.setProperty('--ar', Math.min(Math.max(ar || 1, 1), 16 / 9));
+          box
+            .querySelector(".np-art")
+            .style.setProperty("--ar", Math.min(Math.max(ar || 1, 1), 16 / 9));
         };
         img.src = m.thumb;
-        box.querySelector('.np-bg').style.backgroundImage = `url("${m.thumb}")`;
+        box.querySelector(".np-bg").style.backgroundImage = `url("${m.thumb}")`;
       }
       progress();
-      if (m.status === 'playing' && m.duration) tick = setInterval(progress, 500);
+      if (m.status === "playing" && m.duration)
+        tick = setInterval(progress, 500);
     }
     function progress() {
-      const cur = box.querySelector('.np-cur');
+      const cur = box.querySelector(".np-cur");
       if (!cur) return;
       const p = position();
       cur.textContent = clock(p);
-      box.querySelector('.np-bar i').style.width = `${(p / m.duration) * 100}%`;
+      box.querySelector(".np-bar i").style.width = `${(p / m.duration) * 100}%`;
     }
 
-    box.addEventListener('click', (e) => {
-      const a = e.target.closest('[data-a]')?.dataset.a;
-      if (a && !e.target.closest('button').disabled) {
+    box.addEventListener("click", (e) => {
+      const a = e.target.closest("[data-a]")?.dataset.a;
+      if (a && !e.target.closest("button").disabled) {
         api.media.control(a);
-        if (a === 'playpause') {
+        if (a === "playpause") {
           // answer immediately; the real state arrives a moment later
-          m = { ...m, position: position(), updatedAt: Date.now(), status: m.status === 'playing' ? 'paused' : 'playing' };
+          m = {
+            ...m,
+            position: position(),
+            updatedAt: Date.now(),
+            status: m.status === "playing" ? "paused" : "playing",
+          };
           receivedAt = Date.now();
           build();
         }
         return;
       }
-      const bar = e.target.closest('.np-bar');
+      const bar = e.target.closest(".np-bar");
       if (bar && m.canSeek && m.duration) {
         const r = bar.getBoundingClientRect();
         const sec = ((e.clientX - r.left) / r.width) * m.duration;
-        api.media.control('seek', sec);
+        api.media.control("seek", sec);
         m = { ...m, position: sec, updatedAt: Date.now() };
         receivedAt = Date.now();
         progress();
@@ -153,19 +185,23 @@ export default {
     });
 
     const update = (v) => {
-      m = v && typeof v === 'object' ? v : { has: false };
+      m = v && typeof v === "object" ? v : { has: false };
       receivedAt = Date.now();
       build();
     };
-    api.on('media', update);
-    api.media.subscribe().then(update).catch(() => update({ has: false, unsupported: true }));
+    api.on("media", update);
+    api.media
+      .subscribe()
+      .then(update)
+      .catch(() => update({ has: false, unsupported: true }));
     build();
     return {
       destroy: () => clearInterval(tick),
       summary: () =>
         m.has
-          ? [m.title, m.artist].filter(Boolean).join(' — ') + (m.status === 'paused' ? ` (${t('sum.paused')})` : '')
-          : t('sum.np_none'),
+          ? [m.title, m.artist].filter(Boolean).join(" — ") +
+            (m.status === "paused" ? ` (${t("sum.paused")})` : "")
+          : t("sum.np_none"),
     };
   },
 };

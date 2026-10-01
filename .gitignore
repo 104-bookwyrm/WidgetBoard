@@ -7,3 +7,6 @@ node_modules/
 *.key
 *.key.pub.bak
 .env
+
+# local handoff notes
+HANDOFF-*.md

@@ -1,12 +1,19 @@
 // Small shared helpers for widgets.
 export const esc = (s) =>
-  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-export const pad = (n) => String(n).padStart(2, '0');
+  String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+export const pad = (n) => String(n).padStart(2, "0");
 
 /** Local date as 'YYYY-MM-DD'. */
-export const ymd = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const ymd = (d = new Date()) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 export const parseYmd = (s) => {
-  const [y, m, d] = s.split('-').map(Number);
+  const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 };
 export const addDays = (s, n) => {
@@ -15,16 +22,25 @@ export const addDays = (s, n) => {
   return ymd(d);
 };
 /** Whole days from a to b (b - a). */
-export const daysBetween = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
+export const daysBetween = (a, b) =>
+  Math.round((parseYmd(b) - parseYmd(a)) / 86400000);
 export const uid = () => crypto.randomUUID();
 
 /** Let a horizontally scrolling chip bar scroll with the normal mouse wheel. */
 export function wheelScrollX(el) {
-  el.addEventListener('wheel', (e) => {
-    if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-    el.scrollLeft += e.deltaY;
-    e.preventDefault();
-  }, { passive: false });
+  el.addEventListener(
+    "wheel",
+    (e) => {
+      if (
+        el.scrollWidth <= el.clientWidth ||
+        Math.abs(e.deltaX) > Math.abs(e.deltaY)
+      )
+        return;
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    },
+    { passive: false },
+  );
 }
 
 /**
@@ -33,7 +49,7 @@ export function wheelScrollX(el) {
  */
 export function deferWhileEditing(box, fn) {
   let pending = false;
-  box.addEventListener('focusout', () =>
+  box.addEventListener("focusout", () =>
     setTimeout(() => {
       if (pending && !box.contains(document.activeElement)) {
         pending = false;
@@ -43,7 +59,11 @@ export function deferWhileEditing(box, fn) {
   );
   return () => {
     const a = document.activeElement;
-    if (a && box.contains(a) && a.matches('input:not([type=checkbox]), textarea, select')) {
+    if (
+      a &&
+      box.contains(a) &&
+      a.matches("input:not([type=checkbox]), textarea, select")
+    ) {
       pending = true;
       return;
     }

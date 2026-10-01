@@ -2,18 +2,18 @@
 // Paper colour: hover → colour dots (bottom-right), or right-click → 메모 색.
 const COLORS = {
   theme: null, // the widget's normal theme surface
-  yellow: '#fff1a6',
-  pink: '#ffcfe1',
-  green: '#cdefc4',
-  blue: '#c9e4ff',
-  purple: '#e2d6ff',
-  orange: '#ffd9b3',
+  yellow: "#fff1a6",
+  pink: "#ffcfe1",
+  green: "#cdefc4",
+  blue: "#c9e4ff",
+  purple: "#e2d6ff",
+  orange: "#ffd9b3",
 };
 
 export default {
   size: { w: 3, h: 3 },
   min: { w: 2, h: 2 },
-  defaults: { text: '', color: 'yellow' },
+  defaults: { text: "", color: "yellow" },
   css: `
     .memo { position: absolute; inset: 0; display: flex; flex-direction: column; box-sizing: border-box; padding: var(--head-h) calc(var(--pad) + 2px) var(--pad); }
     .memo.paper { background: color-mix(in srgb, var(--memo-bg) calc(var(--widget-opacity) * 100% + 10%), transparent); color: #2a2a2a; }
@@ -31,24 +31,29 @@ export default {
   `,
   mount(root, s, api) {
     const { t } = api;
-    if (typeof s.text !== 'string') s.text = '';
-    if (!(s.color in COLORS)) s.color = 'yellow';
+    if (typeof s.text !== "string") s.text = "";
+    if (!(s.color in COLORS)) s.color = "yellow";
 
     root.innerHTML = `
       <div class="memo">
-        <textarea spellcheck="false" placeholder="${t('memo.placeholder')}"></textarea>
+        <textarea spellcheck="false" placeholder="${t("memo.placeholder")}"></textarea>
         <div class="memo-colors">${Object.keys(COLORS)
-          .map((c) => `<button data-c="${c}" title="${t('memo.color.' + c)}" style="--dot:${COLORS[c] ?? 'transparent'}"></button>`)
-          .join('')}</div>
+          .map(
+            (c) =>
+              `<button data-c="${c}" title="${t("memo.color." + c)}" style="--dot:${COLORS[c] ?? "transparent"}"></button>`,
+          )
+          .join("")}</div>
       </div>`;
     const box = root.firstElementChild;
-    const ta = box.querySelector('textarea');
+    const ta = box.querySelector("textarea");
     ta.value = s.text;
 
     function paint() {
-      box.classList.toggle('paper', !!COLORS[s.color]);
-      box.style.setProperty('--memo-bg', COLORS[s.color] ?? 'transparent');
-      box.querySelectorAll('[data-c]').forEach((b) => b.classList.toggle('on', b.dataset.c === s.color));
+      box.classList.toggle("paper", !!COLORS[s.color]);
+      box.style.setProperty("--memo-bg", COLORS[s.color] ?? "transparent");
+      box
+        .querySelectorAll("[data-c]")
+        .forEach((b) => b.classList.toggle("on", b.dataset.c === s.color));
     }
     function setColor(c) {
       s.color = c;
@@ -63,13 +68,13 @@ export default {
       s.text = ta.value.slice(0, 50000);
       api.save();
     };
-    ta.addEventListener('input', () => {
+    ta.addEventListener("input", () => {
       clearTimeout(timer);
       timer = setTimeout(flush, 500);
     });
-    ta.addEventListener('blur', flush);
-    box.querySelector('.memo-colors').onclick = (e) => {
-      const c = e.target.closest('[data-c]')?.dataset.c;
+    ta.addEventListener("blur", flush);
+    box.querySelector(".memo-colors").onclick = (e) => {
+      const c = e.target.closest("[data-c]")?.dataset.c;
       if (c) setColor(c);
     };
 
@@ -77,10 +82,20 @@ export default {
     return {
       destroy: flush,
       summary: () => {
-        const txt = ta.value.trim().replace(/\s+/g, ' ');
-        return txt ? txt.slice(0, 160) + (txt.length > 160 ? '…' : '') : t('sum.memo_empty');
+        const txt = ta.value.trim().replace(/\s+/g, " ");
+        return txt
+          ? txt.slice(0, 160) + (txt.length > 160 ? "…" : "")
+          : t("sum.memo_empty");
       },
-      menu: () => [{ text: t('memo.color'), items: Object.keys(COLORS).map((c) => ({ text: t('memo.color.' + c), action: () => setColor(c) })) }],
+      menu: () => [
+        {
+          text: t("memo.color"),
+          items: Object.keys(COLORS).map((c) => ({
+            text: t("memo.color." + c),
+            action: () => setColor(c),
+          })),
+        },
+      ],
     };
   },
 };
