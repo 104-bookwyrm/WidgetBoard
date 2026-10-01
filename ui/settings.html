@@ -109,6 +109,7 @@
       }
       .set-row select,
       .set-row input[type="time"],
+      .set-row input[type="number"],
       .set-row input[type="text"] {
         font: inherit;
         padding: 6px 8px;
@@ -474,7 +475,55 @@
         </section>
         <section data-page="backup" hidden>
           <h2 data-i18n="set.nav.backup">백업 · 데이터</h2>
-          <p class="set-soon" data-i18n="set.soon"></p>
+
+          <fieldset>
+            <legend data-i18n="set.backup.now_legend"></legend>
+            <div class="set-row">
+              <label data-i18n="set.backup.location"></label>
+              <button id="backup-open" data-i18n="set.backup.open"></button>
+            </div>
+            <p class="hint" id="backup-location"></p>
+            <div class="set-row">
+              <button
+                id="backup-now"
+                class="primary"
+                data-i18n="set.backup.now"
+              ></button>
+              <span class="hint" id="backup-now-msg" aria-live="polite"></span>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.backup.auto_legend"></legend>
+            <div class="set-row">
+              <label for="backup-auto" data-i18n="set.backup.auto"></label>
+              <select id="backup-auto">
+                <option value="off" data-i18n="set.off"></option>
+                <option value="daily" data-i18n="set.backup.daily"></option>
+                <option value="weekly" data-i18n="set.backup.weekly"></option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="backup-keep" data-i18n="set.backup.keep"></label>
+              <input type="number" id="backup-keep" min="1" max="99" />
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.backup.restore_legend"></legend>
+            <p class="hint" data-i18n="set.backup.restore_hint"></p>
+            <div id="backup-list" class="set-list"></div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.backup.data_legend"></legend>
+            <div class="set-row">
+              <button
+                id="backup-config"
+                data-i18n="set.backup.open_config"
+              ></button>
+            </div>
+          </fieldset>
         </section>
         <section data-page="about" hidden>
           <h2 data-i18n="set.nav.about">정보 · 업데이트</h2>

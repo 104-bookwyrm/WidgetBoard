@@ -1032,6 +1032,230 @@ fn run_update_check(app: &AppHandle, manual: bool) {
     }
 }
 /// Slow schedule: first look 3 minutes after start, then re-evaluate every hour against "daily"/"weekly".
+// ---------- backup & restore (timestamped folder copies; no zip dependency) ----------
+const BACKUP_FILES: [&str; 4] = ["layout.json", "config.json", "settings.json", "theme.css"];
+const BACKUP_DIRS: [&str; 3] = ["data", "diary", "assets"];
+
+/// Filesystem-sortable local timestamp "YYYYMMDD-HHMM".
+#[cfg(windows)]
+fn local_stamp() -> String {
+    use windows::Win32::System::SystemInformation::GetLocalTime;
+    let t = unsafe { GetLocalTime() };
+    format!("{:04}{:02}{:02}-{:02}{:02}", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute)
+}
+#[cfg(not(windows))]
+fn local_stamp() -> String {
+    now_secs().to_string()
+}
+
+fn copy_dir(src: &Path, dst: &Path) -> Result<(), String> {
+    fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let p = entry.path();
+        if p.is_dir() {
+            copy_dir(&p, &dst.join(entry.file_name()))?;
+        } else if p.extension().map_or(true, |e| e != "tmp") {
+            fs::copy(&p, dst.join(entry.file_name())).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+/// Where backups live: config backup.dir if set, else Documents\WidgetBoard\Backups, else <appdata>\Backups.
+fn backups_root(app: &AppHandle, dir: &Path) -> PathBuf {
+    let cfg = read_config(dir);
+    let custom = cfg.get("backup").and_then(|b| b.get("dir")).and_then(|v| v.as_str()).unwrap_or("");
+    if !custom.is_empty() {
+        return PathBuf::from(custom);
+    }
+    app.path()
+        .document_dir()
+        .map(|d| d.join("WidgetBoard").join("Backups"))
+        .unwrap_or_else(|_| dir.join("Backups"))
+}
+
+/// Copy the live data into a new timestamped folder under `root`. `tag` ("", "auto", "pre-restore")
+/// is appended to the folder name. Returns the folder path.
+fn backup_to(src_dir: &Path, root: &Path, tag: &str) -> Result<PathBuf, String> {
+    let stamp = local_stamp();
+    let name = if tag.is_empty() {
+        format!("WidgetBoard-backup-{stamp}")
+    } else {
+        format!("WidgetBoard-backup-{stamp}-{tag}")
+    };
+    let dest = root.join(&name);
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let mut files = vec![];
+    for f in BACKUP_FILES {
+        let p = src_dir.join(f);
+        if p.exists() {
+            fs::copy(&p, dest.join(f)).map_err(|e| e.to_string())?;
+            files.push(f.to_string());
+        }
+    }
+    for d in BACKUP_DIRS {
+        let p = src_dir.join(d);
+        if p.is_dir() {
+            copy_dir(&p, &dest.join(d))?;
+            files.push(format!("{d}/"));
+        }
+    }
+    let manifest = json!({ "app": env!("CARGO_PKG_VERSION"), "created": stamp, "files": files });
+    write_atomic(&dest.join("manifest.json"), serde_json::to_string_pretty(&manifest).unwrap().as_bytes())?;
+    Ok(dest)
+}
+
+/// Overwrite the live data from a backup folder (an exact snapshot: content dirs are replaced wholesale).
+fn restore_from(src: &Path, dir: &Path) -> Result<(), String> {
+    for f in BACKUP_FILES {
+        let p = src.join(f);
+        if p.exists() {
+            fs::copy(&p, dir.join(f)).map_err(|e| e.to_string())?;
+        }
+    }
+    for d in BACKUP_DIRS {
+        let p = src.join(d);
+        if p.is_dir() {
+            let target = dir.join(d);
+            let _ = fs::remove_dir_all(&target);
+            copy_dir(&p, &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Keep the newest `keep` auto backups; delete older ones. Only touches "-auto" folders.
+fn prune_auto(root: &Path, keep: usize) {
+    let mut autos: Vec<PathBuf> = fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_dir() && p.file_name().and_then(|n| n.to_str()).map_or(false, |n| n.ends_with("-auto"))
+        })
+        .collect();
+    autos.sort(); // timestamped names sort chronologically
+    if autos.len() > keep {
+        for p in &autos[..autos.len() - keep] {
+            let _ = fs::remove_dir_all(p);
+        }
+    }
+}
+
+/// True if there is no "-auto" backup newer than `interval` seconds.
+fn auto_due(root: &Path, interval: u64) -> bool {
+    let newest = fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.is_dir() && p.file_name().and_then(|n| n.to_str()).map_or(false, |n| n.ends_with("-auto"))
+        })
+        .filter_map(|p| fs::metadata(&p).and_then(|m| m.modified()).ok())
+        .max();
+    match newest {
+        Some(t) => SystemTime::now().duration_since(t).map(|d| d.as_secs() >= interval).unwrap_or(true),
+        None => true,
+    }
+}
+
+#[tauri::command]
+fn backup_now(app: AppHandle, state: State<AppState>, dir: Option<String>) -> Result<String, String> {
+    let root = dir
+        .filter(|d| !d.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| backups_root(&app, &state.dir));
+    let _ = app.emit("flush-saves", ()); // capture pending widget saves
+    std::thread::sleep(Duration::from_millis(300));
+    let dest = backup_to(&state.dir, &root, "")?;
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn list_backups(app: AppHandle, state: State<AppState>) -> Value {
+    let root = backups_root(&app, &state.dir);
+    let mut items: Vec<Value> = fs::read_dir(&root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.join("manifest.json").exists())
+        .map(|p| {
+            let m: Value = read_json(&p.join("manifest.json")).unwrap_or(json!({}));
+            json!({
+                "name": p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string(),
+                "path": p.to_string_lossy(),
+                "created": m.get("created").and_then(|v| v.as_str()).unwrap_or(""),
+                "app": m.get("app").and_then(|v| v.as_str()).unwrap_or(""),
+            })
+        })
+        .collect();
+    items.sort_by(|a, b| b["name"].as_str().cmp(&a["name"].as_str())); // newest first
+    let backup = read_config(&state.dir).get("backup").cloned().unwrap_or(json!({}));
+    json!({ "root": root.to_string_lossy(), "items": items, "backup": backup })
+}
+
+#[tauri::command]
+fn open_backups_folder(app: AppHandle, state: State<AppState>) {
+    let root = backups_root(&app, &state.dir);
+    let _ = fs::create_dir_all(&root);
+    open_path(&root);
+}
+
+#[tauri::command]
+fn restore_backup(app: AppHandle, state: State<AppState>, path: String) -> Result<(), String> {
+    let src = PathBuf::from(&path);
+    if !src.join("manifest.json").exists() {
+        return Err("not a backup folder".into());
+    }
+    // Safety net: snapshot the current state before overwriting it.
+    let _ = backup_to(&state.dir, &backups_root(&app, &state.dir), "pre-restore");
+    // Flush, copy, relaunch — off-thread so the flush can land before we overwrite.
+    let _ = app.emit("flush-saves", ());
+    let dir = state.dir.clone();
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(700));
+        if let Err(e) = restore_from(&src, &dir) {
+            eprintln!("restore failed: {e}");
+            return;
+        }
+        relaunch(&app2);
+    });
+    Ok(())
+}
+
+/// Hourly: if auto backup is on and one is due, make one and prune to `keep`.
+fn spawn_auto_backup(app: AppHandle) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(300));
+        loop {
+            {
+                let st = app.state::<AppState>();
+                let cfg = read_config(&st.dir);
+                let b = cfg.get("backup");
+                let auto = b.and_then(|b| b.get("auto")).and_then(|v| v.as_str()).unwrap_or("off");
+                let keep = b.and_then(|b| b.get("keep")).and_then(|v| v.as_u64()).unwrap_or(7).max(1) as usize;
+                let interval = match auto {
+                    "daily" => Some(86_400u64),
+                    "weekly" => Some(604_800),
+                    _ => None,
+                };
+                if let Some(iv) = interval {
+                    let root = backups_root(&app, &st.dir);
+                    if auto_due(&root, iv) && backup_to(&st.dir, &root, "auto").is_ok() {
+                        prune_auto(&root, keep);
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_secs(3600));
+        }
+    });
+}
+
 fn spawn_updater(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(180));
@@ -1049,17 +1273,21 @@ fn spawn_updater(app: AppHandle) {
         }
     });
 }
+/// Start a fresh copy of this exe, then exit; the new process waits for us (single-instance).
+fn relaunch(app: &AppHandle) {
+    if let Ok(exe) = std::env::current_exe() {
+        if std::process::Command::new(exe).args(["--wait-pid", &std::process::id().to_string()]).spawn().is_ok() {
+            app.exit(0);
+        }
+    }
+}
 /// Relaunch this exe after we exit; the new process waits for us (single-instance) and installs the update.
 fn restart_for_update(app: &AppHandle) {
     let _ = app.emit("flush-saves", ());
     let h = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(700)); // let pending widget saves land
-        if let Ok(exe) = std::env::current_exe() {
-            if std::process::Command::new(exe).args(["--wait-pid", &std::process::id().to_string()]).spawn().is_ok() {
-                h.exit(0);
-            }
-        }
+        relaunch(&h);
     });
 }
 /// `--wait-pid N`: we were started by an app that is about to quit — wait for it (max 15 s).
@@ -1306,6 +1534,7 @@ fn main() {
             spawn_hit_test(handle.clone());
             spawn_monitor_watch(handle.clone());
             spawn_updater(handle.clone());
+            spawn_auto_backup(handle.clone());
             spawn_file_watch(handle, app.state::<AppState>().dir.clone());
             Ok(())
         })
@@ -1344,8 +1573,48 @@ fn main() {
             open_theme_file,
             get_settings,
             set_app,
-            open_settings
+            open_settings,
+            backup_now,
+            restore_backup,
+            list_backups,
+            open_backups_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running WidgetBoard");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backup_restore_roundtrip() {
+        let base = std::env::temp_dir().join(format!("wb-test-{}", std::process::id()));
+        let live = base.join("live");
+        let backups = base.join("backups");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(live.join("data")).unwrap();
+        fs::write(live.join("config.json"), b"{\"a\":1}").unwrap();
+        fs::write(live.join("data").join("checklist.json"), b"[1,2,3]").unwrap();
+        fs::write(live.join("data").join("skip.tmp"), b"junk").unwrap();
+
+        let dest = backup_to(&live, &backups, "test").unwrap();
+        assert!(dest.join("manifest.json").exists());
+        assert!(dest.join("config.json").exists());
+        assert_eq!(fs::read(dest.join("data").join("checklist.json")).unwrap(), b"[1,2,3]");
+        assert!(!dest.join("data").join("skip.tmp").exists(), ".tmp files are not backed up");
+
+        // Mutate live, then restore from the backup.
+        fs::write(live.join("config.json"), b"{\"a\":999}").unwrap();
+        fs::write(live.join("data").join("extra.json"), b"new").unwrap();
+        restore_from(&dest, &live).unwrap();
+        assert_eq!(fs::read(live.join("config.json")).unwrap(), b"{\"a\":1}", "file restored");
+        assert!(live.join("data").join("checklist.json").exists(), "backed-up file is back");
+        assert!(
+            !live.join("data").join("extra.json").exists(),
+            "content dirs are replaced wholesale, so files added after the backup are gone"
+        );
+
+        let _ = fs::remove_dir_all(&base);
+    }
 }

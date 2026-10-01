@@ -1,6 +1,7 @@
 // v0.12: standalone settings window (settings.html).
 // Increment 1 — window shell + General page. Increment 2 — Accessibility + About/updates pages.
 // Increment 3 — Timer & calendar page (presets editor + holidays).
+// Increment 4 — Backup & data page (backup/restore, auto schedule).
 import { chromium } from "playwright";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
@@ -376,6 +377,69 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
       ),
     ),
     "excluded day saved to holidays.remove",
+  );
+  await p.close();
+}
+
+// --- Backup & data page ---
+{
+  const p = await page("en");
+  await p.click(".set-nav button[data-page=backup]");
+  await p.waitForTimeout(100);
+  const sec = await p.$eval(".set-main [data-page=backup]", (e) => e.innerText);
+  ok(
+    !RAW.test(sec),
+    "no raw keys on backup page (en)",
+    (sec.match(RAW) || [])[0],
+  );
+  ok(/C:\/mock\/Backups/.test(sec), "backup location shown", sec);
+  ok(/No backups yet/.test(sec), "empty state when no backups");
+
+  // back up now adds a listed backup
+  await p.click("#backup-now");
+  await p.waitForTimeout(100);
+  const rows = await p.$$eval("#backup-list .set-list-row", (r) => r.length);
+  ok(rows === 1, "backup now adds a backup to the list", String(rows));
+
+  // auto schedule + keep persist to config.backup
+  await p.selectOption("#backup-auto", "weekly");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).backup.auto,
+    )) === "weekly",
+    "auto schedule saved to config.backup",
+  );
+  await p.fill("#backup-keep", "3");
+  await p.dispatchEvent("#backup-keep", "change");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).backup.keep,
+    )) === 3,
+    "keep count saved to config.backup",
+  );
+
+  // open folder routes to the backend
+  await p.click("#backup-open");
+  await p.waitForTimeout(50);
+  ok(
+    await p.evaluate(() =>
+      (window.__native || []).some(([c]) => c === "open_backups_folder"),
+    ),
+    "open folder invokes backend",
+  );
+
+  // restore: inline confirm, then restore_backup with the folder path
+  await p.click("#backup-list .set-list-row:first-child button");
+  await p.waitForTimeout(50);
+  await p.click("#backup-list .set-list-row:first-child button.primary");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(() => window.__restored || "")).includes(
+      "WidgetBoard-backup",
+    ),
+    "restore invokes restore_backup with the backup path",
   );
   await p.close();
 }

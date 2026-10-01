@@ -420,6 +420,90 @@ function fillTimer() {
   renderHolidayRemoves();
 }
 
+// ---- Backup & data page ----
+// Backups are timestamped folder copies (Rust side). Restore flushes, copies, then relaunches.
+function prettyStamp(s) {
+  const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/.exec(s || "");
+  return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}` : s || "";
+}
+function renderBackupList(items) {
+  const host = $("#backup-list");
+  host.innerHTML = "";
+  if (!items.length) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = t("set.backup.none");
+    host.append(p);
+    return;
+  }
+  for (const it of items) {
+    const row = document.createElement("div");
+    row.className = "set-list-row";
+    const txt = document.createElement("span");
+    txt.className = "grow";
+    txt.textContent = prettyStamp(it.created) + (it.app ? ` · v${it.app}` : "");
+    row.append(
+      txt,
+      btn(t("set.backup.restore"), () => confirmRestore(row, it.path), ""),
+    );
+    host.append(row);
+  }
+}
+function confirmRestore(row, path) {
+  // inline confirm (no native confirm); restore relaunches the app on the Rust side
+  row.innerHTML = "";
+  const msg = document.createElement("span");
+  msg.className = "grow";
+  msg.textContent = t("set.backup.confirm");
+  const yes = btn(
+    t("set.backup.confirm_yes"),
+    () => {
+      invoke("restore_backup", { path })
+        .then(() => (msg.textContent = t("set.backup.restoring")))
+        .catch((e) => (msg.textContent = String(e)));
+    },
+    "primary",
+  );
+  const no = btn(t("set.close"), () => fillBackup(), "");
+  row.append(msg, yes, no);
+}
+function bindBackup() {
+  $("#backup-open").onclick = () =>
+    invoke("open_backups_folder").catch(() => {});
+  $("#backup-config").onclick = () =>
+    invoke("open_config_file").catch(() => {});
+  $("#backup-now").onclick = () => {
+    $("#backup-now-msg").textContent = t("set.backup.working");
+    invoke("backup_now", {})
+      .then(() => {
+        $("#backup-now-msg").textContent = t("set.backup.done");
+        saved();
+        fillBackup();
+      })
+      .catch((e) => ($("#backup-now-msg").textContent = String(e)));
+  };
+  $("#backup-auto").onchange = () =>
+    invoke("save_config", {
+      patch: { backup: { auto: $("#backup-auto").value } },
+    }).then(saved);
+  $("#backup-keep").onchange = () => {
+    const n = Math.max(1, Math.min(99, +$("#backup-keep").value || 7));
+    $("#backup-keep").value = n;
+    invoke("save_config", { patch: { backup: { keep: n } } }).then(saved);
+  };
+}
+async function fillBackup() {
+  const info = await invoke("list_backups").catch(() => null);
+  if (!info) return;
+  $("#backup-location").textContent = info.root || "";
+  const b = info.backup || {};
+  $("#backup-auto").value = ["off", "daily", "weekly"].includes(b.auto)
+    ? b.auto
+    : "off";
+  $("#backup-keep").value = b.keep != null ? b.keep : 7;
+  renderBackupList(info.items || []);
+}
+
 // ---- init ----
 async function init() {
   data = await invoke("get_settings");
@@ -435,6 +519,8 @@ async function init() {
   fillAbout();
   bindTimer();
   fillTimer();
+  bindBackup();
+  fillBackup();
   showPage(new URLSearchParams(location.search).get("page") || "general");
 
   await listen("settings-page", showPage);
@@ -446,6 +532,7 @@ async function init() {
     fillA11y();
     fillAbout();
     fillTimer();
+    fillBackup();
     showPage(currentPage());
   });
   await listen("theme-changed", applyTheme);
@@ -565,6 +652,35 @@ function settingsMock() {
             return;
           case "update_restart":
             window.__restarted = true;
+            return;
+          case "list_backups":
+            return {
+              root: "C:/mock/Backups",
+              items: JSON.parse(ls.get("wb-backups") || "[]"),
+              backup: cfg().backup || { auto: "off", keep: 7, dir: "" },
+            };
+          case "backup_now": {
+            const items = JSON.parse(ls.get("wb-backups") || "[]");
+            const stamp = "20261001-1530";
+            const path = "C:/mock/Backups/WidgetBoard-backup-" + stamp;
+            if (!items.some((x) => x.path === path))
+              items.unshift({
+                name: "WidgetBoard-backup-" + stamp,
+                path,
+                created: stamp,
+                app: "0.12.0",
+              });
+            ls.set("wb-backups", JSON.stringify(items));
+            return path;
+          }
+          case "restore_backup":
+            window.__restored = args.path;
+            return;
+          case "open_backups_folder":
+            (window.__native ||= []).push(["open_backups_folder"]);
+            return;
+          case "open_config_file":
+            (window.__native ||= []).push(["open_config_file"]);
             return;
           default:
             return null;
