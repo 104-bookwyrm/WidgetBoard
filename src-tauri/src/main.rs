@@ -433,7 +433,12 @@ fn save_config(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(
         match (base, patch) {
             (Value::Object(b), Value::Object(p)) => {
                 for (k, v) in p {
-                    merge(b.entry(k).or_insert(Value::Null), v);
+                    // A null in a patch deletes the key (lets the UI remove e.g. a custom holiday).
+                    if v.is_null() {
+                        b.remove(&k);
+                    } else {
+                        merge(b.entry(k).or_insert(Value::Null), v);
+                    }
                 }
             }
             (b, p) => *b = p,

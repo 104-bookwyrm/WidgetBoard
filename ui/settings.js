@@ -142,12 +142,13 @@ function fillGeneral() {
     );
 }
 
-// ---- Accessibility page ----
-// Ports the in-board #settings-panel a11y controls. Same data-ui keys → same config.ui.*.
-// Only save_config is needed: boards re-apply native effects (zoom/dwell/hotkey) on config-changed.
-function bindA11y() {
-  for (const i of document.querySelectorAll('[data-page="a11y"] [data-ui]')) {
-    i.addEventListener("change", () => {
+// ---- shared [data-ui] controls → config.ui.* ----
+// Same keys as the in-board #settings-panel. Only save_config is needed: boards re-apply
+// native effects (zoom/dwell/hotkey) themselves on config-changed.
+function bindUiControls(sel) {
+  for (const i of document.querySelectorAll(sel)) {
+    let tmr;
+    i.addEventListener(i.type === "range" ? "input" : "change", () => {
       const k = i.dataset.ui;
       const v =
         i.type === "checkbox"
@@ -155,21 +156,32 @@ function bindA11y() {
           : /^-?\d+(\.\d+)?$/.test(i.value)
             ? +i.value
             : i.value;
-      invoke("save_config", { patch: { ui: { [k]: v } } }).then(saved);
+      const go = () =>
+        invoke("save_config", { patch: { ui: { [k]: v } } }).then(saved);
+      if (i.type === "range") (clearTimeout(tmr), (tmr = setTimeout(go, 250)));
+      else go();
     });
   }
+}
+function fillUiControls(sel) {
+  const u = cfgUi();
+  for (const i of document.querySelectorAll(sel)) {
+    const v = u[i.dataset.ui];
+    if (i.type === "checkbox") i.checked = !!v;
+    else if (v != null) i.value = String(v);
+  }
+}
+
+// ---- Accessibility page ----
+function bindA11y() {
+  bindUiControls('[data-page="a11y"] [data-ui]');
   const rm = $("#a11y-motion");
   rm.addEventListener("change", () =>
     invoke("set_app", { patch: { reduceMotion: rm.checked } }).then(saved),
   );
 }
 function fillA11y() {
-  const u = cfgUi();
-  for (const i of document.querySelectorAll('[data-page="a11y"] [data-ui]')) {
-    const v = u[i.dataset.ui];
-    if (i.type === "checkbox") i.checked = !!v;
-    else if (v != null) i.value = String(v);
-  }
+  fillUiControls('[data-page="a11y"] [data-ui]');
   $("#a11y-motion").checked = !!data?.app?.reduceMotion;
 }
 
@@ -234,6 +246,180 @@ function fillAbout() {
     .catch(() => {});
 }
 
+// ---- Timer & calendar page ----
+// Presets (config.timer.presets) and holidays (config.holidays) had no UI before — edited by hand.
+const holidays = () => (data?.config && data.config.holidays) || {};
+function btn(text, onclick, cls = "del") {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = cls;
+  b.textContent = text;
+  b.onclick = onclick;
+  return b;
+}
+
+// -- timer presets: full-array replace on every change (save_config replaces arrays) --
+let presets = []; // working copy; arrays can't partial-merge, so we always send the whole list
+function savePresets() {
+  if (data.config)
+    data.config.timer = { ...(data.config.timer || {}), presets };
+  invoke("save_config", { patch: { timer: { presets } } }).then(saved);
+}
+function renderPresets() {
+  const host = $("#timer-presets");
+  host.innerHTML = "";
+  presets.forEach((p, i) => {
+    const row = document.createElement("div");
+    row.className = "set-list-row";
+    const label = document.createElement("input");
+    label.type = "text";
+    label.className = "grow";
+    label.value = p.label || "";
+    label.placeholder = t("set.timer.label_ph");
+    label.setAttribute("aria-label", t("set.timer.label_ph"));
+    const time = document.createElement("input");
+    time.type = "text";
+    time.size = 6;
+    time.value = p.time || "";
+    time.placeholder = "25";
+    time.setAttribute("aria-label", t("set.timer.time"));
+    let tmr;
+    const commit = () => {
+      presets[i] = { label: label.value, time: time.value };
+      savePresets(); // no re-render here — keep focus/caret while typing
+    };
+    label.oninput = time.oninput = () => (
+      clearTimeout(tmr),
+      (tmr = setTimeout(commit, 300))
+    );
+    const move = (d) => {
+      const j = i + d;
+      if (j < 0 || j >= presets.length) return;
+      [presets[i], presets[j]] = [presets[j], presets[i]];
+      savePresets();
+      renderPresets();
+    };
+    row.append(
+      label,
+      time,
+      btn("↑", () => move(-1)),
+      btn("↓", () => move(1)),
+      btn("✕", () => {
+        presets.splice(i, 1);
+        savePresets();
+        renderPresets();
+      }),
+    );
+    host.append(row);
+  });
+}
+
+// -- holidays: country + custom-added days + excluded days --
+function renderHolidayAdds() {
+  const host = $("#cal-add-list");
+  host.innerHTML = "";
+  const add = holidays().add || {};
+  for (const [date, name] of Object.entries(add)) {
+    if (typeof name !== "string" || !name.trim()) continue;
+    const row = document.createElement("div");
+    row.className = "set-list-row";
+    const txt = document.createElement("span");
+    txt.className = "grow";
+    txt.textContent = `${date} — ${name}`;
+    row.append(
+      txt,
+      btn("✕", () => {
+        // null deletes the key (save_config merge convention)
+        invoke("save_config", {
+          patch: { holidays: { add: { [date]: null } } },
+        }).then(() => {
+          if (data.config?.holidays?.add) delete data.config.holidays.add[date];
+          saved();
+          renderHolidayAdds();
+        });
+      }),
+    );
+    host.append(row);
+  }
+}
+function renderHolidayRemoves() {
+  const host = $("#cal-remove-list");
+  host.innerHTML = "";
+  const rem = Array.isArray(holidays().remove) ? holidays().remove : [];
+  rem.forEach((date) => {
+    const row = document.createElement("div");
+    row.className = "set-list-row";
+    const txt = document.createElement("span");
+    txt.className = "grow";
+    txt.textContent = date;
+    row.append(
+      txt,
+      btn("✕", () => saveRemoves(rem.filter((d) => d !== date))),
+    );
+    host.append(row);
+  });
+}
+function saveRemoves(arr) {
+  if (data.config)
+    data.config.holidays = { ...(data.config.holidays || {}), remove: arr };
+  invoke("save_config", { patch: { holidays: { remove: arr } } }).then(() => {
+    saved();
+    renderHolidayRemoves();
+  });
+}
+function bindTimer() {
+  bindUiControls('[data-page="timer"] [data-ui]');
+  $("#timer-preset-add").onclick = () => {
+    presets.push({ label: "", time: "" });
+    renderPresets();
+  };
+  $("#cal-country").onchange = () => {
+    const country = $("#cal-country").value;
+    if (data.config)
+      data.config.holidays = { ...(data.config.holidays || {}), country };
+    invoke("save_config", { patch: { holidays: { country } } }).then(saved);
+  };
+  $("#cal-add-btn").onclick = () => {
+    const date = $("#cal-add-date").value;
+    const name = $("#cal-add-name").value.trim();
+    if (!date || !name) return;
+    if (data.config) {
+      data.config.holidays = data.config.holidays || {};
+      data.config.holidays.add = {
+        ...(data.config.holidays.add || {}),
+        [date]: name,
+      };
+    }
+    invoke("save_config", {
+      patch: { holidays: { add: { [date]: name } } },
+    }).then(() => {
+      $("#cal-add-date").value = $("#cal-add-name").value = "";
+      saved();
+      renderHolidayAdds();
+    });
+  };
+  $("#cal-remove-btn").onclick = () => {
+    const date = $("#cal-remove-date").value;
+    if (!date) return;
+    const cur = Array.isArray(holidays().remove) ? holidays().remove : [];
+    $("#cal-remove-date").value = "";
+    if (!cur.includes(date)) saveRemoves([...cur, date]);
+  };
+}
+function fillTimer() {
+  fillUiControls('[data-page="timer"] [data-ui]');
+  presets = Array.isArray(data?.config?.timer?.presets)
+    ? data.config.timer.presets.map((p) => ({
+        label: p.label || "",
+        time: p.time || "",
+      }))
+    : [];
+  renderPresets();
+  $("#cal-country").value = holidays().country ?? "KR";
+  renderHolidayAdds();
+  renderHolidayRemoves();
+}
+
 // ---- init ----
 async function init() {
   data = await invoke("get_settings");
@@ -247,6 +433,8 @@ async function init() {
   fillA11y();
   bindAbout();
   fillAbout();
+  bindTimer();
+  fillTimer();
   showPage(new URLSearchParams(location.search).get("page") || "general");
 
   await listen("settings-page", showPage);
@@ -257,6 +445,7 @@ async function init() {
     applyStatic();
     fillA11y();
     fillAbout();
+    fillTimer();
     showPage(currentPage());
   });
   await listen("theme-changed", applyTheme);
@@ -343,11 +532,16 @@ function settingsMock() {
             return !!args.on;
           case "save_config": {
             const merge = (b, p) => {
-              for (const [k, v] of Object.entries(p))
+              for (const [k, v] of Object.entries(p)) {
+                if (v === null) {
+                  delete b[k];
+                  continue;
+                }
                 b[k] =
                   v && typeof v === "object" && !Array.isArray(v)
                     ? merge(b[k] && typeof b[k] === "object" ? b[k] : {}, v)
                     : v;
+              }
               return b;
             };
             const c = merge(cfg(), args.patch);

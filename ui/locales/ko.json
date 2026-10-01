@@ -377,5 +377,22 @@
   "set.weekStart.sun": "일요일",
   "set.motion": "동작과 애니메이션 줄이기",
   "set.about.licenses": "글꼴 라이선스",
-  "set.about.licenses_body": "읽기 쉬운 글꼴은 SIL 오픈 폰트 라이선스(OFL)로 포함되어 있습니다: Atkinson Hyperlegible, Lexend, OpenDyslexic."
+  "set.about.licenses_body": "읽기 쉬운 글꼴은 SIL 오픈 폰트 라이선스(OFL)로 포함되어 있습니다: Atkinson Hyperlegible, Lexend, OpenDyslexic.",
+  "set.timer.alarm": "알림",
+  "set.timer.presets": "빠른 시작 버튼",
+  "set.timer.presets_hint": "타이머 위젯에 표시되는 버튼입니다. 시간: 분(25), m:ss(1:30) 또는 h:mm:ss(1:00:00). 이름은 선택입니다.",
+  "set.timer.add_preset": "버튼 추가",
+  "set.timer.label_ph": "이름 (선택)",
+  "set.timer.time": "시간",
+  "set.cal.holidays": "공휴일",
+  "set.cal.country": "공휴일 달력",
+  "set.cal.country_kr": "대한민국",
+  "set.cal.country_none": "없음",
+  "set.cal.custom": "추가한 날",
+  "set.cal.name_ph": "이름",
+  "set.cal.add": "추가",
+  "set.cal.date": "날짜",
+  "set.cal.excluded": "숨긴 날",
+  "set.cal.excluded_hint": "공휴일이어도 숨길 날짜입니다.",
+  "set.cal.exclude": "숨기기"
 }

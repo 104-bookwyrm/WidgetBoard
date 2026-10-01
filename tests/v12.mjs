@@ -1,5 +1,6 @@
 // v0.12: standalone settings window (settings.html).
 // Increment 1 — window shell + General page. Increment 2 — Accessibility + About/updates pages.
+// Increment 3 — Timer & calendar page (presets editor + holidays).
 import { chromium } from "playwright";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
@@ -259,6 +260,122 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   ok(
     await p.evaluate(() => window.__restarted === true),
     "apply triggers update_restart",
+  );
+  await p.close();
+}
+
+// --- Timer & calendar page: presets editor + holidays ---
+{
+  const p = await page("ko", {
+    seedConfig: {
+      ui: {},
+      timer: {
+        presets: [
+          { label: "", time: "5" },
+          { label: "Tea", time: "3" },
+        ],
+      },
+      holidays: { country: "KR", add: {}, remove: [] },
+    },
+  });
+  await p.click(".set-nav button[data-page=timer]");
+  await p.waitForTimeout(50);
+  const body = await p.$eval(".set-main [data-page=timer]", (e) => e.innerText);
+  ok(
+    !RAW.test(body),
+    "no raw keys on timer page (ko)",
+    (body.match(RAW) || [])[0],
+  );
+
+  let rows = await p.$$eval("#timer-presets .set-list-row", (r) => r.length);
+  ok(rows === 2, "presets seeded (2 rows)", String(rows));
+
+  // editing a preset time saves the whole array
+  await p.fill(
+    "#timer-presets .set-list-row:nth-child(1) input:nth-child(2)",
+    "9",
+  );
+  await p.waitForTimeout(400);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).timer.presets[0].time,
+    )) === "9",
+    "preset time saved to config.timer.presets",
+  );
+
+  // add then remove a preset
+  await p.click("#timer-preset-add");
+  rows = await p.$$eval("#timer-presets .set-list-row", (r) => r.length);
+  ok(rows === 3, "add preset adds a row", String(rows));
+  await p.click("#timer-presets .set-list-row:nth-child(1) button:last-child");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).timer.presets.length,
+    )) === 2,
+    "remove preset persists",
+  );
+
+  // alarm repeats → config.ui (numeric)
+  await p.selectOption("#timer-rings", "10");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).ui.timerRings,
+    )) === 10,
+    "timerRings saved to config.ui as number",
+  );
+
+  // holiday country
+  await p.selectOption("#cal-country", "none");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).holidays.country,
+    )) === "none",
+    "holiday country saved",
+  );
+
+  // add a custom day, then remove it (null-delete)
+  await p.fill("#cal-add-date", "2026-06-03");
+  await p.fill("#cal-add-name", "임시공휴일");
+  await p.click("#cal-add-btn");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () =>
+        JSON.parse(localStorage.getItem("wb-config")).holidays.add[
+          "2026-06-03"
+        ],
+    )) === "임시공휴일",
+    "custom day added to holidays.add",
+  );
+  ok(
+    (await p.$$eval("#cal-add-list .set-list-row", (r) => r.length)) === 1,
+    "custom day listed",
+  );
+  await p.click("#cal-add-list .set-list-row:first-child button");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () =>
+        "2026-06-03" in
+        (JSON.parse(localStorage.getItem("wb-config")).holidays.add || {}),
+    )) === false,
+    "custom day removed via null-delete",
+  );
+
+  // exclude a day
+  await p.fill("#cal-remove-date", "2026-05-01");
+  await p.click("#cal-remove-btn");
+  await p.waitForTimeout(100);
+  ok(
+    await p.evaluate(() =>
+      JSON.parse(localStorage.getItem("wb-config")).holidays.remove.includes(
+        "2026-05-01",
+      ),
+    ),
+    "excluded day saved to holidays.remove",
   );
   await p.close();
 }

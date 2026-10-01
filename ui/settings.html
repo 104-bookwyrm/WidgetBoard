@@ -125,6 +125,37 @@
       .set-soon {
         opacity: 0.6;
       }
+      .set-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 6px 0;
+      }
+      .set-list-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .set-list-row .grow {
+        flex: 1;
+        min-width: 0;
+      }
+      .set-add {
+        justify-content: flex-start;
+      }
+      .set-list-row input,
+      .set-add input {
+        font: inherit;
+        padding: 6px 8px;
+        min-height: 24px;
+        background: var(--c1);
+        color: var(--c3);
+        border: var(--line-width) var(--line-style) var(--line-color);
+        border-radius: 8px;
+      }
+      .set-list-row .del {
+        min-width: 32px;
+      }
       .set-saved {
         position: fixed;
         inset: auto 16px 16px auto;
@@ -214,7 +245,85 @@
         </section>
         <section data-page="timer" hidden>
           <h2 data-i18n="set.nav.timer">타이머 · 달력</h2>
-          <p class="set-soon" data-i18n="set.soon"></p>
+
+          <fieldset>
+            <legend data-i18n="set.timer.alarm"></legend>
+            <div class="set-row">
+              <label for="timer-sound" data-i18n="set.sound"></label>
+              <input type="checkbox" id="timer-sound" data-ui="timerSound" />
+            </div>
+            <div class="set-row">
+              <label for="timer-volume" data-i18n="set.volume"></label>
+              <input
+                type="range"
+                id="timer-volume"
+                min="0"
+                max="100"
+                step="5"
+                data-ui="timerVolume"
+              />
+            </div>
+            <div class="set-row">
+              <label for="timer-rings" data-i18n="set.rings"></label>
+              <select id="timer-rings" data-ui="timerRings">
+                <option value="1">1</option>
+                <option value="3">3</option>
+                <option value="10">10</option>
+                <option value="30">30</option>
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.timer.presets"></legend>
+            <p class="hint" data-i18n="set.timer.presets_hint"></p>
+            <div id="timer-presets" class="set-list"></div>
+            <button
+              id="timer-preset-add"
+              data-i18n="set.timer.add_preset"
+            ></button>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.cal.holidays"></legend>
+            <div class="set-row">
+              <label for="cal-country" data-i18n="set.cal.country"></label>
+              <select id="cal-country">
+                <option value="KR" data-i18n="set.cal.country_kr"></option>
+                <option value="none" data-i18n="set.cal.country_none"></option>
+              </select>
+            </div>
+
+            <h4 data-i18n="set.cal.custom"></h4>
+            <div id="cal-add-list" class="set-list"></div>
+            <div class="set-row set-add">
+              <input
+                type="date"
+                id="cal-add-date"
+                aria-label="date"
+                data-i18n-title="set.cal.date"
+              />
+              <input
+                type="text"
+                id="cal-add-name"
+                data-i18n-placeholder="set.cal.name_ph"
+              />
+              <button id="cal-add-btn" data-i18n="set.cal.add"></button>
+            </div>
+
+            <h4 data-i18n="set.cal.excluded"></h4>
+            <p class="hint" data-i18n="set.cal.excluded_hint"></p>
+            <div id="cal-remove-list" class="set-list"></div>
+            <div class="set-row set-add">
+              <input
+                type="date"
+                id="cal-remove-date"
+                aria-label="date"
+                data-i18n-title="set.cal.date"
+              />
+              <button id="cal-remove-btn" data-i18n="set.cal.exclude"></button>
+            </div>
+          </fieldset>
         </section>
         <section data-page="a11y" hidden>
           <h2 data-i18n="set.nav.a11y">접근성</h2>
