@@ -1,0 +1,390 @@
+// Standalone settings window. Plain module, no build step (like the rest of ui/).
+// Reads everything once via get_settings, applies changes instantly, mirrors the app's a11y settings.
+import { loadLang, t, applyStatic } from "./i18n.js";
+
+const T = window.__TAURI__ ?? settingsMock();
+const invoke = (cmd, args) => T.core.invoke(cmd, args);
+const win = T.webviewWindow.getCurrentWebviewWindow();
+const listen = (ev, h) => win.listen(ev, (e) => h(e.payload));
+
+const PAGES = [
+  "general",
+  "appearance",
+  "widgets",
+  "timer",
+  "a11y",
+  "backup",
+  "about",
+];
+const LANGS = [
+  ["ko", "한국어"],
+  ["en", "English"],
+];
+
+let data = null; // last get_settings result
+const $ = (sel) => document.querySelector(sel);
+const cfgUi = () =>
+  data?.config?.ui && typeof data.config.ui === "object" ? data.config.ui : {};
+
+// ---- live "saved" feedback ----
+let savedTimer;
+function saved() {
+  const el = $(".set-saved");
+  el.textContent = t("set.saved");
+  el.classList.add("show");
+  clearTimeout(savedTimer);
+  savedTimer = setTimeout(() => el.classList.remove("show"), 1200);
+}
+
+// ---- theme + accessibility (the window respects the app's own a11y) ----
+function applyTheme(css) {
+  let s = document.getElementById("theme-css");
+  if (!s) {
+    s = document.createElement("style");
+    s.id = "theme-css";
+    document.head.appendChild(s);
+  }
+  s.textContent = css || "";
+}
+function applyA11y() {
+  const u = cfgUi();
+  const c = document.body.classList;
+  c.toggle("high-contrast", !!u.highContrast);
+  c.toggle("big-targets", !!u.bigTargets);
+  c.toggle("wide-text", !!u.wideText);
+  c.toggle("cvd-safe", !!u.cvd);
+  c.toggle("show-hints", !!u.showHints);
+  c.toggle("short-lines", !!u.shortLines);
+  for (const f of ["atkinson", "lexend", "opendyslexic"])
+    c.toggle("font-" + f, u.readableFont === f);
+  c.toggle("reduce-motion", !!data?.app?.reduceMotion);
+  // The board zoom command only scales boards; scale this window in-page instead.
+  document.documentElement.style.zoom = +u.zoom || 1;
+}
+
+// ---- page routing ----
+function showPage(page) {
+  if (!PAGES.includes(page)) page = "general";
+  for (const sec of document.querySelectorAll(".set-main [data-page]"))
+    sec.hidden = sec.dataset.page !== page;
+  for (const b of document.querySelectorAll(".set-nav button"))
+    b.setAttribute("aria-current", b.dataset.page === page ? "page" : "false");
+  const sel = $(".set-nav-select");
+  if (sel.value !== page) sel.value = page;
+  const main = $(".set-main");
+  main.scrollTop = 0;
+  main.focus();
+}
+function currentPage() {
+  return (
+    document.querySelector(".set-nav button[aria-current='page']")?.dataset
+      .page || "general"
+  );
+}
+function cyclePage(dir) {
+  const i = PAGES.indexOf(currentPage());
+  showPage(PAGES[(i + dir + PAGES.length) % PAGES.length]);
+}
+
+function buildNav() {
+  const nav = $(".set-nav");
+  const sel = $(".set-nav-select");
+  nav.innerHTML = "";
+  sel.innerHTML = "";
+  for (const page of PAGES) {
+    const b = document.createElement("button");
+    b.dataset.page = page;
+    b.textContent = t("set.nav." + page);
+    b.setAttribute("aria-current", "false");
+    b.onclick = () => showPage(page);
+    nav.appendChild(b);
+    const o = document.createElement("option");
+    o.value = page;
+    o.textContent = t("set.nav." + page);
+    sel.appendChild(o);
+  }
+  sel.onchange = () => showPage(sel.value);
+}
+
+// ---- General page ----
+function fillGeneral() {
+  const lang = $("#set-lang");
+  lang.innerHTML = "";
+  for (const [code, name] of LANGS) {
+    const o = document.createElement("option");
+    o.value = code;
+    o.textContent = name;
+    lang.appendChild(o);
+  }
+  lang.value = data.app.lang;
+  lang.onchange = () =>
+    invoke("set_app", { patch: { lang: lang.value } }).then(saved);
+
+  const onTop = $("#set-ontop");
+  onTop.checked = !!data.app.onTop;
+  onTop.onchange = () =>
+    invoke("set_app", { patch: { onTop: onTop.checked } }).then(saved);
+
+  const auto = $("#set-autostart");
+  auto.checked = !!data.autostart.on;
+  $("#set-autostart-hint").hidden = !data.autostart.disabledByWindows;
+  auto.onchange = () =>
+    invoke("set_autostart", { on: auto.checked }).then((on) => {
+      auto.checked = !!on;
+      saved();
+    });
+
+  const week = $("#set-weekstart");
+  week.value = cfgUi().weekStart || "default";
+  week.onchange = () =>
+    invoke("save_config", { patch: { ui: { weekStart: week.value } } }).then(
+      saved,
+    );
+}
+
+// ---- Accessibility page ----
+// Ports the in-board #settings-panel a11y controls. Same data-ui keys → same config.ui.*.
+// Only save_config is needed: boards re-apply native effects (zoom/dwell/hotkey) on config-changed.
+function bindA11y() {
+  for (const i of document.querySelectorAll('[data-page="a11y"] [data-ui]')) {
+    i.addEventListener("change", () => {
+      const k = i.dataset.ui;
+      const v =
+        i.type === "checkbox"
+          ? i.checked
+          : /^-?\d+(\.\d+)?$/.test(i.value)
+            ? +i.value
+            : i.value;
+      invoke("save_config", { patch: { ui: { [k]: v } } }).then(saved);
+    });
+  }
+  const rm = $("#a11y-motion");
+  rm.addEventListener("change", () =>
+    invoke("set_app", { patch: { reduceMotion: rm.checked } }).then(saved),
+  );
+}
+function fillA11y() {
+  const u = cfgUi();
+  for (const i of document.querySelectorAll('[data-page="a11y"] [data-ui]')) {
+    const v = u[i.dataset.ui];
+    if (i.type === "checkbox") i.checked = !!v;
+    else if (v != null) i.value = String(v);
+  }
+  $("#a11y-motion").checked = !!data?.app?.reduceMotion;
+}
+
+// ---- About & updates page ----
+function showUpdate(info) {
+  if (!info) return;
+  const sel = $("#about-update");
+  sel.value = ["weekly", "daily", "off"].includes(info.check)
+    ? info.check
+    : "weekly";
+  const when = info.lastCheck
+    ? new Date(info.lastCheck * 1000).toLocaleString(
+        data.app.lang === "ko" ? "ko-KR" : "en-US",
+        { dateStyle: "medium", timeStyle: "short" },
+      )
+    : "";
+  const lines = [t("upd.current", { v: info.current })];
+  if (info.busy) lines.push(t("upd.checking"));
+  else if (info.pending)
+    lines.push(
+      t("upd.ready", { v: info.pending.version }) +
+        (info.pending.notes ? ` — ${info.pending.notes}` : ""),
+    );
+  else if (!info.configured) lines.push(t("upd.not_configured"));
+  else if (info.lastError)
+    lines.push(
+      t("upd.failed", {
+        e:
+          info.lastError === "not_configured"
+            ? t("upd.not_configured")
+            : String(info.lastError || ""),
+      }),
+    );
+  else if (when) lines.push(t("upd.last", { when }));
+  $("#about-update-status").textContent = lines.join(" · ");
+  $("#about-update-now").disabled = !!info.busy;
+  const a = $("#about-update-apply");
+  a.hidden = !info.pending;
+  a.textContent = info.pending
+    ? t("upd.apply", { v: info.pending.version })
+    : "";
+}
+function bindAbout() {
+  $("#about-update").onchange = () =>
+    invoke("save_config", {
+      patch: { update: { check: $("#about-update").value } },
+    }).then(() => {
+      saved();
+      invoke("update_status")
+        .then(showUpdate)
+        .catch(() => {});
+    });
+  $("#about-update-now").onclick = () => invoke("update_check").catch(() => {});
+  // Rust's restart_for_update emits flush-saves + waits 700ms, so boards persist first.
+  $("#about-update-apply").onclick = () =>
+    invoke("update_restart").catch(() => {});
+}
+function fillAbout() {
+  $("#about-version").textContent = `WidgetBoard v${data.version || ""}`.trim();
+  invoke("update_status")
+    .then(showUpdate)
+    .catch(() => {});
+}
+
+// ---- init ----
+async function init() {
+  data = await invoke("get_settings");
+  applyTheme(data.theme);
+  await loadLang(data.app.lang);
+  buildNav();
+  applyStatic();
+  applyA11y();
+  fillGeneral();
+  bindA11y();
+  fillA11y();
+  bindAbout();
+  fillAbout();
+  showPage(new URLSearchParams(location.search).get("page") || "general");
+
+  await listen("settings-page", showPage);
+  await listen("lang-changed", async (code) => {
+    data.app.lang = code || data.app.lang;
+    await loadLang(data.app.lang);
+    buildNav();
+    applyStatic();
+    fillA11y();
+    fillAbout();
+    showPage(currentPage());
+  });
+  await listen("theme-changed", applyTheme);
+  await listen("motion-changed", (on) => {
+    if (data) data.app.reduceMotion = !!on;
+    applyA11y();
+    $("#a11y-motion").checked = !!data?.app?.reduceMotion;
+  });
+  await listen("config-changed", (cfg) => {
+    if (data) data.config = cfg;
+    applyA11y();
+    fillGeneral();
+    fillA11y();
+  });
+  await listen("update-status", showUpdate);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") win.close();
+    else if (e.ctrlKey && (e.key === "Tab" || e.key === "PageDown"))
+      (e.preventDefault(), cyclePage(e.shiftKey ? -1 : 1));
+    else if (e.ctrlKey && e.key === "PageUp")
+      (e.preventDefault(), cyclePage(-1));
+  });
+}
+init();
+
+// ---- browser mock (mirrors the app's mock contract; used when window.__TAURI__ is absent) ----
+function settingsMock() {
+  const handlers = {};
+  const ls = {
+    get: (k) => {
+      try {
+        return localStorage.getItem(k);
+      } catch {
+        return null;
+      }
+    },
+    set: (k, v) => {
+      try {
+        localStorage.setItem(k, v);
+      } catch {}
+    },
+  };
+  const emit = (ev, p) =>
+    (handlers[ev] || []).forEach((h) => h({ payload: p }));
+  window.__mock = { emit };
+  const cfg = () => JSON.parse(ls.get("wb-config") || "null") || { ui: {} };
+  return {
+    core: {
+      async invoke(cmd, args) {
+        if (window.__mockFail?.has(cmd))
+          throw new Error("mock failure: " + cmd);
+        switch (cmd) {
+          case "get_settings":
+            return {
+              app: {
+                lang: new URLSearchParams(location.search).get("lang") || "ko",
+                onTop: ls.get("wb-ontop") === "1",
+                reduceMotion: false,
+              },
+              theme: ls.get("wb-theme") || "",
+              config: cfg(),
+              autostart: {
+                on: !!ls.get("wb-autostart"),
+                disabledByWindows: !!window.__mockAutostartDisabled,
+              },
+              version: "0.12.0",
+              displays: [
+                { label: "board-0", display: "D1", index: 1, primary: true },
+              ],
+              widgets: JSON.parse(ls.get("wb-widgets") || "[]"),
+              dataDir: "C:/mock/appdata",
+            };
+          case "set_app": {
+            const p = args.patch || {};
+            if ("onTop" in p) ls.set("wb-ontop", p.onTop ? "1" : "");
+            (window.__native ||= []).push(["set_app", p]);
+            if ("lang" in p) emit("lang-changed", p.lang);
+            if ("reduceMotion" in p) emit("motion-changed", p.reduceMotion);
+            return;
+          }
+          case "set_autostart":
+            ls.set("wb-autostart", args.on ? "1" : "");
+            return !!args.on;
+          case "save_config": {
+            const merge = (b, p) => {
+              for (const [k, v] of Object.entries(p))
+                b[k] =
+                  v && typeof v === "object" && !Array.isArray(v)
+                    ? merge(b[k] && typeof b[k] === "object" ? b[k] : {}, v)
+                    : v;
+              return b;
+            };
+            const c = merge(cfg(), args.patch);
+            ls.set("wb-config", JSON.stringify(c));
+            return emit("config-changed", c);
+          }
+          case "update_status":
+            return {
+              configured: true,
+              current: "0.12.0",
+              check: (cfg().update && cfg().update.check) || "weekly",
+              lastCheck: 0,
+            };
+          case "update_check":
+            emit("update-status", {
+              configured: true,
+              current: "0.12.0",
+              check: (cfg().update && cfg().update.check) || "weekly",
+              pending: { version: "0.12.1", notes: "" },
+            });
+            return;
+          case "update_restart":
+            window.__restarted = true;
+            return;
+          default:
+            return null;
+        }
+      },
+    },
+    webviewWindow: {
+      getCurrentWebviewWindow: () => ({
+        listen: async (ev, h) => {
+          (handlers[ev] ||= []).push(h);
+          return () => (handlers[ev] = handlers[ev].filter((x) => x !== h));
+        },
+        close: async () => (window.__mock.closed = true),
+      }),
+    },
+  };
+}

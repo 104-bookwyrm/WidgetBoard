@@ -1,0 +1,17 @@
+{
+  "name": "widgetboard-tests",
+  "private": true,
+  "type": "module",
+  "description": "Dev-only harness for WidgetBoard UI tests. The app itself has no build step.",
+  "scripts": {
+    "serve": "python -m http.server 8765 --directory ui",
+    "test:stress": "node tests/stress.mjs",
+    "test:v10": "node tests/v10.mjs",
+    "test:v11": "node tests/v11.mjs",
+    "test:v12": "node tests/v12.mjs"
+  },
+  "devDependencies": {
+    "pngjs": "^7.0.0",
+    "playwright": "^1.55.0"
+  }
+}

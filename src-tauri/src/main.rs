@@ -100,6 +100,7 @@ struct AppState {
     hits: Mutex<HashMap<String, Vec<Rect>>>,
     interacting: AtomicBool,
     edit: AtomicBool,
+    settings_open: AtomicBool, // the standalone settings window is open; boards drop to the desktop layer
     tray_items: Mutex<Option<TrayItems>>,
     generation: AtomicUsize, // board windows are recreated when monitors change
     media: media::Media,
@@ -482,6 +483,114 @@ fn set_autostart(on: bool) -> Result<bool, String> {
     Ok(autostart_get())
 }
 
+// ---------- settings window ----------
+
+/// Everything the standalone settings window needs in one call.
+#[tauri::command]
+fn get_settings(state: State<AppState>) -> Value {
+    let s = state.settings.lock().unwrap().clone();
+    let widgets: Vec<Value> = state
+        .widgets
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|w| json!({
+            "id": w.get("id").and_then(Value::as_str),
+            "type": w.get("type").and_then(Value::as_str),
+            "display": w.get("display").and_then(Value::as_str),
+        }))
+        .collect();
+    let theme = fs::read_to_string(state.dir.join("theme.css")).unwrap_or_else(|_| DEFAULT_THEME.into());
+    json!({
+        "app": { "lang": s.lang, "onTop": s.on_top, "reduceMotion": s.reduce_motion },
+        "theme": theme,
+        "config": read_config(&state.dir),
+        "autostart": { "on": autostart_get(), "disabledByWindows": false },
+        "version": updater::CURRENT,
+        "displays": state.boards.lock().unwrap().clone(),
+        "widgets": widgets,
+        "dataDir": state.dir.to_string_lossy(),
+    })
+}
+
+/// Apply app-level settings from the settings window: any of lang / onTop / reduceMotion.
+/// Mirrors the tray handlers in `on_menu` so both entry points behave identically.
+#[tauri::command]
+fn set_app(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(), String> {
+    let (mut lang_changed, mut layer_changed, mut motion): (bool, bool, Option<bool>) = (false, false, None);
+    {
+        let mut s = state.settings.lock().unwrap();
+        if let Some(v) = patch.get("lang").and_then(Value::as_str) {
+            if locales().contains_key(v) && v != s.lang {
+                s.lang = v.to_string();
+                lang_changed = true;
+            }
+        }
+        if let Some(v) = patch.get("onTop").and_then(Value::as_bool) {
+            if v != s.on_top {
+                s.on_top = v;
+                layer_changed = true;
+            }
+        }
+        if let Some(v) = patch.get("reduceMotion").and_then(Value::as_bool) {
+            if v != s.reduce_motion {
+                s.reduce_motion = v;
+                motion = Some(v);
+            }
+        }
+    }
+    state.persist_settings();
+    if lang_changed {
+        refresh_tray(&app);
+        let lang = state.settings.lock().unwrap().lang.clone();
+        let _ = app.emit("lang-changed", lang);
+    }
+    if layer_changed {
+        apply_layer(&app);
+        refresh_tray(&app);
+    }
+    if let Some(on) = motion {
+        refresh_tray(&app);
+        let _ = app.emit("motion-changed", on);
+    }
+    Ok(())
+}
+
+/// Open (or focus) the standalone settings window on the given page.
+fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.unminimize();
+        w.set_focus()?;
+        let _ = app.emit_to("settings", "settings-page", page);
+        return Ok(());
+    }
+    let lang = app.state::<AppState>().settings.lock().unwrap().lang.clone();
+    let w = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App(format!("settings.html?page={page}").into()))
+        .title(tr(&lang, "set.title"))
+        .inner_size(760.0, 560.0)
+        .min_inner_size(560.0, 420.0)
+        .resizable(true)
+        .skip_taskbar(false)
+        .center() // ponytail: primary/current monitor; per-cursor centring if it matters
+        .build()?;
+    // Boards are topmost with "always on top"; drop them while settings is open so it stays reachable.
+    app.state::<AppState>().settings_open.store(true, Ordering::Relaxed);
+    apply_layer(app);
+    let h = app.clone();
+    w.on_window_event(move |ev| {
+        if matches!(ev, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
+            h.state::<AppState>().settings_open.store(false, Ordering::Relaxed);
+            apply_layer(&h);
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn open_settings(app: AppHandle, page: Option<String>) -> Result<(), String> {
+    open_settings_window(&app, page.as_deref().unwrap_or("general")).map_err(|e| e.to_string())
+}
+
 // ---------- accessibility commands ----------
 
 #[tauri::command]
@@ -608,7 +717,9 @@ fn open_config_file(state: State<AppState>) {
 /// Boards are on top when "always on top" is set or while editing; otherwise on the desktop layer.
 fn apply_layer(app: &AppHandle) {
     let st = app.state::<AppState>();
-    let top = st.edit.load(Ordering::Relaxed) || st.kbd.load(Ordering::Relaxed) || st.settings.lock().unwrap().on_top;
+    // While the settings window is open it must sit above the boards; drop them off the topmost layer.
+    let top = !st.settings_open.load(Ordering::Relaxed)
+        && (st.edit.load(Ordering::Relaxed) || st.kbd.load(Ordering::Relaxed) || st.settings.lock().unwrap().on_top);
     for w in boards(app) {
         if top {
             let _ = w.set_always_on_bottom(false);
@@ -1094,10 +1205,13 @@ fn on_menu(app: &AppHandle, id: &str) {
             st.persist_settings();
             let _ = app.emit("motion-changed", on);
         }
-        "settings" | "layouts" => {
+        "settings" => {
+            let _ = open_settings_window(app, "general");
+        }
+        "layouts" => {
             apply_edit_mode(app, true);
             if let Some(label) = st.primary_label() {
-                let _ = app.emit_to(&label, if id == "settings" { "open-settings" } else { "open-layouts" }, ());
+                let _ = app.emit_to(&label, "open-layouts", ());
             }
         }
         "theme" => {
@@ -1170,6 +1284,7 @@ fn main() {
                 hits: Mutex::new(HashMap::new()),
                 interacting: AtomicBool::new(false),
                 edit: AtomicBool::new(false),
+                settings_open: AtomicBool::new(false),
                 tray_items: Mutex::new(None),
                 generation: AtomicUsize::new(0),
                 media: media::Media::new(),
@@ -1221,7 +1336,10 @@ fn main() {
             set_hit_rects,
             set_interacting,
             set_edit_mode,
-            open_theme_file
+            open_theme_file,
+            get_settings,
+            set_app,
+            open_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running WidgetBoard");

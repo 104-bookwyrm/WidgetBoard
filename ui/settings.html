@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="set.title">설정</title>
+    <link rel="stylesheet" href="base.css" />
+    <style>
+      /* The settings window is a normal opaque window (unlike the transparent boards). */
+      html,
+      body.settings {
+        height: 100%;
+      }
+      body.settings {
+        margin: 0;
+        background: var(--c1);
+        color: var(--c3);
+        font: var(--font-size, 14px) / 1.5 var(--font);
+        display: flex;
+        flex-direction: column;
+      }
+      .set-wrap {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
+      .set-nav {
+        flex: 0 0 200px;
+        border-right: var(--line-width) var(--line-style) var(--line-color);
+        padding: 12px 8px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .set-nav button {
+        display: block;
+        width: 100%;
+        text-align: start;
+        padding: 10px 12px;
+        min-height: 24px;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      .set-nav button:hover {
+        background: color-mix(in srgb, var(--c3) 10%, transparent);
+      }
+      .set-nav button[aria-current="page"] {
+        background: var(--c2);
+        color: var(--on-accent);
+      }
+      .set-nav-select {
+        display: none;
+        margin: 8px;
+        padding: 8px;
+        font: inherit;
+        background: var(--c1);
+        color: var(--c3);
+        border: var(--line-width) var(--line-style) var(--line-color);
+        border-radius: 8px;
+      }
+      .set-main {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 24px;
+        min-width: 0;
+      }
+      .set-main h2 {
+        margin: 0 0 16px;
+        font-size: 1.3em;
+      }
+      .set-main section[hidden] {
+        display: none;
+      }
+      fieldset {
+        border: var(--line-width) var(--line-style) var(--line-color);
+        border-radius: var(--radius, 12px);
+        margin: 0 0 18px;
+        padding: 8px 16px 16px;
+      }
+      legend {
+        padding: 0 6px;
+        font-weight: 600;
+      }
+      .set-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 10px 0;
+        flex-wrap: wrap;
+      }
+      .set-row + .set-row {
+        border-top: 1px solid color-mix(in srgb, var(--c3) 8%, transparent);
+      }
+      .set-row label {
+        flex: 1;
+        min-width: 140px;
+      }
+      .set-row .hint {
+        flex-basis: 100%;
+        font-size: 0.85em;
+        opacity: 0.7;
+        margin-top: -4px;
+      }
+      .set-row select,
+      .set-row input[type="time"],
+      .set-row input[type="text"] {
+        font: inherit;
+        padding: 6px 8px;
+        min-height: 24px;
+        background: var(--c1);
+        color: var(--c3);
+        border: var(--line-width) var(--line-style) var(--line-color);
+        border-radius: 8px;
+      }
+      .set-row input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+      }
+      .set-soon {
+        opacity: 0.6;
+      }
+      .set-saved {
+        position: fixed;
+        inset: auto 16px 16px auto;
+        background: var(--c2);
+        color: var(--on-accent);
+        padding: 8px 14px;
+        border-radius: 8px;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+      }
+      .set-saved.show {
+        opacity: 1;
+      }
+      body.reduce-motion .set-saved {
+        transition: none;
+      }
+      /* Narrow / high-zoom: sidebar collapses to a select, no horizontal scroll. */
+      @media (max-width: 600px) {
+        .set-nav {
+          display: none;
+        }
+        .set-nav-select {
+          display: block;
+        }
+        .set-wrap {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body class="settings">
+    <div class="set-saved" role="status" aria-live="polite"></div>
+    <div class="set-wrap">
+      <nav class="set-nav" aria-label="설정 페이지"></nav>
+      <select class="set-nav-select" aria-label="설정 페이지"></select>
+      <main class="set-main" tabindex="-1">
+        <section data-page="general">
+          <h2 data-i18n="set.nav.general">일반</h2>
+          <fieldset>
+            <legend data-i18n="set.general.behavior">동작</legend>
+            <div class="set-row">
+              <label for="set-lang" data-i18n="set.general.lang">언어</label>
+              <select id="set-lang"></select>
+            </div>
+            <div class="set-row">
+              <label for="set-ontop" data-i18n="set.general.onTop"
+                >항상 위에 표시</label
+              >
+              <input type="checkbox" id="set-ontop" />
+            </div>
+            <div class="set-row">
+              <label for="set-autostart" data-i18n="set.general.autostart"
+                >Windows 시작 시 자동 실행</label
+              >
+              <input type="checkbox" id="set-autostart" />
+              <p
+                class="hint"
+                id="set-autostart-hint"
+                data-i18n="set.general.autostart_disabled"
+                hidden
+              ></p>
+            </div>
+            <div class="set-row">
+              <label for="set-weekstart" data-i18n="set.general.weekStart"
+                >한 주 시작</label
+              >
+              <select id="set-weekstart">
+                <option
+                  value="default"
+                  data-i18n="set.weekStart.default"
+                ></option>
+                <option value="mon" data-i18n="set.weekStart.mon"></option>
+                <option value="sun" data-i18n="set.weekStart.sun"></option>
+              </select>
+            </div>
+          </fieldset>
+        </section>
+
+        <section data-page="appearance" hidden>
+          <h2 data-i18n="set.nav.appearance">모양</h2>
+          <p class="set-soon" data-i18n="set.soon"></p>
+        </section>
+        <section data-page="widgets" hidden>
+          <h2 data-i18n="set.nav.widgets">위젯과 배치</h2>
+          <p class="set-soon" data-i18n="set.soon"></p>
+        </section>
+        <section data-page="timer" hidden>
+          <h2 data-i18n="set.nav.timer">타이머 · 달력</h2>
+          <p class="set-soon" data-i18n="set.soon"></p>
+        </section>
+        <section data-page="a11y" hidden>
+          <h2 data-i18n="set.nav.a11y">접근성</h2>
+          <p class="hint" data-i18n="set.access_note"></p>
+          <div class="set-row">
+            <label for="a11y-motion" data-i18n="set.motion"></label>
+            <input type="checkbox" id="a11y-motion" />
+          </div>
+
+          <fieldset>
+            <legend data-i18n="set.g.motor"></legend>
+            <div class="set-row">
+              <label for="a11y-hotkey" data-i18n="set.hotkey"></label>
+              <select id="a11y-hotkey" data-ui="hotkey">
+                <option value="" data-i18n="set.off"></option>
+                <option value="Ctrl+Alt+W">Ctrl + Alt + W</option>
+                <option value="Ctrl+Alt+Space">Ctrl + Alt + Space</option>
+                <option value="Ctrl+Shift+F12">Ctrl + Shift + F12</option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="a11y-dwell" data-i18n="set.dwell"></label>
+              <select id="a11y-dwell" data-ui="dwellMs">
+                <option value="0" data-i18n="set.off"></option>
+                <option value="400" data-i18n="set.dwell.short"></option>
+                <option value="800" data-i18n="set.dwell.mid"></option>
+                <option value="1500" data-i18n="set.dwell.long"></option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="a11y-clickDrag" data-i18n="set.clickdrag"></label>
+              <input type="checkbox" id="a11y-clickDrag" data-ui="clickDrag" />
+            </div>
+            <div class="set-row">
+              <label for="a11y-bigTargets" data-i18n="set.big"></label>
+              <input
+                type="checkbox"
+                id="a11y-bigTargets"
+                data-ui="bigTargets"
+              />
+            </div>
+            <div class="set-row">
+              <label for="a11y-showControls" data-i18n="set.controls"></label>
+              <input
+                type="checkbox"
+                id="a11y-showControls"
+                data-ui="showControls"
+              />
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.g.vision"></legend>
+            <div class="set-row">
+              <label for="a11y-zoom" data-i18n="set.zoom"></label>
+              <select id="a11y-zoom" data-ui="zoom">
+                <option value="1">100%</option>
+                <option value="1.25">125%</option>
+                <option value="1.5">150%</option>
+                <option value="1.75">175%</option>
+                <option value="2">200%</option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="a11y-highContrast" data-i18n="set.hc"></label>
+              <input
+                type="checkbox"
+                id="a11y-highContrast"
+                data-ui="highContrast"
+              />
+            </div>
+            <div class="set-row">
+              <label for="a11y-wideText" data-i18n="set.wide"></label>
+              <input type="checkbox" id="a11y-wideText" data-ui="wideText" />
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.g.hearing"></legend>
+            <div class="set-row">
+              <label for="a11y-flashAlert" data-i18n="set.flash"></label>
+              <input
+                type="checkbox"
+                id="a11y-flashAlert"
+                data-ui="flashAlert"
+              />
+            </div>
+            <div class="set-row">
+              <label for="a11y-notifyAlert" data-i18n="set.notify"></label>
+              <input
+                type="checkbox"
+                id="a11y-notifyAlert"
+                data-ui="notifyAlert"
+              />
+            </div>
+            <div class="set-row">
+              <label for="a11y-soundCaptions" data-i18n="set.captions"></label>
+              <input
+                type="checkbox"
+                id="a11y-soundCaptions"
+                data-ui="soundCaptions"
+              />
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.g.color"></legend>
+            <div class="set-row">
+              <label for="a11y-cvd" data-i18n="set.cvd"></label>
+              <input type="checkbox" id="a11y-cvd" data-ui="cvd" />
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.g.cognitive"></legend>
+            <div class="set-row">
+              <label for="a11y-showHints" data-i18n="set.hints"></label>
+              <input type="checkbox" id="a11y-showHints" data-ui="showHints" />
+            </div>
+            <div class="set-row">
+              <label for="a11y-readableFont" data-i18n="set.readable"></label>
+              <select id="a11y-readableFont" data-ui="readableFont">
+                <option value="none" data-i18n="set.readable.none"></option>
+                <option value="atkinson">Atkinson Hyperlegible</option>
+                <option value="lexend">Lexend</option>
+                <option value="opendyslexic">OpenDyslexic</option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="a11y-shortLines" data-i18n="set.short"></label>
+              <input
+                type="checkbox"
+                id="a11y-shortLines"
+                data-ui="shortLines"
+              />
+            </div>
+            <div class="set-row">
+              <label for="a11y-reminderTime" data-i18n="set.remind"></label>
+              <input
+                type="time"
+                id="a11y-reminderTime"
+                data-ui="reminderTime"
+              />
+            </div>
+          </fieldset>
+
+          <p class="hint" data-i18n="set.keys"></p>
+        </section>
+        <section data-page="backup" hidden>
+          <h2 data-i18n="set.nav.backup">백업 · 데이터</h2>
+          <p class="set-soon" data-i18n="set.soon"></p>
+        </section>
+        <section data-page="about" hidden>
+          <h2 data-i18n="set.nav.about">정보 · 업데이트</h2>
+          <p id="about-version"></p>
+          <fieldset>
+            <legend data-i18n="upd.title"></legend>
+            <div class="set-row">
+              <label for="about-update" data-i18n="upd.check"></label>
+              <select id="about-update">
+                <option value="weekly" data-i18n="upd.weekly"></option>
+                <option value="daily" data-i18n="upd.daily"></option>
+                <option value="off" data-i18n="set.off"></option>
+              </select>
+            </div>
+            <p class="hint" id="about-update-status" aria-live="polite"></p>
+            <div class="set-row">
+              <button id="about-update-now" data-i18n="upd.now"></button>
+              <button id="about-update-apply" class="primary" hidden></button>
+            </div>
+          </fieldset>
+          <details class="set-licenses">
+            <summary data-i18n="set.about.licenses"></summary>
+            <p class="hint" data-i18n="set.about.licenses_body"></p>
+          </details>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="settings.js"></script>
+  </body>
+</html>
