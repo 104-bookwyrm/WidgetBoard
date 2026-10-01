@@ -77,6 +77,7 @@ function showPage(page) {
   const main = $(".set-main");
   main.scrollTop = 0;
   main.focus();
+  if (page === "widgets" && data) fillWidgets(); // board widgets may have changed since last view
 }
 function currentPage() {
   return (
@@ -728,6 +729,187 @@ async function fillFontList() {
   }
 }
 
+// ---- Widgets & layout page ----
+// Board-geometry actions (add, presets) go to the primary board via emit_primary; everything
+// else (close, move, save/apply/undo layouts, lock) is plain commands.
+const WIDGET_TYPES = [
+  "checklist",
+  "calendar",
+  "dday",
+  "diary",
+  "memo",
+  "nowplaying",
+  "timer",
+  "stopwatch",
+  "image",
+];
+async function winReplace(next) {
+  const before = await invoke("get_all_widgets").catch(() => []);
+  await invoke("store_set", {
+    key: "layouts_undo",
+    value: before,
+    src: "settings",
+  }).catch(() => {});
+  await invoke("replace_widgets", { widgets: next }).catch(() => {});
+}
+const afterBoardChange = () => {
+  saved();
+  setTimeout(fillWidgets, 400); // board-side ops land asynchronously
+};
+function renderWidgetList(all) {
+  const host = $("#wg-list");
+  host.innerHTML = "";
+  if (!all.length) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = t("set.widgets.none");
+    host.append(p);
+    return;
+  }
+  const displays = (data.displays || []).map((d) => d.display);
+  for (const w of all) {
+    const row = document.createElement("div");
+    row.className = "set-list-row";
+    const txt = document.createElement("span");
+    txt.className = "grow";
+    txt.textContent =
+      t("widget." + w.type) + (w.display ? ` · ${w.display}` : "");
+    row.append(txt);
+    if (displays.length > 1)
+      row.append(
+        btn(
+          "⇆",
+          () => {
+            const i = displays.indexOf(w.display);
+            const to = displays[(i + 1) % displays.length];
+            winReplace(
+              all.map((x) => (x.id === w.id ? { ...x, display: to } : x)),
+            ).then(afterBoardChange);
+          },
+          "",
+        ),
+      );
+    row.append(
+      btn("✕", () =>
+        winReplace(all.filter((x) => x.id !== w.id)).then(afterBoardChange),
+      ),
+    );
+    host.append(row);
+  }
+}
+async function renderWgLayouts() {
+  const list = await invoke("store_get", { key: "layouts" }).catch(() => null);
+  const layouts = (Array.isArray(list) ? list : []).filter(
+    (l) => l && typeof l.name === "string" && Array.isArray(l.widgets),
+  );
+  const host = $("#wg-layouts");
+  host.innerHTML = "";
+  if (!layouts.length) {
+    const p = document.createElement("p");
+    p.className = "hint";
+    p.textContent = t("lay.none");
+    host.append(p);
+  } else {
+    for (const l of layouts) {
+      const row = document.createElement("div");
+      row.className = "set-list-row";
+      const txt = document.createElement("span");
+      txt.className = "grow";
+      txt.textContent = `${l.name} · ${t("lay.count", { n: l.widgets.length })}`;
+      row.append(
+        txt,
+        btn(
+          t("lay.apply"),
+          () => winReplace(l.widgets).then(afterBoardChange),
+          "",
+        ),
+        btn("✕", () => {
+          invoke("store_set", {
+            key: "layouts",
+            value: layouts.filter((x) => x !== l),
+            src: "settings",
+          }).then(() => {
+            saved();
+            renderWgLayouts();
+          });
+        }),
+      );
+      host.append(row);
+    }
+  }
+  const undo = await invoke("store_get", { key: "layouts_undo" }).catch(
+    () => null,
+  );
+  $("#wg-layout-undo").hidden = !Array.isArray(undo);
+}
+function bindWidgets() {
+  bindUiControls('[data-page="widgets"] [data-ui]');
+  const sel = $("#wg-add-type");
+  $("#wg-add").onclick = () =>
+    invoke("emit_primary", { event: "add-widget", payload: sel.value })
+      .then(afterBoardChange)
+      .catch(() => {});
+  $("#wg-edit").onclick = () =>
+    invoke("set_edit_mode", { on: true }).catch(() => {});
+  for (const id of ["work", "study"])
+    $("#wg-preset-" + id).onclick = () =>
+      invoke("emit_primary", { event: "apply-preset", payload: id })
+        .then(afterBoardChange)
+        .catch(() => {});
+  $("#wg-layout-save").onclick = async () => {
+    const all = await invoke("get_all_widgets").catch(() => []);
+    const now = new Date();
+    const name =
+      $("#wg-layout-name").value.trim().slice(0, 40) ||
+      t("lay.default_name", {
+        date: `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+      });
+    const list = await invoke("store_get", { key: "layouts" }).catch(
+      () => null,
+    );
+    const prev = Array.isArray(list) ? list : [];
+    const next = [
+      ...prev.filter((l) => l.name !== name),
+      { name, saved: now.toISOString(), widgets: all },
+    ].slice(-20);
+    await invoke("store_set", {
+      key: "layouts",
+      value: next,
+      src: "settings",
+    }).catch(() => {});
+    $("#wg-layout-name").value = "";
+    saved();
+    renderWgLayouts();
+  };
+  $("#wg-layout-undo").onclick = async () => {
+    const prev = await invoke("store_get", { key: "layouts_undo" }).catch(
+      () => null,
+    );
+    if (!Array.isArray(prev)) return;
+    await invoke("replace_widgets", { widgets: prev }).catch(() => {});
+    await invoke("store_set", {
+      key: "layouts_undo",
+      value: null,
+      src: "settings",
+    }).catch(() => {});
+    afterBoardChange();
+  };
+}
+async function fillWidgets() {
+  const sel = $("#wg-add-type");
+  sel.innerHTML = "";
+  for (const type of WIDGET_TYPES) {
+    const o = document.createElement("option");
+    o.value = type;
+    o.textContent = t("widget." + type);
+    sel.append(o);
+  }
+  const all = await invoke("get_all_widgets").catch(() => []);
+  renderWidgetList(Array.isArray(all) ? all : []);
+  renderWgLayouts();
+  fillUiControls('[data-page="widgets"] [data-ui]');
+}
+
 // ---- init ----
 async function init() {
   data = await invoke("get_settings");
@@ -748,6 +930,8 @@ async function init() {
   bindAppearance();
   fillTheme();
   fillFontList();
+  bindWidgets();
+  fillWidgets();
   showPage(new URLSearchParams(location.search).get("page") || "general");
 
   await listen("settings-page", showPage);
@@ -761,6 +945,7 @@ async function init() {
     fillTimer();
     fillBackup();
     fillTheme();
+    fillWidgets();
     showPage(currentPage());
   });
   await listen("theme-changed", (css) => {
@@ -778,6 +963,7 @@ async function init() {
     fillGeneral();
     fillA11y();
     fillUiControls('[data-page="appearance"] [data-ui]');
+    fillUiControls('[data-page="widgets"] [data-ui]');
   });
   await listen("update-status", showUpdate);
 
@@ -834,6 +1020,7 @@ function settingsMock() {
               version: "0.12.0",
               displays: [
                 { label: "board-0", display: "D1", index: 1, primary: true },
+                { label: "board-1", display: "D2", index: 2, primary: false },
               ],
               widgets: JSON.parse(ls.get("wb-widgets") || "[]"),
               dataDir: "C:/mock/appdata",
@@ -901,6 +1088,31 @@ function settingsMock() {
             const v = ls.get("wb-store-" + args.key);
             return v ? JSON.parse(v) : null;
           }
+          case "get_all_widgets":
+            return JSON.parse(ls.get("wb-widgets") || "[]");
+          case "replace_widgets":
+            ls.set("wb-widgets", JSON.stringify(args.widgets || []));
+            (window.__native ||= []).push(["replace_widgets", args.widgets]);
+            return emit("layout-replaced");
+          case "set_edit_mode":
+            (window.__native ||= []).push(["set_edit_mode", args.on]);
+            return;
+          case "emit_primary":
+            (window.__native ||= []).push([
+              "emit_primary",
+              args.event,
+              args.payload,
+            ]);
+            if (args.event === "add-widget") {
+              const ws = JSON.parse(ls.get("wb-widgets") || "[]");
+              ws.push({
+                id: "w" + ws.length,
+                type: args.payload,
+                display: "D1",
+              });
+              ls.set("wb-widgets", JSON.stringify(ws));
+            }
+            return;
           case "list_backups":
             return {
               root: "C:/mock/Backups",

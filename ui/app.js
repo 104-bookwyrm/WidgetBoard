@@ -1873,6 +1873,9 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   syncHits();
 
   await listen("add-widget", (e) => addWidget(e.payload));
+  await listen("apply-preset", (e) =>
+    applyPreset(e.payload).catch(reportError),
+  );
   await listen("widget-arrived", (e) => receiveWidget(e.payload));
   await listen("edit-mode", (e) => setEdit(!!e.payload));
   await listen("theme-changed", (e) => applyTheme(e.payload));

@@ -407,7 +407,54 @@
         </section>
         <section data-page="widgets" hidden>
           <h2 data-i18n="set.nav.widgets">위젯과 배치</h2>
-          <p class="set-soon" data-i18n="set.soon"></p>
+
+          <fieldset>
+            <legend data-i18n="set.widgets.list_legend"></legend>
+            <div id="wg-list" class="set-list"></div>
+            <div class="set-row set-add">
+              <select id="wg-add-type"></select>
+              <button id="wg-add" data-i18n="set.widgets.add"></button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.widgets.layout_legend"></legend>
+            <div class="set-row">
+              <label for="wg-lock" data-i18n="set.lock"></label>
+              <input type="checkbox" id="wg-lock" data-ui="lockLayout" />
+            </div>
+            <div class="set-row">
+              <label data-i18n="set.widgets.edit"></label>
+              <button id="wg-edit" data-i18n="set.widgets.edit_btn"></button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="lay.builtin"></legend>
+            <div class="set-row set-add">
+              <button id="wg-preset-work" data-preset="work">
+                <span data-i18n="lay.work"></span>
+              </button>
+              <button id="wg-preset-study" data-preset="study">
+                <span data-i18n="lay.study"></span>
+              </button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="lay.saved"></legend>
+            <div id="wg-layouts" class="set-list"></div>
+            <div class="set-row set-add">
+              <input
+                type="text"
+                id="wg-layout-name"
+                maxlength="40"
+                data-i18n-placeholder="lay.name"
+              />
+              <button id="wg-layout-save" data-i18n="lay.save"></button>
+              <button id="wg-layout-undo" data-i18n="lay.undo" hidden></button>
+            </div>
+          </fieldset>
         </section>
         <section data-page="timer" hidden>
           <h2 data-i18n="set.nav.timer">타이머 · 달력</h2>

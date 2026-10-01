@@ -3,6 +3,7 @@
 // Increment 3 — Timer & calendar page (presets editor + holidays).
 // Increment 4 — Backup & data page (backup/restore, auto schedule).
 // Increment 5a — Appearance page (theme editor).
+// Increment 5b — Widgets & layout page (list/add/move/close, presets, saved layouts).
 import { chromium } from "playwright";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
@@ -20,7 +21,7 @@ const ok = (cond, msg, extra = "") => {
 const errs = [];
 async function page(
   lang = "ko",
-  { width = 1024, height = 800, seedConfig, seedTheme } = {},
+  { width = 1024, height = 800, seedConfig, seedTheme, seedWidgets } = {},
 ) {
   const p = await b.newPage({ viewport: { width, height } });
   p.on("pageerror", (e) => errs.push(e.message));
@@ -33,12 +34,13 @@ async function page(
   );
   await p.goto(`http://localhost:8765/settings.html?lang=${lang}`);
   await p.evaluate(
-    ({ cfg, theme }) => {
+    ({ cfg, theme, widgets }) => {
       localStorage.clear();
       if (cfg) localStorage.setItem("wb-config", JSON.stringify(cfg));
       if (theme) localStorage.setItem("wb-theme", theme);
+      if (widgets) localStorage.setItem("wb-widgets", JSON.stringify(widgets));
     },
-    { cfg: seedConfig, theme: seedTheme },
+    { cfg: seedConfig, theme: seedTheme, widgets: seedWidgets },
   );
   await p.reload();
   await p.waitForTimeout(300);
@@ -382,6 +384,104 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
       ),
     ),
     "excluded day saved to holidays.remove",
+  );
+  await p.close();
+}
+
+// --- Widgets & layout page ---
+{
+  const p = await page("ko", {
+    seedWidgets: [
+      { id: "a", type: "memo", display: "D1" },
+      { id: "b", type: "timer", display: "D2" },
+    ],
+  });
+  await p.click(".set-nav button[data-page=widgets]");
+  await p.waitForTimeout(100);
+  const body = await p.$eval(
+    ".set-main [data-page=widgets]",
+    (e) => e.innerText,
+  );
+  ok(
+    !RAW.test(body),
+    "no raw keys on widgets page (ko)",
+    (body.match(RAW) || [])[0],
+  );
+  let rows = await p.$$eval("#wg-list .set-list-row", (r) => r.length);
+  ok(rows === 2, "widget list shows seeded widgets", String(rows));
+
+  // close a widget → replace_widgets without it
+  await p.click("#wg-list .set-list-row:first-child button:last-child");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-widgets")).length,
+    )) === 1,
+    "close removes a widget via replace_widgets",
+  );
+
+  // add a widget → emit_primary add-widget to the board
+  await p.selectOption("#wg-add-type", "calendar");
+  await p.click("#wg-add");
+  await p.waitForTimeout(100);
+  ok(
+    await p.evaluate(() =>
+      (window.__native || []).some(
+        ([c, ev, pl]) =>
+          c === "emit_primary" && ev === "add-widget" && pl === "calendar",
+      ),
+    ),
+    "add widget emits add-widget to the primary board",
+  );
+
+  // lock layout → config.ui.lockLayout
+  await p.click("#wg-lock");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).ui.lockLayout,
+    )) === true,
+    "lock layout saved to config.ui",
+  );
+
+  // edit layout → set_edit_mode
+  await p.click("#wg-edit");
+  await p.waitForTimeout(50);
+  ok(
+    await p.evaluate(() =>
+      (window.__native || []).some(
+        ([c, on]) => c === "set_edit_mode" && on === true,
+      ),
+    ),
+    "edit layout enables edit mode",
+  );
+
+  // preset → emit_primary apply-preset
+  await p.click("#wg-preset-work");
+  await p.waitForTimeout(50);
+  ok(
+    await p.evaluate(() =>
+      (window.__native || []).some(
+        ([c, ev, pl]) =>
+          c === "emit_primary" && ev === "apply-preset" && pl === "work",
+      ),
+    ),
+    "preset emits apply-preset",
+  );
+
+  // save a named layout → store
+  await p.fill("#wg-layout-name", "My setup");
+  await p.click("#wg-layout-save");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-store-layouts"))[0].name,
+    )) === "My setup",
+    "layout saved to the layouts store",
+  );
+  ok(
+    (await p.$$eval("#wg-layouts .set-list-row", (r) => r.length)) === 1,
+    "saved layout listed",
   );
   await p.close();
 }

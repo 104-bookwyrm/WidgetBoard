@@ -682,6 +682,16 @@ fn get_all_widgets(state: State<AppState>) -> Vec<Value> {
     state.widgets.lock().unwrap().clone()
 }
 
+/// Forward an event to the primary board (the settings window drives board-only actions this way,
+/// e.g. add-widget / apply-preset, which need board geometry).
+#[tauri::command]
+fn emit_primary(app: AppHandle, state: State<AppState>, event: String, payload: Value) -> Result<(), String> {
+    if let Some(label) = state.primary_label() {
+        app.emit_to(&label, &event, payload).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Replace every widget at once (loading a layout preset); all boards reload.
 #[tauri::command]
 fn replace_widgets(app: AppHandle, state: State<AppState>, widgets: Vec<Value>) -> Result<(), String> {
@@ -1579,7 +1589,8 @@ fn main() {
             backup_now,
             restore_backup,
             list_backups,
-            open_backups_folder
+            open_backups_folder,
+            emit_primary
         ])
         .run(tauri::generate_context!())
         .expect("error while running WidgetBoard");

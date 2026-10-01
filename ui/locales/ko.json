@@ -417,5 +417,11 @@
   "set.backup.open_config": "config.json 열기",
   "set.appearance.board": "보드",
   "set.appearance.advanced": "AI 테마",
-  "set.appearance.reset": "기본 테마로 되돌리기"
+  "set.appearance.reset": "기본 테마로 되돌리기",
+  "set.widgets.list_legend": "보드의 위젯",
+  "set.widgets.add": "추가",
+  "set.widgets.none": "아직 위젯이 없습니다.",
+  "set.widgets.layout_legend": "배치",
+  "set.widgets.edit": "보드에서 위젯 배치",
+  "set.widgets.edit_btn": "배치 편집"
 }

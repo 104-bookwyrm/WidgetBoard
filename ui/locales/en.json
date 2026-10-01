@@ -417,5 +417,11 @@
   "set.backup.open_config": "Open config.json",
   "set.appearance.board": "Board",
   "set.appearance.advanced": "AI themes",
-  "set.appearance.reset": "Reset to default theme"
+  "set.appearance.reset": "Reset to default theme",
+  "set.widgets.list_legend": "Widgets on your boards",
+  "set.widgets.add": "Add",
+  "set.widgets.none": "No widgets yet.",
+  "set.widgets.layout_legend": "Layout",
+  "set.widgets.edit": "Arrange widgets on the board",
+  "set.widgets.edit_btn": "Edit layout"
 }
