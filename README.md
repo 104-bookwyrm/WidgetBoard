@@ -67,7 +67,10 @@ single widget (installed fonts are suggested, any name can be typed; _모두 초
 
 ## Settings (tray → 설정…)
 
-Saved in `config.json` → `"ui"`, applied instantly on every monitor.
+Settings open in a standalone window (General · Appearance · Widgets & layout ·
+Timer & calendar · Accessibility · Backup & data · About). Changes apply
+instantly on every monitor; most are saved in `config.json`. Backups are
+timestamped folder copies under `Documents\WidgetBoard\Backups` (configurable).
 
 | group         | setting                          | options                                                                                                     |
 | ------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -325,8 +328,8 @@ All in `%APPDATA%\app.widgetboard.desktop\`:
 | file                  | what                                                                                                                         |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `layout.json`         | widgets: type, monitor, x, y, w, h (grid cells), settings (memo text, slideshow list…), background, font, colours, frame     |
-| `settings.json`       | `lang` (`ko` / `en`), `on_top`, `reduce_motion`                                                                              |
-| `config.json`         | `ui` (Settings panel), timer presets, holidays                                                                               |
+| `config.json`         | `app` (`lang`, `on_top`, `reduce_motion`), `ui` (appearance & accessibility), timer presets, holidays, `backup`              |
+| `settings.json`       | legacy app settings (pre-0.12); still read as a fallback, no longer written                                                  |
 | `theme.css`           | the theme                                                                                                                    |
 | `data/events.json`    | calendar entries (also used by the checklist)                                                                                |
 | `data/checklist.json` | checklist tasks                                                                                                              |

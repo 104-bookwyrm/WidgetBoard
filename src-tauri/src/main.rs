@@ -119,8 +119,17 @@ impl AppState {
         write_atomic(&self.dir.join("layout.json"), serde_json::to_string_pretty(&data).unwrap().as_bytes())
     }
     fn persist_settings(&self) {
-        let s = serde_json::to_string_pretty(&*self.settings.lock().unwrap()).unwrap();
-        let _ = write_atomic(&self.dir.join("settings.json"), s.as_bytes());
+        // app settings now live under config.json "app" (merged from the old settings.json in v0.12).
+        let s = self.settings.lock().unwrap().clone();
+        let mut cfg = read_config(&self.dir);
+        if !cfg.is_object() {
+            cfg = json!({});
+        }
+        cfg["app"] = serde_json::to_value(&s).unwrap_or(Value::Null);
+        let _ = write_atomic(
+            &self.dir.join("config.json"),
+            serde_json::to_string_pretty(&cfg).unwrap().as_bytes(),
+        );
     }
     fn primary_label(&self) -> Option<String> {
         let boards = self.boards.lock().unwrap();
@@ -174,6 +183,49 @@ fn read_config(dir: &Path) -> Value {
     read_json(&dir.join("config.json"))
         .or_else(|| serde_json::from_str(DEFAULT_CONFIG).ok())
         .unwrap_or(Value::Null)
+}
+
+/// App settings: from config.json "app" (v0.12+), falling back to the old settings.json.
+fn load_settings(dir: &Path) -> Settings {
+    let cfg = read_config(dir);
+    if let Some(app) = cfg.get("app") {
+        if app.is_object() {
+            if let Ok(s) = serde_json::from_value::<Settings>(app.clone()) {
+                return s;
+            }
+        }
+    }
+    read_json(&dir.join("settings.json")).unwrap_or_default()
+}
+
+/// One-time v0.12 migration: fold settings.json into config.json "app", and the legacy
+/// checklist.weekStart into ui.weekStart. Idempotent; leaves settings.json in place for rollback.
+fn migrate_config(dir: &Path) {
+    let mut cfg = read_config(dir);
+    if !cfg.is_object() {
+        cfg = json!({});
+    }
+    let mut changed = false;
+    if cfg.get("app").map_or(true, |a| !a.is_object()) {
+        let legacy: Settings = read_json(&dir.join("settings.json")).unwrap_or_default();
+        cfg["app"] = serde_json::to_value(&legacy).unwrap_or(Value::Null);
+        changed = true;
+    }
+    if cfg.get("ui").and_then(|u| u.get("weekStart")).is_none() {
+        if let Some(wk) = cfg.get("checklist").and_then(|c| c.get("weekStart")).cloned() {
+            if !cfg.get("ui").map_or(false, |u| u.is_object()) {
+                cfg["ui"] = json!({});
+            }
+            cfg["ui"]["weekStart"] = wk;
+            changed = true;
+        }
+    }
+    if changed {
+        let _ = write_atomic(
+            &dir.join("config.json"),
+            serde_json::to_string_pretty(&cfg).unwrap().as_bytes(),
+        );
+    }
 }
 
 fn widget_id(w: &Value) -> Option<&str> {
@@ -1454,16 +1506,10 @@ fn on_menu(app: &AppHandle, id: &str) {
             let _ = open_settings_window(app, "general");
         }
         "layouts" => {
-            apply_edit_mode(app, true);
-            if let Some(label) = st.primary_label() {
-                let _ = app.emit_to(&label, "open-layouts", ());
-            }
+            let _ = open_settings_window(app, "widgets");
         }
         "theme" => {
-            apply_edit_mode(app, true); // the panel needs the mouse
-            if let Some(label) = st.primary_label() {
-                let _ = app.emit_to(&label, "open-theme-panel", ());
-            }
+            let _ = open_settings_window(app, "appearance");
         }
         "toggle" => toggle_boards(app),
         "folder" => open_path(&st.dir),
@@ -1520,7 +1566,8 @@ fn main() {
             let widgets = read_json::<Value>(&dir.join("layout.json"))
                 .and_then(|v| v.get("widgets").and_then(Value::as_array).cloned())
                 .unwrap_or_default();
-            let settings: Settings = read_json(&dir.join("settings.json")).unwrap_or_default();
+            migrate_config(&dir); // v0.12: fold settings.json + checklist.weekStart into config.json
+            let settings = load_settings(&dir);
             app.manage(AppState {
                 dir,
                 widgets: Mutex::new(widgets),
@@ -1627,6 +1674,34 @@ mod tests {
             !live.join("data").join("extra.json").exists(),
             "content dirs are replaced wholesale, so files added after the backup are gone"
         );
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn migrate_folds_settings_and_weekstart() {
+        let base = std::env::temp_dir().join(format!("wb-mig-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        fs::write(
+            base.join("settings.json"),
+            br#"{"lang":"en","on_top":true,"reduce_motion":false}"#,
+        )
+        .unwrap();
+        fs::write(base.join("config.json"), br#"{"checklist":{"weekStart":"sun"}}"#).unwrap();
+
+        migrate_config(&base);
+        let s = load_settings(&base);
+        assert_eq!(s.lang, "en");
+        assert!(s.on_top);
+        let cfg = read_config(&base);
+        assert_eq!(cfg["app"]["lang"], "en", "settings folded into config.app");
+        assert_eq!(cfg["ui"]["weekStart"], "sun", "weekStart moved to ui");
+
+        // Idempotent: once config.app exists, a changed settings.json is ignored.
+        fs::write(base.join("settings.json"), br#"{"lang":"ko"}"#).unwrap();
+        migrate_config(&base);
+        assert_eq!(load_settings(&base).lang, "en");
 
         let _ = fs::remove_dir_all(&base);
     }

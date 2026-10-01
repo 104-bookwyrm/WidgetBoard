@@ -4,7 +4,7 @@
 //  • 이번 주 (week) — weekly recurring tasks: tick once per week, unticked again when a new week starts
 //  • 이번 달 (month)— monthly recurring tasks: tick once per month, unticked again on the 1st
 // Items are shared by every checklist widget (data/checklist.json); each widget remembers its own tab.
-// Week start: Monday by default, config.json → "checklist": { "weekStart": "sun" } for Sunday.
+// Week start: Monday by default, config.json → "ui": { "weekStart": "sun" } for Sunday.
 import {
   esc,
   ymd,
@@ -80,10 +80,7 @@ export default {
       new Intl.DateTimeFormat(lang, opts).format(parseYmd(d));
 
     // ---- periods ----
-    const weekStart = () =>
-      (api.config?.ui?.weekStart ?? api.config?.checklist?.weekStart) === "sun"
-        ? 0
-        : 1;
+    const weekStart = () => (api.config?.ui?.weekStart === "sun" ? 0 : 1);
     function weekFirstDay(d) {
       const back = (parseYmd(d).getDay() - weekStart() + 7) % 7;
       return addDays(d, -back);
