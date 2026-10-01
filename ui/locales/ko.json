@@ -414,5 +414,8 @@
   "set.backup.confirm_yes": "복원하고 다시 시작",
   "set.backup.restoring": "복원 중…",
   "set.backup.data_legend": "데이터",
-  "set.backup.open_config": "config.json 열기"
+  "set.backup.open_config": "config.json 열기",
+  "set.appearance.board": "보드",
+  "set.appearance.advanced": "AI 테마",
+  "set.appearance.reset": "기본 테마로 되돌리기"
 }

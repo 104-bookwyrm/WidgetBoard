@@ -375,8 +375,10 @@ fn list_fonts() -> Vec<String> {
 }
 
 #[tauri::command]
-fn save_theme(state: State<AppState>, css: String) -> Result<(), String> {
-    write_atomic(&state.dir.join("theme.css"), css.as_bytes())
+fn save_theme(app: AppHandle, state: State<AppState>, css: String) -> Result<(), String> {
+    write_atomic(&state.dir.join("theme.css"), css.as_bytes())?;
+    let _ = app.emit("theme-changed", css); // instant preview; don't wait for the file-watch poll
+    Ok(())
 }
 
 /// Raw binary upload. JS: invoke('save_asset', uint8array, { headers: { ext: 'png' } })

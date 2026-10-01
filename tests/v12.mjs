@@ -2,6 +2,7 @@
 // Increment 1 — window shell + General page. Increment 2 — Accessibility + About/updates pages.
 // Increment 3 — Timer & calendar page (presets editor + holidays).
 // Increment 4 — Backup & data page (backup/restore, auto schedule).
+// Increment 5a — Appearance page (theme editor).
 import { chromium } from "playwright";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
@@ -19,7 +20,7 @@ const ok = (cond, msg, extra = "") => {
 const errs = [];
 async function page(
   lang = "ko",
-  { width = 1024, height = 800, seedConfig } = {},
+  { width = 1024, height = 800, seedConfig, seedTheme } = {},
 ) {
   const p = await b.newPage({ viewport: { width, height } });
   p.on("pageerror", (e) => errs.push(e.message));
@@ -31,10 +32,14 @@ async function page(
       errs.push(m.text()),
   );
   await p.goto(`http://localhost:8765/settings.html?lang=${lang}`);
-  await p.evaluate((cfg) => {
-    localStorage.clear();
-    if (cfg) localStorage.setItem("wb-config", JSON.stringify(cfg));
-  }, seedConfig);
+  await p.evaluate(
+    ({ cfg, theme }) => {
+      localStorage.clear();
+      if (cfg) localStorage.setItem("wb-config", JSON.stringify(cfg));
+      if (theme) localStorage.setItem("wb-theme", theme);
+    },
+    { cfg: seedConfig, theme: seedTheme },
+  );
   await p.reload();
   await p.waitForTimeout(300);
   return p;
@@ -377,6 +382,84 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
       ),
     ),
     "excluded day saved to holidays.remove",
+  );
+  await p.close();
+}
+
+// --- Appearance page: theme editor ---
+{
+  const theme =
+    ':root{\n--c1:#101014;\n--c2:#5b8cff;\n--c3:#e8e8ee;\n--radius:12px;\n--cell:80px;\n--font:"Lexend",sans-serif;\n}\n';
+  const p = await page("ko", { seedTheme: theme });
+  await p.click(".set-nav button[data-page=appearance]");
+  await p.waitForTimeout(50);
+  const body = await p.$eval(
+    ".set-main [data-page=appearance]",
+    (e) => e.innerText,
+  );
+  ok(
+    !RAW.test(body),
+    "no raw keys on appearance page (ko)",
+    (body.match(RAW) || [])[0],
+  );
+
+  // controls reflect the seeded theme
+  ok(
+    (await p.$eval("#th-c2", (e) => e.value.toLowerCase())) === "#5b8cff",
+    "accent colour reflects theme",
+  );
+
+  // changing a slider saves theme.css with the new value
+  await p.$eval("#th-radius", (e) => {
+    e.value = "20";
+    e.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await p.waitForTimeout(100);
+  ok(
+    await p.evaluate(() =>
+      (window.__native || []).some(
+        ([c, css]) => c === "save_theme" && /--radius:\s*20px/.test(css),
+      ),
+    ),
+    "slider change saves theme.css",
+  );
+
+  // board setting (header strip) routes to config.ui
+  await p.selectOption("#ap-header", "always");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).ui.header,
+    )) === "always",
+    "header strip saved to config.ui",
+  );
+
+  // AI paste: a valid theme applies and reveals undo
+  await p.click("#th-ai-paste");
+  await p.fill("#th-paste-text", ":root{ --c2:#ff0000; }");
+  await p.click("#th-paste-apply");
+  await p.waitForTimeout(100);
+  ok(
+    await p.evaluate(() =>
+      (window.__native || []).some(
+        ([c, css]) => c === "save_theme" && /--c2:\s*#ff0000/.test(css),
+      ),
+    ),
+    "AI paste applies the theme",
+  );
+  ok(
+    await p.$eval("#th-undo", (e) => !e.hidden),
+    "undo appears after AI paste",
+  );
+
+  // reset writes the default theme
+  await p.click("#th-reset");
+  await p.waitForTimeout(100);
+  ok(
+    await p.evaluate(() =>
+      (window.__native || []).some(([c]) => c === "save_theme"),
+    ),
+    "reset saves a theme",
   );
   await p.close();
 }

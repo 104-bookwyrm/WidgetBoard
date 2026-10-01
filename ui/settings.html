@@ -157,6 +157,24 @@
       .set-list-row .del {
         min-width: 32px;
       }
+      .set-row input[type="color"] {
+        width: 44px;
+        height: 28px;
+        padding: 0;
+        border: var(--line-width) var(--line-style) var(--line-color);
+        border-radius: 6px;
+        background: var(--c1);
+      }
+      #th-paste-result {
+        font-size: 0.85em;
+        margin: 6px 0;
+      }
+      #th-paste-result.bad {
+        color: #c0392b;
+      }
+      #th-paste-result.warn {
+        opacity: 0.8;
+      }
       .set-saved {
         position: fixed;
         inset: auto 16px 16px auto;
@@ -238,7 +256,154 @@
 
         <section data-page="appearance" hidden>
           <h2 data-i18n="set.nav.appearance">모양</h2>
-          <p class="set-soon" data-i18n="set.soon"></p>
+
+          <fieldset>
+            <legend data-i18n="theme.title"></legend>
+            <div class="set-row">
+              <label for="th-c1" data-i18n="theme.surface"></label>
+              <input type="color" id="th-c1" data-var="--c1" />
+            </div>
+            <div class="set-row">
+              <label for="th-c2" data-i18n="theme.accent"></label>
+              <input type="color" id="th-c2" data-var="--c2" />
+            </div>
+            <div class="set-row">
+              <label for="th-c3" data-i18n="theme.text"></label>
+              <input type="color" id="th-c3" data-var="--c3" />
+            </div>
+            <div class="set-row">
+              <label for="th-font" data-i18n="font.family"></label>
+              <input id="th-font" list="th-font-list" />
+              <datalist id="th-font-list"></datalist>
+            </div>
+            <div class="set-row">
+              <label for="th-size" data-i18n="font.size"></label>
+              <input
+                type="range"
+                id="th-size"
+                min="10"
+                max="24"
+                data-var="--font-size"
+                data-unit="px"
+              />
+            </div>
+            <div class="set-row">
+              <label for="th-radius" data-i18n="theme.radius"></label>
+              <input
+                type="range"
+                id="th-radius"
+                min="0"
+                max="32"
+                data-var="--radius"
+                data-unit="px"
+              />
+            </div>
+            <div class="set-row">
+              <label for="th-outline" data-i18n="theme.outline"></label>
+              <input
+                type="range"
+                id="th-outline"
+                min="0"
+                max="6"
+                data-var="--line-width"
+                data-unit="px"
+              />
+            </div>
+            <div class="set-row">
+              <label for="th-opacity" data-i18n="theme.opacity"></label>
+              <input
+                type="range"
+                id="th-opacity"
+                min="0"
+                max="1"
+                step="0.02"
+                data-var="--widget-opacity"
+              />
+            </div>
+            <div class="set-row">
+              <label for="th-cell" data-i18n="theme.cell"></label>
+              <input
+                type="range"
+                id="th-cell"
+                min="48"
+                max="160"
+                step="4"
+                data-var="--cell"
+                data-unit="px"
+              />
+            </div>
+            <div class="set-row">
+              <button id="th-reset" data-i18n="set.appearance.reset"></button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.appearance.board"></legend>
+            <div class="set-row">
+              <label for="ap-header" data-i18n="set.header"></label>
+              <select id="ap-header" data-ui="header">
+                <option value="hover" data-i18n="set.header.hover"></option>
+                <option value="always" data-i18n="set.header.always"></option>
+                <option value="hidden" data-i18n="set.header.hidden"></option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="ap-density" data-i18n="set.density"></label>
+              <select id="ap-density" data-ui="density">
+                <option
+                  value="compact"
+                  data-i18n="set.density.compact"
+                ></option>
+                <option value="normal" data-i18n="set.density.normal"></option>
+                <option value="roomy" data-i18n="set.density.roomy"></option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="ap-frame" data-i18n="set.frame"></label>
+              <select id="ap-frame" data-ui="frame">
+                <option value="none" data-i18n="look.frame.none"></option>
+                <option value="corners" data-i18n="look.frame.corners"></option>
+                <option value="double" data-i18n="look.frame.double"></option>
+                <option value="stitch" data-i18n="look.frame.stitch"></option>
+                <option value="dots" data-i18n="look.frame.dots"></option>
+                <option value="ornate" data-i18n="look.frame.ornate"></option>
+                <option value="pixel" data-i18n="look.frame.pixel"></option>
+                <option value="tape" data-i18n="look.frame.tape"></option>
+              </select>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.appearance.advanced"></legend>
+            <p class="hint" data-i18n="ai.paste_help"></p>
+            <div class="set-row set-add">
+              <button id="th-ai-copy" data-i18n="ai.copy"></button>
+              <button
+                id="th-ai-paste"
+                class="primary"
+                data-i18n="ai.paste"
+              ></button>
+              <button id="th-undo" data-i18n="ai.undo" hidden></button>
+              <button id="th-file" data-i18n="theme.open_file"></button>
+            </div>
+            <div id="th-paste" hidden>
+              <textarea
+                id="th-paste-text"
+                spellcheck="false"
+                rows="6"
+                style="width: 100%"
+              ></textarea>
+              <div id="th-paste-result" aria-live="polite"></div>
+              <div class="set-row set-add">
+                <button
+                  id="th-paste-apply"
+                  class="primary"
+                  data-i18n="ai.apply"
+                ></button>
+                <button id="th-paste-cancel" data-i18n="set.close"></button>
+              </div>
+            </div>
+          </fieldset>
         </section>
         <section data-page="widgets" hidden>
           <h2 data-i18n="set.nav.widgets">위젯과 배치</h2>

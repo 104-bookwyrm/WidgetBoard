@@ -414,5 +414,8 @@
   "set.backup.confirm_yes": "Restore and restart",
   "set.backup.restoring": "Restoring…",
   "set.backup.data_legend": "Data",
-  "set.backup.open_config": "Open config.json"
+  "set.backup.open_config": "Open config.json",
+  "set.appearance.board": "Board",
+  "set.appearance.advanced": "AI themes",
+  "set.appearance.reset": "Reset to default theme"
 }

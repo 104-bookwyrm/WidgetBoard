@@ -22,29 +22,32 @@ const LANGS = [
 ];
 
 let data = null; // last get_settings result
+let themeCss = ""; // current theme.css text, kept in sync with the board
 const $ = (sel) => document.querySelector(sel);
 const cfgUi = () =>
   data?.config?.ui && typeof data.config.ui === "object" ? data.config.ui : {};
 
-// ---- live "saved" feedback ----
+// ---- transient status toast (reuses the .set-saved pill) ----
 let savedTimer;
-function saved() {
+function flash(msg) {
   const el = $(".set-saved");
-  el.textContent = t("set.saved");
+  el.textContent = msg;
   el.classList.add("show");
   clearTimeout(savedTimer);
-  savedTimer = setTimeout(() => el.classList.remove("show"), 1200);
+  savedTimer = setTimeout(() => el.classList.remove("show"), 1600);
 }
+const saved = () => flash(t("set.saved"));
 
 // ---- theme + accessibility (the window respects the app's own a11y) ----
 function applyTheme(css) {
+  themeCss = typeof css === "string" ? css : "";
   let s = document.getElementById("theme-css");
   if (!s) {
     s = document.createElement("style");
     s.id = "theme-css";
     document.head.appendChild(s);
   }
-  s.textContent = css || "";
+  s.textContent = themeCss;
 }
 function applyA11y() {
   const u = cfgUi();
@@ -504,6 +507,227 @@ async function fillBackup() {
   renderBackupList(info.items || []);
 }
 
+// ---- Appearance page (theme editor) — ported from the in-board #theme-panel ----
+// theme.css is the source of truth; save_theme persists and emits theme-changed for instant board preview.
+const sanitize = (css) =>
+  css
+    .replace(/@import[^;]*;?/gi, "")
+    .replace(/url\(\s*['"]?\s*(https?:|\/\/)[^)]*\)/gi, "none");
+function setVar(css, name, value) {
+  const esc = name.replace(/[-]/g, "\\-");
+  const re = new RegExp(`(^|[\\s;{])(${esc}\\s*:\\s*)([^;]*)(;)`, "m");
+  if (re.test(css)) return css.replace(re, `$1$2${value}$4`);
+  if (/:root\s*\{/.test(css))
+    return css.replace(/:root\s*\{/, (m) => `${m}\n  ${name}: ${value};`);
+  return `${css}\n:root { ${name}: ${value}; }\n`;
+}
+const _cvs = document.createElement("canvas").getContext("2d");
+function toHex(color) {
+  _cvs.fillStyle = "#000";
+  _cvs.fillStyle = color.trim();
+  return _cvs.fillStyle.startsWith("#") ? _cvs.fillStyle : "#000000";
+}
+const firstFamily = (v) =>
+  (v || "")
+    .split(",")[0]
+    .trim()
+    .replace(/^["']|["']$/g, "");
+const cleanFont = (f) =>
+  String(f || "")
+    .replace(/["';{}\\<>]/g, "")
+    .trim()
+    .slice(0, 80);
+const themeVars = () => [
+  ...document.querySelectorAll('[data-page="appearance"] [data-var]'),
+];
+
+function saveTheme(css) {
+  for (const i of themeVars())
+    document.documentElement.style.removeProperty(i.dataset.var);
+  applyTheme(css);
+  invoke("save_theme", { css })
+    .then(saved)
+    .catch(() => {});
+  fillTheme();
+}
+function fillTheme() {
+  const cs = getComputedStyle(document.documentElement);
+  $("#th-font").value = firstFamily(cs.getPropertyValue("--font"));
+  for (const i of themeVars()) {
+    const v = cs.getPropertyValue(i.dataset.var).trim();
+    i.value = i.type === "color" ? toHex(v) : parseFloat(v) || 0;
+  }
+  fillUiControls('[data-page="appearance"] [data-ui]');
+}
+
+// --- AI theme validation (ported) ---
+function extractCss(text) {
+  const m = String(text).match(/```(?:css)?\s*\n([\s\S]*?)```/i);
+  return (m ? m[1] : String(text)).trim();
+}
+function checkTheme(text) {
+  const css = extractCss(text);
+  if (!css) return { ok: false, error: t("ai.err_empty") };
+  let sheet;
+  try {
+    sheet = new CSSStyleSheet();
+    sheet.replaceSync(sanitize(css));
+  } catch {
+    return { ok: false, error: t("ai.err_syntax") };
+  }
+  const style = [...sheet.cssRules].filter((r) => r.style);
+  if (!style.some((r) => [...r.style].some((p) => p.startsWith("--"))))
+    return { ok: false, error: t("ai.err_no_vars") };
+  const warnings = [];
+  const outside = style.filter(
+    (r) =>
+      !/^(:root|\[data-widget=("|')?[a-z]+("|')?\])(\s*,\s*(:root|\[data-widget=("|')?[a-z]+("|')?\]))*$/.test(
+        r.selectorText,
+      ),
+  );
+  if (outside.length || [...sheet.cssRules].length !== style.length)
+    warnings.push(
+      t("ai.warn_outside", {
+        n: outside.length + [...sheet.cssRules].length - style.length,
+      }),
+    );
+  if (/@import|url\(\s*['"]?\s*(https?:|\/\/)/i.test(css))
+    warnings.push(t("ai.warn_remote"));
+  if (/--(cell|gap)\s*:/.test(css)) warnings.push(t("ai.warn_grid"));
+  return { ok: true, css, warnings };
+}
+function contrast(a, b) {
+  const lum = (c) => {
+    const p = document.createElement("i");
+    p.style.color = c;
+    document.body.append(p);
+    const v = getComputedStyle(p).color;
+    p.remove();
+    const n = v.match(/[\d.]+/g)?.map(Number) || [0, 0, 0];
+    const rgb = v.startsWith("color(")
+      ? n.slice(0, 3).map((x) => x * 255)
+      : n.slice(0, 3);
+    const ch = rgb.map((x) =>
+      (x /= 255) <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4,
+    );
+    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+  };
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+function contrastWarnings() {
+  const w = [];
+  const text = contrast("var(--c3)", "var(--c1)");
+  const acc = contrast("var(--on-accent)", "var(--c2)");
+  if (text < 4.5) w.push(t("ai.warn_contrast_text", { r: text.toFixed(1) }));
+  if (acc < 3) w.push(t("ai.warn_contrast_accent", { r: acc.toFixed(1) }));
+  return w;
+}
+let themeBackup = null;
+async function copyText(txt) {
+  try {
+    await navigator.clipboard.writeText(txt);
+    return true;
+  } catch {
+    const ta = Object.assign(document.createElement("textarea"), {
+      value: txt,
+    });
+    document.body.append(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  }
+}
+async function aiCopy() {
+  const prompt = await fetch("ai-theme-prompt.md")
+    .then((r) => r.text())
+    .catch(() => "");
+  const body =
+    prompt
+      .split("<!-- PROMPT START -->")[1]
+      ?.split("<!-- PROMPT END -->")[0]
+      ?.trim() || prompt;
+  const full = `${body}\n\n## My current theme (start from this if I ask to change it)\n\`\`\`css\n${themeCss.trim()}\n\`\`\`\n\n## What I want\n`;
+  flash(t((await copyText(full)) ? "ai.copied" : "ai.copy_failed"));
+}
+async function aiApply() {
+  const res = $("#th-paste-result");
+  const r = checkTheme($("#th-paste-text").value);
+  res.className = "";
+  if (!r.ok) {
+    res.className = "bad";
+    res.textContent = r.error;
+    return;
+  }
+  themeBackup = themeCss;
+  invoke("store_set", {
+    key: "theme_backup",
+    value: themeBackup,
+    src: "host",
+  }).catch(() => {});
+  saveTheme(r.css);
+  const warnings = [...r.warnings, ...contrastWarnings()];
+  res.className = warnings.length ? "warn" : "";
+  res.textContent = warnings.length ? warnings.join(" · ") : t("ai.applied");
+  $("#th-undo").hidden = false;
+}
+async function aiUndo() {
+  const prev =
+    themeBackup ??
+    (await invoke("store_get", { key: "theme_backup" }).catch(() => null));
+  if (typeof prev !== "string") return flash(t("ai.no_backup"));
+  saveTheme(prev);
+  themeBackup = null;
+  $("#th-undo").hidden = true;
+  flash(t("ai.undone"));
+}
+function bindAppearance() {
+  bindUiControls('[data-page="appearance"] [data-ui]');
+  for (const i of themeVars()) {
+    const val = () => i.value + (i.dataset.unit ?? "");
+    i.addEventListener("input", () =>
+      document.documentElement.style.setProperty(i.dataset.var, val()),
+    );
+    i.addEventListener("change", () =>
+      saveTheme(setVar(themeCss, i.dataset.var, val())),
+    );
+  }
+  $("#th-font").addEventListener("change", () => {
+    const name = cleanFont($("#th-font").value);
+    const val = name
+      ? `"${name}", "Malgun Gothic", system-ui, sans-serif`
+      : '"Segoe UI Variable", "Segoe UI", "Malgun Gothic", system-ui, sans-serif';
+    saveTheme(setVar(themeCss, "--font", val));
+  });
+  $("#th-file").onclick = () => invoke("open_theme_file").catch(() => {});
+  $("#th-reset").onclick = async () => {
+    const def = await fetch("default-theme.css")
+      .then((r) => r.text())
+      .catch(() => "");
+    if (def) saveTheme(def);
+  };
+  $("#th-ai-copy").onclick = aiCopy;
+  $("#th-ai-paste").onclick = () => {
+    $("#th-paste").hidden = false;
+    $("#th-paste-result").textContent = "";
+    $("#th-paste-text").focus();
+  };
+  $("#th-paste-cancel").onclick = () => ($("#th-paste").hidden = true);
+  $("#th-paste-apply").onclick = aiApply;
+  $("#th-undo").onclick = aiUndo;
+}
+async function fillFontList() {
+  const fonts = await invoke("list_fonts").catch(() => []);
+  const dl = $("#th-font-list");
+  dl.innerHTML = "";
+  for (const f of Array.isArray(fonts) ? fonts : []) {
+    const o = document.createElement("option");
+    o.value = f;
+    dl.append(o);
+  }
+}
+
 // ---- init ----
 async function init() {
   data = await invoke("get_settings");
@@ -521,6 +745,9 @@ async function init() {
   fillTimer();
   bindBackup();
   fillBackup();
+  bindAppearance();
+  fillTheme();
+  fillFontList();
   showPage(new URLSearchParams(location.search).get("page") || "general");
 
   await listen("settings-page", showPage);
@@ -533,9 +760,13 @@ async function init() {
     fillAbout();
     fillTimer();
     fillBackup();
+    fillTheme();
     showPage(currentPage());
   });
-  await listen("theme-changed", applyTheme);
+  await listen("theme-changed", (css) => {
+    applyTheme(css);
+    fillTheme();
+  });
   await listen("motion-changed", (on) => {
     if (data) data.app.reduceMotion = !!on;
     applyA11y();
@@ -546,6 +777,7 @@ async function init() {
     applyA11y();
     fillGeneral();
     fillA11y();
+    fillUiControls('[data-page="appearance"] [data-ui]');
   });
   await listen("update-status", showUpdate);
 
@@ -653,6 +885,22 @@ function settingsMock() {
           case "update_restart":
             window.__restarted = true;
             return;
+          case "save_theme":
+            ls.set("wb-theme", args.css);
+            (window.__native ||= []).push(["save_theme", args.css]);
+            return emit("theme-changed", args.css);
+          case "open_theme_file":
+            (window.__native ||= []).push(["open_theme_file"]);
+            return;
+          case "list_fonts":
+            return ["Lexend", "Arial", "Georgia"];
+          case "store_set":
+            ls.set("wb-store-" + args.key, JSON.stringify(args.value));
+            return;
+          case "store_get": {
+            const v = ls.get("wb-store-" + args.key);
+            return v ? JSON.parse(v) : null;
+          }
           case "list_backups":
             return {
               root: "C:/mock/Backups",
