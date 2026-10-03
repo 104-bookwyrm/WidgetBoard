@@ -23,6 +23,8 @@ async function page(w = 1440, h = 810, lang = "ko") {
       !/404|mock failure/.test(m.text()) &&
       errs.push(m.text()),
   );
+  // the calendar checks use September 2026 dates; pin the date, timers still run normally
+  await p.clock.setSystemTime(new Date("2026-09-26T09:00:00+09:00"));
   await p.goto(`http://localhost:8765/index.html?lang=${lang}`);
   return p;
 }
@@ -585,7 +587,7 @@ async function dragResize(p, sel, dw, dh) {
   });
   await p.waitForTimeout(1000);
   ok(
-    (await p.textContent("#toast")).includes("저장하지 못했습니다"),
+    (await p.textContent("#toast")).includes("저장 실패"),
     "G: failed save is reported",
     await p.textContent("#toast"),
   );
@@ -682,7 +684,7 @@ async function dragResize(p, sel, dw, dh) {
   await dragHead(p, ".widget >> nth=0", 2, 0);
   await p.waitForTimeout(500);
   ok(
-    (await p.textContent("#toast")).includes("저장하지 못했습니다"),
+    (await p.textContent("#toast")).includes("저장 실패"),
     "K: layout save failure reported",
   );
   await p.close();
@@ -1109,7 +1111,7 @@ async function dragResize(p, sel, dw, dh) {
   // Sunday week start via config
   await tab("week");
   await p.evaluate(() =>
-    __mock.emit("config-changed", { checklist: { weekStart: "sun" } }),
+    __mock.emit("config-changed", { ui: { weekStart: "sun" } }),
   );
   await p.waitForTimeout(100);
   ok(
@@ -1259,7 +1261,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.text.includes("액자 없이"))
+      .find((i) => i.text.includes("액자 제거"))
       .action(),
   );
   await p.waitForTimeout(100);
@@ -1295,7 +1297,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.text.includes("액자 없이"))
+      .find((i) => i.text.includes("액자 제거"))
       .action(),
   );
   await p.evaluate(() => (document.body.style.background = "#ff00ff"));
@@ -1492,7 +1494,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.click("#paste-apply");
   await p.waitForTimeout(200);
   ok(
-    (await p.textContent("#paste-result")) === "적용했습니다 ✓",
+    (await p.textContent("#paste-result")) === "적용했습니다.",
     "U: well-formed AI answer applies with no warnings",
     await p.textContent("#paste-result"),
   );
@@ -1573,7 +1575,7 @@ async function dragResize(p, sel, dw, dh) {
   );
   ok(
     r[0] === "warn" &&
-      r[1].includes("범위 밖") &&
+      r[1].includes("미설정 규칙") &&
       r[1].includes("칸 크기") &&
       r[1].includes("인터넷"),
     "U: out-of-contract rules, grid change, remote import all flagged",
@@ -1844,7 +1846,7 @@ async function dragResize(p, sel, dw, dh) {
   );
   ok(
     menu?.some(
-      (m) => m.startsWith("위젯 종류 바꾸기>") && m.includes("스톱워치"),
+      (m) => m.startsWith("다른 위젯으로 바꾸기>") && m.includes("스톱워치"),
     ),
     "W: Shift+F10 opens the menu with “change type”",
     JSON.stringify(menu),
@@ -1853,7 +1855,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.items && i.text === "위젯 종류 바꾸기")
+      .find((i) => i.items && i.text === "다른 위젯으로 바꾸기")
       .items.find((x) => x.text === "스톱워치")
       .action(),
   );
@@ -1875,7 +1877,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.text === "위젯 종류 바꾸기")
+      .find((i) => i.text === "다른 위젯으로 바꾸기")
       .items.find((x) => x.text === "타이머")
       .action(),
   );
@@ -1893,7 +1895,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.text === "위젯 종류 바꾸기")
+      .find((i) => i.text === "다른 위젯으로 바꾸기")
       .items.find((x) => x.text === "이미지")
       .action(),
   );
@@ -1904,7 +1906,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.text === "위젯 종류 바꾸기")
+      .find((i) => i.text === "다른 위젯으로 바꾸기")
       .items.find((x) => x.text === "메모")
       .action(),
   );
@@ -1921,8 +1923,8 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.text === "위젯 종류 바꾸기")
-      .items.find((x) => x.text === "캘린더")
+      .find((i) => i.text === "다른 위젯으로 바꾸기")
+      .items.find((x) => x.text === "달력")
       .action(),
   );
   await p.waitForTimeout(450);
@@ -1970,7 +1972,7 @@ async function dragResize(p, sel, dw, dh) {
       ".widget[data-id=c]",
       (e) =>
         e.getAttribute("role") === "region" &&
-        e.getAttribute("aria-label") === "캘린더",
+        e.getAttribute("aria-label") === "달력",
     ),
     "W: widgets are labelled regions",
   );

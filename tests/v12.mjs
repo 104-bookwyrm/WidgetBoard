@@ -57,7 +57,7 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   ok(nav.length === 7, "seven sidebar pages", String(nav.length));
   ok(
     nav.join("|") ===
-      "일반|모양|위젯과 배치|타이머 · 달력|접근성|백업 · 데이터|정보 · 업데이트",
+      "일반|모양|위젯 · 배치|타이머 · 달력|접근성|백업 · 데이터|정보 · 업데이트",
     "nav localized (ko)",
     nav.join("|"),
   );

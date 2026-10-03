@@ -10,3 +10,7 @@ node_modules/
 
 # local handoff notes
 HANDOFF-*.md
+
+# local working notes
+memory.md
+plan.md

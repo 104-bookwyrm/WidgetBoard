@@ -44,7 +44,7 @@ const openSettings = async (p) => {
   );
   const st = await p.$eval("#update-status", (e) => e.textContent);
   ok(
-    /v0\.11\.0/.test(st) && /주소가 아직 없습니다/.test(st),
+    /v0\.11\.0/.test(st) && /주소가 설정되지 않았습니다/.test(st),
     'status shows version and "not configured"',
     st,
   );
@@ -55,7 +55,9 @@ const openSettings = async (p) => {
   await p.click("#update-now");
   await p.waitForTimeout(150);
   ok(
-    /주소가 아직 없습니다/.test(await p.$eval("#toast", (e) => e.textContent)),
+    /주소가 설정되지 않았습니다/.test(
+      await p.$eval("#toast", (e) => e.textContent),
+    ),
     "manual check explains what is missing",
   );
   await p.selectOption("#set-update", "daily");
@@ -90,7 +92,7 @@ const openSettings = async (p) => {
   await p.waitForTimeout(250);
   const tt = await p.$eval("#toast", (e) => e.textContent);
   ok(
-    /v0\.12\.0 준비됨/.test(tt) && /지금 다시 시작/.test(tt),
+    /v0\.12\.0 준비 완료/.test(tt) && /재시작/.test(tt),
     "ready toast offers restart",
     tt,
   );

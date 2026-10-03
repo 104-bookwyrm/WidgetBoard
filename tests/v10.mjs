@@ -626,7 +626,7 @@ const BASE = [
   await p.keyboard.press("Escape"); // closes settings
   // focus mode
   const hits0 = await p.evaluate(() => window.__hits.length);
-  ok(await menuAction(p, "me", "이 위젯에만 집중"), "4: focus entry in menu");
+  ok(await menuAction(p, "me", "집중 모드"), "4: focus entry in menu");
   await p.waitForTimeout(250);
   const f = await p.evaluate(() => ({
     vis: [...document.querySelectorAll(".widget")]
@@ -759,7 +759,7 @@ const BASE = [
   await p.clock.fastForward("00:25");
   await p.waitForTimeout(200);
   ok(
-    !/남은 할 일/.test(
+    !/남은 일정/.test(
       await p.$eval("#toast", (e) => (e.hidden ? "" : e.textContent)),
     ),
     "6: no reminder before the time",
@@ -768,7 +768,7 @@ const BASE = [
   await p.waitForTimeout(300);
   const t1 = await p.$eval("#toast", (e) => e.textContent);
   ok(
-    /남은 할 일 2개/.test(t1),
+    /남은 일정 2개/.test(t1),
     "6: reminder counts today's open + carried tasks (done & daily-done skipped)",
     t1,
   );
@@ -789,10 +789,7 @@ const BASE = [
 {
   const p = await page();
   await seed(p, BASE);
-  ok(
-    await menuAction(p, "tm", "모양 (글꼴·색·테두리)…"),
-    "7: appearance entry in menu",
-  );
+  ok(await menuAction(p, "tm", "모양…"), "7: appearance entry in menu");
   await p.waitForTimeout(150);
   ok(
     !(await p.$eval("#font-panel", (e) => e.hidden)),
@@ -946,7 +943,7 @@ const BASE = [
     `${cornerRed}/${midRed}`,
   );
   // custom SVG upload
-  await menuAction(p, "hx", "모양 (글꼴·색·테두리)…");
+  await menuAction(p, "hx", "모양…");
   await p.waitForTimeout(150);
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30"><rect x="1" y="1" width="28" height="28" fill="none" stroke="#000" stroke-width="4"/></svg>';
@@ -1058,7 +1055,9 @@ const BASE = [
     "8: layouts panel opens from tray",
   );
   ok(
-    /아직/.test(await p.$eval("#layout-list", (e) => e.textContent)),
+    /저장된 레이아웃이 없습니다/.test(
+      await p.$eval("#layout-list", (e) => e.textContent),
+    ),
     "8: empty saved list says so",
   );
   await p.screenshot({ path: "shots/v10-layouts.png" });
@@ -1190,7 +1189,9 @@ const BASE = [
   await p.click('#layout-list [data-del="0"]');
   await p.waitForTimeout(250);
   ok(
-    /아직/.test(await p.$eval("#layout-list", (e) => e.textContent)),
+    /저장된 레이아웃이 없습니다/.test(
+      await p.$eval("#layout-list", (e) => e.textContent),
+    ),
     "8: layout deleted",
   );
   await p.click("#toast button");
