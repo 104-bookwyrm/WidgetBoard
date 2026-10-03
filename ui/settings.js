@@ -124,17 +124,12 @@ function fillGeneral() {
   lang.onchange = () =>
     invoke("set_app", { patch: { lang: lang.value } }).then(saved);
 
-  const onTop = $("#set-ontop");
-  onTop.checked = !!data.app.onTop;
-  onTop.onchange = () =>
-    invoke("set_app", { patch: { onTop: onTop.checked } }).then(saved);
-
   const auto = $("#set-autostart");
   auto.checked = !!data.autostart.on;
   $("#set-autostart-hint").hidden = !data.autostart.disabledByWindows;
   auto.onchange = () =>
     invoke("set_autostart", { on: auto.checked }).then((on) => {
-      auto.checked = !!on;
+      auto.checked = data.autostart.on = !!on;
       saved();
     });
 
@@ -756,25 +751,65 @@ const afterBoardChange = () => {
   saved();
   setTimeout(fillWidgets, 400); // board-side ops land asynchronously
 };
+// Boards listen for these broadcasts and act on their own widgets (name / hidden / locate / restore).
+const emit = (ev, payload) => T.event.emit(ev, payload).catch(() => {});
+const wName = (w) => w.name || t("widget." + w.type);
+const when = (secs) =>
+  new Date(secs * 1000).toLocaleString(
+    data.app.lang === "ko" ? "ko-KR" : "en-US",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+    },
+  );
+function hintRow(host, key) {
+  const p = document.createElement("p");
+  p.className = "hint";
+  p.textContent = t(key);
+  host.append(p);
+}
 function renderWidgetList(all) {
   const host = $("#wg-list");
   host.innerHTML = "";
-  if (!all.length) {
-    const p = document.createElement("p");
-    p.className = "hint";
-    p.textContent = t("set.widgets.none");
-    host.append(p);
-    return;
-  }
+  if (!all.length) return hintRow(host, "set.widgets.none");
   const displays = (data.displays || []).map((d) => d.display);
   for (const w of all) {
     const row = document.createElement("div");
-    row.className = "set-list-row";
-    const txt = document.createElement("span");
-    txt.className = "grow";
-    txt.textContent =
-      t("widget." + w.type) + (w.display ? ` · ${w.display}` : "");
-    row.append(txt);
+    row.className = "set-list-row" + (w.hidden ? " is-hidden" : "");
+    // the name field: clicking it flashes the real widget, typing renames it
+    const name = document.createElement("input");
+    name.type = "text";
+    name.className = "grow";
+    name.maxLength = 40;
+    name.value = w.name || "";
+    name.placeholder = t("widget." + w.type);
+    name.setAttribute(
+      "aria-label",
+      t("set.widgets.name", { type: t("widget." + w.type) }),
+    );
+    name.onfocus = () => emit("widget-locate", w.id);
+    name.onchange = () => {
+      w.name = name.value.trim();
+      emit("widget-patch", { id: w.id, patch: { name: w.name } });
+      saved();
+    };
+    const meta = document.createElement("span");
+    meta.className = "muted";
+    meta.textContent =
+      t("widget." + w.type) +
+      (w.display && displays.length > 1 ? ` · ${w.display}` : "");
+    const hide = btn(
+      t(w.hidden ? "set.widgets.show" : "set.widgets.hide"),
+      () => {
+        w.hidden = !w.hidden;
+        emit("widget-patch", { id: w.id, patch: { hidden: w.hidden } });
+        saved();
+        renderWidgetList(all);
+      },
+      "",
+    );
+    hide.setAttribute("aria-pressed", String(!!w.hidden));
+    row.append(name, meta, hide);
     if (displays.length > 1)
       row.append(
         btn(
@@ -789,14 +824,120 @@ function renderWidgetList(all) {
           "",
         ),
       );
+    const close = btn("✕", async () => {
+      await invoke("bin_put", { widget: w }).catch(() => {});
+      winReplace(all.filter((x) => x.id !== w.id)).then(afterBoardChange);
+    });
+    close.title = close.ariaLabel = t("set.bin.close", { name: wName(w) });
+    row.append(close);
+    host.append(row);
+  }
+}
+
+// -- closed-widgets bin --
+function confirmInline(row, msgKey, onYes, back) {
+  row.innerHTML = "";
+  const msg = document.createElement("span");
+  msg.className = "grow";
+  msg.textContent = t(msgKey);
+  row.append(
+    msg,
+    btn(t("set.bin.erase_yes"), onYes, "primary"),
+    btn(t("set.close"), back, ""),
+  );
+}
+async function renderBin() {
+  const bin = await invoke("bin_list").catch(() => []);
+  const host = $("#wg-bin");
+  host.innerHTML = "";
+  $("#wg-bin-empty").hidden = !bin.length;
+  if (!bin.length) return hintRow(host, "set.bin.none");
+  for (const { at, w } of bin) {
+    const row = document.createElement("div");
+    row.className = "set-list-row";
+    const txt = document.createElement("span");
+    txt.className = "grow";
+    txt.textContent = `${wName(w)} · ${t("widget." + w.type)}`;
+    const ts = document.createElement("span");
+    ts.className = "muted";
+    ts.textContent = when(at);
     row.append(
-      btn("✕", () =>
-        winReplace(all.filter((x) => x.id !== w.id)).then(afterBoardChange),
+      txt,
+      ts,
+      btn(
+        t("set.bin.restore"),
+        async () => {
+          const back = await invoke("bin_take", { id: w.id }).catch(() => null);
+          if (back) emit("widget-restore", back);
+          afterBoardChange();
+          renderBin();
+        },
+        "",
+      ),
+      btn(t("set.bin.erase"), () =>
+        confirmInline(
+          row,
+          "set.bin.erase_confirm",
+          async () => {
+            await invoke("bin_erase", { id: w.id }).catch(() => {});
+            renderBin();
+          },
+          renderBin,
+        ),
       ),
     );
     host.append(row);
   }
 }
+
+// -- memo archive (opt-in) --
+async function renderArchive() {
+  const on = !!data.config?.archive?.memos;
+  $("#wg-archive").checked = on;
+  const host = $("#wg-archive-list");
+  host.innerHTML = "";
+  const lines = await invoke("memo_archive_list").catch(() => []);
+  if (!lines.length) return on ? hintRow(host, "set.archive.none") : undefined;
+  const byId = new Map();
+  for (const v of lines)
+    (byId.get(v.id) || byId.set(v.id, []).get(v.id)).push(v);
+  const memos = [...byId.values()].sort((a, b) => b.at(-1).t - a.at(-1).t);
+  for (const versions of memos) {
+    const last = versions.at(-1);
+    const d = document.createElement("details");
+    const sum = document.createElement("summary");
+    const title = last.name || last.text.split("\n")[0].slice(0, 40);
+    sum.textContent = `${title} · ${t("set.archive.versions", { n: versions.length })} · ${when(last.t)}`;
+    d.append(sum);
+    d.ontoggle = () => {
+      if (!d.open || d.children.length > 1) return;
+      for (const v of [...versions].reverse()) {
+        const row = document.createElement("div");
+        row.className = "set-list-row";
+        const pre = document.createElement("pre");
+        pre.textContent = v.text;
+        const ts = document.createElement("span");
+        ts.className = "muted";
+        ts.textContent = when(v.t);
+        row.append(
+          ts,
+          pre,
+          btn(
+            t("set.archive.copy"),
+            () =>
+              copyText(v.text).then((ok) =>
+                flash(t(ok ? "ai.copied" : "ai.copy_failed")),
+              ),
+            "",
+          ),
+        );
+        d.append(row);
+      }
+    };
+    host.append(d);
+  }
+}
+
 async function renderWgLayouts() {
   const list = await invoke("store_get", { key: "layouts" }).catch(() => null);
   const layouts = (Array.isArray(list) ? list : []).filter(
@@ -843,6 +984,27 @@ async function renderWgLayouts() {
   $("#wg-layout-undo").hidden = !Array.isArray(undo);
 }
 function bindWidgets() {
+  $("#wg-bin-empty").onclick = () => {
+    const row = document.createElement("div");
+    row.className = "set-list-row";
+    $("#wg-bin").prepend(row);
+    confirmInline(
+      row,
+      "set.bin.empty_confirm",
+      async () => {
+        await invoke("bin_erase", { id: null }).catch(() => {});
+        renderBin();
+      },
+      renderBin,
+    );
+  };
+  $("#wg-archive").onchange = () =>
+    invoke("save_config", {
+      patch: { archive: { memos: $("#wg-archive").checked } },
+    }).then(() => {
+      saved();
+      renderArchive();
+    });
   bindUiControls('[data-page="widgets"] [data-ui]');
   const sel = $("#wg-add-type");
   $("#wg-add").onclick = () =>
@@ -907,6 +1069,8 @@ async function fillWidgets() {
   const all = await invoke("get_all_widgets").catch(() => []);
   renderWidgetList(Array.isArray(all) ? all : []);
   renderWgLayouts();
+  renderBin();
+  renderArchive();
   fillUiControls('[data-page="widgets"] [data-ui]');
 }
 
@@ -966,6 +1130,10 @@ async function init() {
     fillUiControls('[data-page="widgets"] [data-ui]');
   });
   await listen("update-status", showUpdate);
+  await listen("restore-failed", (e) => {
+    fillBackup(); // drop the stuck "restoring…" row
+    $("#backup-now-msg").textContent = String(e);
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") win.close();
@@ -1008,7 +1176,6 @@ function settingsMock() {
             return {
               app: {
                 lang: new URLSearchParams(location.search).get("lang") || "ko",
-                onTop: ls.get("wb-ontop") === "1",
                 reduceMotion: false,
               },
               theme: ls.get("wb-theme") || "",
@@ -1027,7 +1194,6 @@ function settingsMock() {
             };
           case "set_app": {
             const p = args.patch || {};
-            if ("onTop" in p) ls.set("wb-ontop", p.onTop ? "1" : "");
             (window.__native ||= []).push(["set_app", p]);
             if ("lang" in p) emit("lang-changed", p.lang);
             if ("reduceMotion" in p) emit("motion-changed", p.reduceMotion);
@@ -1142,10 +1308,37 @@ function settingsMock() {
           case "open_config_file":
             (window.__native ||= []).push(["open_config_file"]);
             return;
+          case "bin_list":
+            return JSON.parse(ls.get("wb-bin") || "[]");
+          case "bin_put": {
+            const bin = JSON.parse(ls.get("wb-bin") || "[]").filter(
+              (e) => e.w.id !== args.widget.id,
+            );
+            bin.unshift({ at: 1790000000, w: args.widget });
+            ls.set("wb-bin", JSON.stringify(bin));
+            return;
+          }
+          case "bin_take": {
+            const bin = JSON.parse(ls.get("wb-bin") || "[]");
+            const e = bin.find((x) => x.w.id === args.id);
+            ls.set("wb-bin", JSON.stringify(bin.filter((x) => x !== e)));
+            return e ? e.w : null;
+          }
+          case "bin_erase": {
+            const bin = JSON.parse(ls.get("wb-bin") || "[]");
+            const keep = args.id ? bin.filter((x) => x.w.id !== args.id) : [];
+            ls.set("wb-bin", JSON.stringify(keep));
+            return;
+          }
+          case "memo_archive_list":
+            return JSON.parse(ls.get("wb-archive") || "[]");
           default:
             return null;
         }
       },
+    },
+    event: {
+      emit: async (ev, p) => (window.__native ||= []).push(["emit", ev, p]),
     },
     webviewWindow: {
       getCurrentWebviewWindow: () => ({

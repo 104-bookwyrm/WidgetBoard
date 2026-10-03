@@ -63,12 +63,11 @@ fn tr(lang: &str, key: &str) -> String {
 #[serde(default)]
 struct Settings {
     lang: String,
-    on_top: bool,
     reduce_motion: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
-        Self { lang: LOCALES[0].0.into(), on_top: false, reduce_motion: false }
+        Self { lang: LOCALES[0].0.into(), reduce_motion: false }
     }
 }
 
@@ -100,7 +99,6 @@ struct AppState {
     hits: Mutex<HashMap<String, Vec<Rect>>>,
     interacting: AtomicBool,
     edit: AtomicBool,
-    settings_open: AtomicBool, // the standalone settings window is open; boards drop to the desktop layer
     tray_items: Mutex<Option<TrayItems>>,
     generation: AtomicUsize, // board windows are recreated when monitors change
     media: media::Media,
@@ -264,7 +262,6 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
         "widgets": widgets,
         "theme": theme,
         "lang": settings.lang,
-        "onTop": settings.on_top,
         "reduceMotion": settings.reduce_motion,
         "edit": state.edit.load(Ordering::Relaxed),
         "config": read_config(&state.dir),
@@ -542,6 +539,135 @@ fn set_autostart(on: bool) -> Result<bool, String> {
     Ok(autostart_get())
 }
 
+// ---------- closed-widgets bin + memo archive ----------
+
+/// Closed widgets wait here (newest first, max BIN_MAX) until restored or erased.
+static BIN_LOCK: Mutex<()> = Mutex::new(());
+const BIN_MAX: usize = 50;
+
+fn bin_path(dir: &Path) -> PathBuf {
+    dir.join("data").join("bin.json")
+}
+fn bin_read(dir: &Path) -> Vec<Value> {
+    read_json(&bin_path(dir)).unwrap_or_default()
+}
+fn bin_write(dir: &Path, bin: &[Value]) -> Result<(), String> {
+    fs::create_dir_all(dir.join("data")).map_err(|e| e.to_string())?;
+    write_atomic(&bin_path(dir), serde_json::to_string_pretty(bin).unwrap().as_bytes())
+}
+fn entry_is(e: &Value, id: &str) -> bool {
+    widget_id(&e["w"]) == Some(id)
+}
+
+#[tauri::command]
+fn bin_put(state: State<AppState>, widget: Value) -> Result<(), String> {
+    let id = widget_id(&widget).ok_or("widget without id")?.to_string();
+    let dropped = {
+        let _g = BIN_LOCK.lock().unwrap();
+        let mut bin = bin_read(&state.dir);
+        bin.retain(|e| !entry_is(e, &id));
+        bin.insert(0, json!({ "at": now_secs(), "w": widget }));
+        let dropped = if bin.len() > BIN_MAX { bin.split_off(BIN_MAX) } else { vec![] };
+        bin_write(&state.dir, &bin)?;
+        dropped
+    };
+    purge_assets(&state.dir, &dropped);
+    Ok(())
+}
+
+#[tauri::command]
+fn bin_list(state: State<AppState>) -> Vec<Value> {
+    bin_read(&state.dir)
+}
+
+/// Remove one entry and hand its widget back (restore / undo). Its images stay.
+#[tauri::command]
+fn bin_take(state: State<AppState>, id: String) -> Result<Option<Value>, String> {
+    let _g = BIN_LOCK.lock().unwrap();
+    let mut bin = bin_read(&state.dir);
+    let Some(i) = bin.iter().position(|e| entry_is(e, &id)) else { return Ok(None) };
+    let e = bin.remove(i);
+    bin_write(&state.dir, &bin)?;
+    Ok(Some(e["w"].clone()))
+}
+
+/// Erase one entry (or the whole bin when id is None) for good, with images nothing else uses.
+#[tauri::command]
+fn bin_erase(state: State<AppState>, id: Option<String>) -> Result<(), String> {
+    let gone = {
+        let _g = BIN_LOCK.lock().unwrap();
+        let (gone, keep): (Vec<Value>, Vec<Value>) =
+            bin_read(&state.dir).into_iter().partition(|e| id.as_deref().map_or(true, |id| entry_is(e, id)));
+        bin_write(&state.dir, &keep)?;
+        gone
+    };
+    purge_assets(&state.dir, &gone);
+    Ok(())
+}
+
+/// Delete asset files that only `gone` referenced. A name still mentioned in layout.json, config.json,
+/// theme.css or any data/*.json (bin, saved layouts, shelf, undo) is kept.
+// ponytail: substring scan over a few small JSON files; index asset refs if this ever gets slow
+fn purge_assets(dir: &Path, gone: &[Value]) {
+    if gone.is_empty() {
+        return;
+    }
+    let refs = serde_json::to_string(gone).unwrap_or_default();
+    let mut keep: String = ["layout.json", "config.json", "theme.css"]
+        .iter()
+        .map(|f| fs::read_to_string(dir.join(f)).unwrap_or_default())
+        .collect();
+    for e in fs::read_dir(dir.join("data")).into_iter().flatten().flatten() {
+        if e.path().extension().is_some_and(|x| x == "json") {
+            keep.push_str(&fs::read_to_string(e.path()).unwrap_or_default());
+        }
+    }
+    for e in fs::read_dir(dir.join("assets")).into_iter().flatten().flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if refs.contains(&name) && !keep.contains(&name) {
+            let _ = fs::remove_file(e.path());
+        }
+    }
+}
+
+/// Opt-in (config.archive.memos): append-only memo history in archive/memos.jsonl. Survives the bin,
+/// erase and restore (restore never touches archive/); backups include it.
+static MEMO_LAST: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
+
+#[tauri::command]
+fn memo_archive(state: State<AppState>, id: String, name: String, text: String) -> Result<(), String> {
+    let on = read_config(&state.dir).pointer("/archive/memos").and_then(Value::as_bool).unwrap_or(false);
+    if !on || text.trim().is_empty() {
+        return Ok(());
+    }
+    let mut g = MEMO_LAST.lock().unwrap();
+    let last = g.get_or_insert_with(HashMap::new);
+    if last.get(&id) == Some(&text) {
+        return Ok(()); // unchanged since the last version
+    }
+    let dir = state.dir.join("archive");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let line = json!({ "t": now_secs(), "id": id, "name": name, "text": text }).to_string() + "\n";
+    use std::io::Write;
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("memos.jsonl"))
+        .and_then(|mut f| f.write_all(line.as_bytes()))
+        .map_err(|e| e.to_string())?;
+    last.insert(id, text);
+    Ok(())
+}
+
+#[tauri::command]
+fn memo_archive_list(state: State<AppState>) -> Vec<Value> {
+    fs::read_to_string(state.dir.join("archive").join("memos.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| serde_json::from_str(l).ok()) // a torn last line is skipped, never fatal
+        .collect()
+}
+
 // ---------- settings window ----------
 
 /// Everything the standalone settings window needs in one call.
@@ -561,7 +687,7 @@ fn get_settings(state: State<AppState>) -> Value {
         .collect();
     let theme = fs::read_to_string(state.dir.join("theme.css")).unwrap_or_else(|_| DEFAULT_THEME.into());
     json!({
-        "app": { "lang": s.lang, "onTop": s.on_top, "reduceMotion": s.reduce_motion },
+        "app": { "lang": s.lang, "reduceMotion": s.reduce_motion },
         "theme": theme,
         "config": read_config(&state.dir),
         "autostart": { "on": autostart_get(), "disabledByWindows": false },
@@ -572,23 +698,17 @@ fn get_settings(state: State<AppState>) -> Value {
     })
 }
 
-/// Apply app-level settings from the settings window: any of lang / onTop / reduceMotion.
+/// Apply app-level settings from the settings window: any of lang / reduceMotion.
 /// Mirrors the tray handlers in `on_menu` so both entry points behave identically.
 #[tauri::command]
 fn set_app(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(), String> {
-    let (mut lang_changed, mut layer_changed, mut motion): (bool, bool, Option<bool>) = (false, false, None);
+    let (mut lang_changed, mut motion): (bool, Option<bool>) = (false, None);
     {
         let mut s = state.settings.lock().unwrap();
         if let Some(v) = patch.get("lang").and_then(Value::as_str) {
             if locales().contains_key(v) && v != s.lang {
                 s.lang = v.to_string();
                 lang_changed = true;
-            }
-        }
-        if let Some(v) = patch.get("onTop").and_then(Value::as_bool) {
-            if v != s.on_top {
-                s.on_top = v;
-                layer_changed = true;
             }
         }
         if let Some(v) = patch.get("reduceMotion").and_then(Value::as_bool) {
@@ -603,10 +723,6 @@ fn set_app(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(), S
         refresh_tray(&app);
         let lang = state.settings.lock().unwrap().lang.clone();
         let _ = app.emit("lang-changed", lang);
-    }
-    if layer_changed {
-        apply_layer(&app);
-        refresh_tray(&app);
     }
     if let Some(on) = motion {
         refresh_tray(&app);
@@ -632,16 +748,7 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
         .skip_taskbar(false)
         .center() // ponytail: primary/current monitor; per-cursor centring if it matters
         .build()?;
-    // Boards are topmost with "always on top"; drop them while settings is open so it stays reachable.
-    app.state::<AppState>().settings_open.store(true, Ordering::Relaxed);
-    apply_layer(app);
-    let h = app.clone();
-    w.on_window_event(move |ev| {
-        if matches!(ev, tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed) {
-            h.state::<AppState>().settings_open.store(false, Ordering::Relaxed);
-            apply_layer(&h);
-        }
-    });
+    let _ = w.set_focus();
     Ok(())
 }
 
@@ -783,20 +890,12 @@ fn open_config_file(state: State<AppState>) {
 
 // ---------- behaviour ----------
 
-/// Boards are on top when "always on top" is set or while editing; otherwise on the desktop layer.
+/// Boards are ordinary windows (normal z-order); editing / keyboard mode lifts them to the top so nothing hides them.
 fn apply_layer(app: &AppHandle) {
     let st = app.state::<AppState>();
-    // While the settings window is open it must sit above the boards; drop them off the topmost layer.
-    let top = !st.settings_open.load(Ordering::Relaxed)
-        && (st.edit.load(Ordering::Relaxed) || st.kbd.load(Ordering::Relaxed) || st.settings.lock().unwrap().on_top);
+    let top = st.edit.load(Ordering::Relaxed) || st.kbd.load(Ordering::Relaxed);
     for w in boards(app) {
-        if top {
-            let _ = w.set_always_on_bottom(false);
-            let _ = w.set_always_on_top(true);
-        } else {
-            let _ = w.set_always_on_top(false);
-            let _ = w.set_always_on_bottom(true);
-        }
+        let _ = w.set_always_on_top(top);
     }
 }
 
@@ -999,7 +1098,6 @@ fn create_boards(app: &AppHandle) -> tauri::Result<()> {
     }
     let st = app.state::<AppState>();
     *st.boards.lock().unwrap() = list.clone(); // before windows load and ask for it
-    let on_top = st.settings.lock().unwrap().on_top;
 
     for (b, m) in list.iter().zip(monitors.iter()) {
         let wa = m.work_area();
@@ -1016,8 +1114,6 @@ fn create_boards(app: &AppHandle) -> tauri::Result<()> {
             .skip_taskbar(true)
             .focused(false)
             .visible(false)
-            .always_on_bottom(!on_top)
-            .always_on_top(on_top)
             .disable_drag_drop_handler()
             .build()?;
         w.set_position(wa.position)?; // position first: a DPI change may resize the window
@@ -1165,6 +1261,11 @@ fn backup_to(src_dir: &Path, root: &Path, tag: &str) -> Result<PathBuf, String> 
             files.push(format!("{d}/"));
         }
     }
+    // archive/ is backed up but never restored over: it is append-only history
+    if src_dir.join("archive").is_dir() {
+        copy_dir(&src_dir.join("archive"), &dest.join("archive"))?;
+        files.push("archive/".to_string());
+    }
     let manifest = json!({ "app": env!("CARGO_PKG_VERSION"), "created": stamp, "files": files });
     write_atomic(&dest.join("manifest.json"), serde_json::to_string_pretty(&manifest).unwrap().as_bytes())?;
     Ok(dest)
@@ -1275,19 +1376,21 @@ fn restore_backup(app: AppHandle, state: State<AppState>, path: String) -> Resul
     if !src.join("manifest.json").exists() {
         return Err("not a backup folder".into());
     }
-    // Safety net: snapshot the current state before overwriting it.
-    let _ = backup_to(&state.dir, &backups_root(&app, &state.dir), "pre-restore");
-    // Flush, copy, relaunch — off-thread so the flush can land before we overwrite.
+    // Flush, snapshot, copy, relaunch — off-thread so the flush lands before the snapshot.
     let _ = app.emit("flush-saves", ());
     let dir = state.dir.clone();
+    let root = backups_root(&app, &state.dir);
     let app2 = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(700));
-        if let Err(e) = restore_from(&src, &dir) {
-            eprintln!("restore failed: {e}");
-            return;
+        // Safety net: no snapshot of the current state, no overwrite.
+        let res = backup_to(&dir, &root, "pre-restore").and_then(|_| restore_from(&src, &dir));
+        match res {
+            Ok(()) => relaunch(&app2),
+            Err(e) => {
+                let _ = app2.emit_to("settings", "restore-failed", e);
+            }
         }
-        relaunch(&app2);
     });
     Ok(())
 }
@@ -1426,7 +1529,6 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let add = Submenu::with_items(app, t("tray.add_widget"), true, &add_refs)?;
 
     let edit = CheckMenuItem::with_id(app, "edit", t("tray.edit_layout"), true, st.edit.load(Ordering::Relaxed), None::<&str>)?;
-    let on_top = CheckMenuItem::with_id(app, "on_top", t("tray.on_top"), true, s.on_top, None::<&str>)?;
     let motion = CheckMenuItem::with_id(app, "motion", t("tray.reduce_motion"), true, s.reduce_motion, None::<&str>)?;
     let theme = MenuItem::with_id(app, "theme", t("tray.theme"), true, None::<&str>)?;
 
@@ -1457,7 +1559,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
     let menu = Menu::with_items(
         app,
-        &[&add, &edit, &on_top, &motion, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
+        &[&add, &edit, &motion, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
     )?;
     *st.tray_items.lock().unwrap() = Some(TrayItems { edit });
     Ok(menu)
@@ -1485,14 +1587,6 @@ fn on_menu(app: &AppHandle, id: &str) {
     }
     match id {
         "edit" => apply_edit_mode(app, !st.edit.load(Ordering::Relaxed)),
-        "on_top" => {
-            {
-                let mut s = st.settings.lock().unwrap();
-                s.on_top = !s.on_top;
-            }
-            st.persist_settings();
-            apply_layer(app);
-        }
         "motion" => {
             let on = {
                 let mut s = st.settings.lock().unwrap();
@@ -1576,7 +1670,6 @@ fn main() {
                 hits: Mutex::new(HashMap::new()),
                 interacting: AtomicBool::new(false),
                 edit: AtomicBool::new(false),
-                settings_open: AtomicBool::new(false),
                 tray_items: Mutex::new(None),
                 generation: AtomicUsize::new(0),
                 media: media::Media::new(),
@@ -1616,6 +1709,12 @@ fn main() {
             media_control,
             save_config,
             set_autostart,
+            bin_put,
+            bin_list,
+            bin_take,
+            bin_erase,
+            memo_archive,
+            memo_archive_list,
             set_dwell,
             set_zoom,
             set_kbd_mode,
@@ -1646,6 +1745,27 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn purge_assets_keeps_shared_images() {
+        let dir = std::env::temp_dir().join(format!("wb-purge-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("assets")).unwrap();
+        fs::create_dir_all(dir.join("data")).unwrap();
+        for f in ["only.png", "live.png", "saved.png", "other.png"] {
+            fs::write(dir.join("assets").join(f), b"x").unwrap();
+        }
+        fs::write(dir.join("layout.json"), br#"{"widgets":[{"bg":"live.png"}]}"#).unwrap();
+        fs::write(dir.join("data").join("layouts.json"), br#"[{"widgets":[{"bg":"saved.png"}]}]"#).unwrap();
+        let gone = vec![json!({ "w": { "bg": "only.png", "settings": { "imgs": ["live.png", "saved.png"] } } })];
+        purge_assets(&dir, &gone);
+        let has = |f: &str| dir.join("assets").join(f).exists();
+        assert!(!has("only.png"), "image only the erased widget used is deleted");
+        assert!(has("live.png"), "image a live widget uses stays");
+        assert!(has("saved.png"), "image a saved layout uses stays");
+        assert!(has("other.png"), "unrelated image stays");
+        let _ = fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn backup_restore_roundtrip() {
@@ -1693,7 +1813,6 @@ mod tests {
         migrate_config(&base);
         let s = load_settings(&base);
         assert_eq!(s.lang, "en");
-        assert!(s.on_top);
         let cfg = read_config(&base);
         assert_eq!(cfg["app"]["lang"], "en", "settings folded into config.app");
         assert_eq!(cfg["ui"]["weekStart"], "sun", "weekStart moved to ui");

@@ -942,3 +942,28 @@ button.mini {
 body.high-contrast .w-frame {
   display: none;
 }
+
+/* hidden widgets: kept alive (content, timers, grid space) but not drawn; a ghost in edit mode */
+body:not(.edit) .widget.w-hidden {
+  display: none;
+}
+body.edit .widget.w-hidden {
+  opacity: 0.35;
+  outline: 2px dashed var(--c3);
+  outline-offset: -2px;
+}
+/* "where is this widget?" — clicked from the settings window */
+.widget.w-locate {
+  display: block !important;
+  outline: 3px solid var(--c2);
+  outline-offset: 2px;
+  animation: wb-locate 0.4s ease-in-out 4 alternate;
+}
+.widget.w-hidden.w-locate {
+  opacity: 0.5;
+}
+@keyframes wb-locate {
+  to {
+    outline-color: transparent;
+  }
+}

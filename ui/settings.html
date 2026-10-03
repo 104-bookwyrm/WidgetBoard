@@ -157,6 +157,32 @@
       .set-list-row .del {
         min-width: 32px;
       }
+      .set-list-row .muted {
+        opacity: 0.7;
+        font-size: 0.9em;
+        white-space: nowrap;
+      }
+      .set-list-row.is-hidden input {
+        font-style: italic;
+        opacity: 0.7;
+      }
+      .set-list details {
+        width: 100%;
+      }
+      .set-list summary {
+        cursor: pointer;
+        padding: 4px 0;
+      }
+      .set-list pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font: inherit;
+        margin: 0;
+        flex: 1;
+        min-width: 0;
+        max-height: 8em;
+        overflow-y: auto;
+      }
       .set-row input[type="color"] {
         width: 44px;
         height: 28px;
@@ -219,12 +245,6 @@
             <div class="set-row">
               <label for="set-lang" data-i18n="set.general.lang">언어</label>
               <select id="set-lang"></select>
-            </div>
-            <div class="set-row">
-              <label for="set-ontop" data-i18n="set.general.onTop"
-                >항상 위에 표시</label
-              >
-              <input type="checkbox" id="set-ontop" />
             </div>
             <div class="set-row">
               <label for="set-autostart" data-i18n="set.general.autostart"
@@ -454,6 +474,33 @@
               <button id="wg-layout-save" data-i18n="lay.save"></button>
               <button id="wg-layout-undo" data-i18n="lay.undo" hidden></button>
             </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.bin.legend"></legend>
+            <p class="hint" data-i18n="set.bin.hint"></p>
+            <div id="wg-bin" class="set-list"></div>
+            <div class="set-row set-add">
+              <button id="wg-bin-empty" data-i18n="set.bin.empty"></button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.archive.legend"></legend>
+            <div class="set-row">
+              <label for="wg-archive" data-i18n="set.archive.toggle"></label>
+              <input
+                type="checkbox"
+                id="wg-archive"
+                aria-describedby="wg-archive-hint"
+              />
+            </div>
+            <p
+              class="hint"
+              id="wg-archive-hint"
+              data-i18n="set.archive.hint"
+            ></p>
+            <div id="wg-archive-list" class="set-list"></div>
           </fieldset>
         </section>
         <section data-page="timer" hidden>

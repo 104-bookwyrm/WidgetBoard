@@ -97,14 +97,11 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     "saved feedback shown",
   );
 
-  // always-on-top routes to set_app
-  await p.click("#set-ontop");
-  await p.waitForTimeout(100);
-  const native = await p.evaluate(() => window.__native || []);
+  // a later config-changed (file watcher echo) must not snap toggles back
+  await p.evaluate(() => window.__mock.emit("config-changed", { ui: {} }));
   ok(
-    native.some(([c, a]) => c === "set_app" && a.onTop === true),
-    "onTop sent via set_app",
-    JSON.stringify(native),
+    await p.$eval("#set-autostart", (e) => e.checked),
+    "autostart stays on after config-changed",
   );
 
   // week start writes ui.weekStart
@@ -420,6 +417,118 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     "close removes a widget via replace_widgets",
   );
 
+  await p.waitForTimeout(500); // list re-renders after board changes
+  const nat = () => p.evaluate(() => window.__native || []);
+  const sent = async (ev, test) =>
+    (await nat()).some(([c, e, pl]) => c === "emit" && e === ev && test(pl));
+  ok(
+    (await p.$$eval("#wg-bin .set-list-row", (r) => r.length)) === 1,
+    "closed widget waits in the bin",
+  );
+
+  // name: focusing it locates the widget, changing it renames via widget-patch
+  const nm = "#wg-list .set-list-row:first-child input";
+  await p.focus(nm);
+  await p.fill(nm, "Groceries");
+  await p.press(nm, "Tab");
+  await p.waitForTimeout(50);
+  ok(
+    await sent("widget-locate", (pl) => pl === "b"),
+    "focusing a name locates the widget",
+  );
+  ok(
+    await sent(
+      "widget-patch",
+      (pl) => pl.id === "b" && pl.patch.name === "Groceries",
+    ),
+    "rename sends widget-patch",
+  );
+  // hide (first button in the row)
+  await p.click("#wg-list .set-list-row:first-child button");
+  await p.waitForTimeout(50);
+  ok(
+    await sent(
+      "widget-patch",
+      (pl) => pl.id === "b" && pl.patch.hidden === true,
+    ),
+    "hide sends widget-patch hidden",
+  );
+  ok(
+    await p.$eval("#wg-list .set-list-row:first-child", (e) =>
+      e.classList.contains("is-hidden"),
+    ),
+    "hidden widget marked in the list",
+  );
+
+  // restore from the bin → widget-restore broadcast, entry leaves the bin
+  await p.click("#wg-bin .set-list-row button");
+  await p.waitForTimeout(100);
+  ok(
+    await sent("widget-restore", (pl) => pl.id === "a"),
+    "restore broadcasts the widget",
+  );
+  ok(
+    (await p.$$eval("#wg-bin .set-list-row", (r) => r.length)) === 0,
+    "restored widget leaves the bin",
+  );
+
+  // erase asks first
+  await p.evaluate(() =>
+    localStorage.setItem(
+      "wb-bin",
+      JSON.stringify([{ at: 1790000000, w: { id: "z", type: "memo" } }]),
+    ),
+  );
+  await p.click(".set-nav button[data-page=widgets]");
+  await p.waitForTimeout(100);
+  await p.click("#wg-bin .set-list-row button:last-child");
+  await p.waitForTimeout(50);
+  ok(
+    JSON.parse(await p.evaluate(() => localStorage.getItem("wb-bin")))
+      .length === 1,
+    "erase asks before deleting",
+  );
+  await p.click("#wg-bin .set-list-row button.primary");
+  await p.waitForTimeout(100);
+  ok(
+    JSON.parse(await p.evaluate(() => localStorage.getItem("wb-bin")))
+      .length === 0,
+    "confirmed erase removes the entry",
+  );
+
+  // memo archive: visible opt-in → config.archive.memos; versions grouped per memo
+  ok(
+    !(await p.$eval("#wg-archive", (e) => e.checked)),
+    "memo archive is off by default",
+  );
+  await p.evaluate(() =>
+    localStorage.setItem(
+      "wb-archive",
+      JSON.stringify([
+        { t: 1790000000, id: "m1", name: "", text: "milk, eggs" },
+        { t: 1790000100, id: "m1", name: "", text: "milk, eggs, bread" },
+      ]),
+    ),
+  );
+  await p.click("#wg-archive");
+  await p.waitForTimeout(100);
+  ok(
+    (await p.evaluate(
+      () => JSON.parse(localStorage.getItem("wb-config")).archive?.memos,
+    )) === true,
+    "archive opt-in saved to config.archive.memos",
+  );
+  ok(
+    (await p.$$eval("#wg-archive-list details", (d) => d.length)) === 1,
+    "archived versions grouped into one memo",
+  );
+  await p.click("#wg-archive-list summary");
+  await p.waitForTimeout(50);
+  ok(
+    (await p.$$eval("#wg-archive-list pre", (d) => d.length)) === 2,
+    "opening a memo lists its versions",
+  );
+
   // add a widget → emit_primary add-widget to the board
   await p.selectOption("#wg-add-type", "calendar");
   await p.click("#wg-add");
@@ -627,13 +736,112 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   await p.close();
 }
 
+// --- Board: names, hide, locate, bin, memo archive ---
+{
+  const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.goto("http://localhost:8765/index.html?lang=en");
+  await p.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem(
+      "wb-widgets",
+      JSON.stringify([
+        {
+          id: "m",
+          type: "memo",
+          display: "D1",
+          x: 0,
+          y: 0,
+          w: 3,
+          h: 3,
+          settings: { text: "hello world" },
+        },
+      ]),
+    );
+  });
+  await p.reload();
+  await p.waitForTimeout(500);
+  const el = '.widget[data-id="m"]';
+  const emit = (ev, pl) =>
+    p.evaluate(([e, x]) => window.__mock.emit(e, x), [ev, pl]);
+  const calls = () => p.evaluate(() => window.__calls || []);
+
+  await emit("widget-patch", { id: "m", patch: { name: "Groceries" } });
+  ok(
+    (await p.$eval(el + " .title", (e) => e.textContent)) === "Groceries",
+    "board shows the custom name",
+  );
+  ok(
+    (await p.$eval(el, (e) => e.getAttribute("aria-label"))) === "Groceries",
+    "custom name is the accessible label",
+  );
+
+  await emit("widget-patch", { id: "m", patch: { hidden: true } });
+  ok(
+    (await p.$eval(el, (e) => getComputedStyle(e).display)) === "none",
+    "hidden widget is not drawn",
+  );
+  await emit("edit-mode", true);
+  await p.waitForTimeout(50);
+  ok(
+    await p.$eval(
+      el,
+      (e) =>
+        getComputedStyle(e).display !== "none" &&
+        +getComputedStyle(e).opacity < 0.5,
+    ),
+    "hidden widget is a translucent ghost in edit mode",
+  );
+  await emit("edit-mode", false);
+  await p.waitForTimeout(400); // save debounce
+  const stored = JSON.parse(
+    await p.evaluate(() => localStorage.getItem("wb-widgets")),
+  )[0];
+  ok(
+    stored.name === "Groceries" && stored.hidden === true,
+    "name and hidden persist",
+    JSON.stringify(stored),
+  );
+
+  await emit("widget-patch", { id: "m", patch: { hidden: false } });
+  await emit("widget-locate", "m");
+  ok(
+    await p.$eval(el, (e) => e.classList.contains("w-locate")),
+    "locate highlights the widget",
+  );
+
+  await p.$eval(el + " [data-act=remove]", (e) => e.click());
+  await p.waitForTimeout(50);
+  ok(
+    (await calls()).some(([c, a]) => c === "bin_put" && a.widget.id === "m"),
+    "closing puts the widget in the bin",
+  );
+  ok(
+    (await calls()).some(
+      ([c, a]) =>
+        c === "memo_archive" &&
+        a.text === "hello world" &&
+        a.name === "Groceries",
+    ),
+    "closing a memo archives its text at once",
+  );
+  await p.click("#toast button");
+  await p.waitForTimeout(50);
+  ok(
+    (await calls()).some(([c, a]) => c === "bin_take" && a.id === "m"),
+    "undo takes it back out of the bin",
+  );
+  ok(!!(await p.$(el)), "undo restores the widget");
+  await p.close();
+}
+
 // --- English ---
 {
   const p = await page("en");
   const body = await p.$eval("body", (e) => e.innerText);
   ok(
     /General/.test(body) &&
-      /Always on top/.test(body) &&
+      !/Always on top/.test(body) &&
       /Start with Windows/.test(body),
     "English General page",
   );

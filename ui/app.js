@@ -213,6 +213,35 @@ function save(w) {
       write("put_widget", { widget: w }).catch(() => {});
     }, 300),
   );
+  if (w.type === "memo") archiveMemo(w);
+}
+
+// Memo archive (opt-in, config.archive.memos; Rust checks the flag and skips repeats).
+// At most one version per memo per minute while typing; at once on close / quit, and before a big deletion.
+const archiveTimers = new Map();
+const memoPrev = new Map();
+function archiveMemo(w, now) {
+  const text = String(w.settings?.text ?? "");
+  const prev = memoPrev.get(w.id) ?? text;
+  memoPrev.set(w.id, text);
+  const send = (txt) =>
+    invoke("memo_archive", { id: w.id, name: w.name || "", text: txt }).catch(
+      () => {},
+    );
+  if (text.length < prev.length / 2) send(prev); // cleared or mostly deleted: keep what was there
+  if (now) {
+    clearTimeout(archiveTimers.get(w.id));
+    archiveTimers.delete(w.id);
+    return send(text);
+  }
+  if (!archiveTimers.has(w.id))
+    archiveTimers.set(
+      w.id,
+      setTimeout(() => {
+        archiveTimers.delete(w.id);
+        send(String(w.settings?.text ?? ""));
+      }, 60000),
+    );
 }
 
 // Tell Rust where the widgets are so clicks elsewhere pass through to the desktop / windows.
@@ -298,6 +327,9 @@ function sanitizeWidget(w, def) {
     w.settings && typeof w.settings === "object" && !Array.isArray(w.settings)
       ? { ...defaults, ...w.settings }
       : defaults;
+  if (typeof w.name === "string") w.name = w.name.trim().slice(0, 40);
+  if (!w.name || typeof w.name !== "string") delete w.name;
+  if (w.hidden !== true) delete w.hidden;
   if (typeof w.font !== "string" || !w.font) delete w.font;
   if (!(w.fontSize >= 6 && w.fontSize <= 96)) delete w.fontSize;
   if (!w.colors || typeof w.colors !== "object" || Array.isArray(w.colors))
@@ -323,6 +355,7 @@ const cleanFont = (f) =>
 function mount(w) {
   const def = REGISTRY[w.type] ?? UNKNOWN;
   sanitizeWidget(w, def);
+  if (w.type === "memo") memoPrev.set(w.id, String(w.settings?.text ?? ""));
   if (def.css && !injectedCss.has(w.type)) {
     const st = document.createElement("style");
     st.textContent = def.css;
@@ -333,7 +366,8 @@ function mount(w) {
   el.className = "widget";
   el.dataset.widget = w.type;
   el.dataset.id = w.id;
-  const name = t("widget." + w.type);
+  el.classList.toggle("w-hidden", !!w.hidden);
+  const name = widgetName(w);
   el.setAttribute("role", "region");
   el.setAttribute("aria-label", name);
   el.innerHTML = `
@@ -620,10 +654,12 @@ function unmount(w) {
 
 let lastClosed = null;
 function removeWidget(w) {
+  if (w.type === "memo") archiveMemo(w, true);
   lastClosed = structuredClone(w);
   unmount(w);
   write("remove_widget", { id: w.id }).catch(() => {});
-  toast(t("toast.closed", { name: t("widget." + w.type) }), {
+  write("bin_put", { widget: lastClosed }).catch(() => {});
+  toast(t("toast.closed", { name: widgetName(w) }), {
     label: t("toast.undo"),
     fn: restoreClosed,
   });
@@ -632,6 +668,7 @@ function restoreClosed() {
   const w = lastClosed;
   lastClosed = null;
   if (!w || mounted.has(w.id)) return;
+  invoke("bin_take", { id: w.id }).catch(() => {});
   if (!fits(w, w.id)) {
     const room = findRoom(REGISTRY[w.type] ?? UNKNOWN, { w: w.w, h: w.h });
     if (room) Object.assign(w, room);
@@ -640,6 +677,37 @@ function restoreClosed() {
   mount(w);
   save(w);
   syncHits();
+}
+
+const widgetName = (w) => w.name || t("widget." + w.type);
+function applyName(w) {
+  const el = mounted.get(w.id)?.el;
+  if (!el) return;
+  const name = widgetName(w);
+  el.setAttribute("aria-label", name);
+  el.querySelector(".w-head .title").textContent = name;
+  el.querySelector(".grip").title = t("a11y.grip", { name });
+}
+/** Hidden: kept alive with its grid space, not drawn (a ghost in edit mode). Shown again from settings. */
+function setHidden(w, on, quiet) {
+  if (on) w.hidden = true;
+  else delete w.hidden;
+  mounted.get(w.id)?.el.classList.toggle("w-hidden", !!on);
+  save(w);
+  syncHits();
+  if (on && !quiet)
+    toast(t("toast.hidden", { name: widgetName(w) }), {
+      label: t("toast.undo"),
+      fn: () => setHidden(w, false, true),
+    });
+}
+function locate(id) {
+  const el = mounted.get(id)?.el;
+  if (!el) return;
+  el.classList.remove("w-locate");
+  void el.offsetWidth; // restart the pulse
+  el.classList.add("w-locate");
+  setTimeout(() => el.classList.remove("w-locate"), 1700);
 }
 
 /**
@@ -744,6 +812,9 @@ async function openMenu(w, el) {
       action: () => invoke("set_edit_mode", { on: !editMode }),
     },
     { item: "Separator" },
+    w.hidden
+      ? { text: t("menu.show"), action: () => setHidden(w, false) }
+      : { text: t("menu.hide"), action: () => setHidden(w, true) },
     { text: t("menu.close"), action: () => removeWidget(w) },
   ];
   try {
@@ -1324,7 +1395,7 @@ function summaryOf(w) {
   }
 }
 function announceSummary(w) {
-  const text = `${t("widget." + w.type)}: ${summaryOf(w)}`;
+  const text = `${widgetName(w)}: ${summaryOf(w)}`;
   announce(text);
   toast(text);
 }
@@ -1335,7 +1406,7 @@ function openOverview() {
     widgets
       .map(
         (w) =>
-          `<li><button data-goto="${esc(w.id)}">${esc(t("widget." + w.type))}</button> <span>${esc(summaryOf(w))}</span></li>`,
+          `<li><button data-goto="${esc(w.id)}">${esc(widgetName(w))}</button> <span>${esc(summaryOf(w))}</span></li>`,
       )
       .join("") || `<li>${esc(t("sum.empty"))}</li>`;
   $("#overview-panel").hidden = false;
@@ -1579,6 +1650,10 @@ function packSlots(slots, cols, rows) {
   return placed;
 }
 async function flushSaves() {
+  for (const id of [...archiveTimers.keys()]) {
+    const w = widgets.find((x) => x.id === id);
+    if (w) archiveMemo(w, true);
+  }
   for (const [id, timer] of [...pending]) {
     clearTimeout(timer);
     pending.delete(id);
@@ -1877,6 +1952,36 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     applyPreset(e.payload).catch(reportError),
   );
   await listen("widget-arrived", (e) => receiveWidget(e.payload));
+  // from the settings window (broadcast; each board acts only on its own widgets)
+  await listen("widget-patch", (e) => {
+    const { id, patch } = e.payload || {};
+    const w = widgets.find((x) => x.id === id);
+    if (!w || !patch) return;
+    if ("name" in patch) {
+      w.name = String(patch.name || "")
+        .trim()
+        .slice(0, 40);
+      if (!w.name) delete w.name;
+      applyName(w);
+    }
+    if ("hidden" in patch) setHidden(w, !!patch.hidden, true);
+    save(w);
+  });
+  await listen("widget-locate", (e) => locate(e.payload));
+  // restored from the bin: the board of its monitor takes it (the primary if that monitor is gone)
+  await listen("widget-restore", (e) => {
+    const w = e.payload;
+    if (!w?.id) return;
+    const known = displays.some((d) => d.display === w.display);
+    if (mounted.has(w.id)) return;
+    if (w.display === myDisplay && fits(w, w.id)) {
+      widgets.push(w); // its old spot is free: put it back exactly there
+      mount(w);
+      save(w);
+      syncHits();
+    } else if (w.display === myDisplay || (!known && isPrimary))
+      receiveWidget(w);
+  });
   await listen("edit-mode", (e) => setEdit(!!e.payload));
   await listen("theme-changed", (e) => applyTheme(e.payload));
   await listen("lang-changed", () => location.reload());
@@ -2167,6 +2272,7 @@ function mockTauri() {
             (window.__mockMediaCmds ||= []).push([args.action, args.seconds]);
             return;
           default:
+            (window.__calls ||= []).push([cmd, args]); // bin_put, memo_archive… for tests
             return null;
         }
       },
