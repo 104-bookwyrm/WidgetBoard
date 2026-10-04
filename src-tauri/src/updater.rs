@@ -1,9 +1,9 @@
 //! Self-updater for the portable build (no installer).
 //!
-//! On a slow schedule (weekly by default) it fetches a small manifest (`latest.json`), downloads the new
-//! `WidgetBoard.exe`, and checks it against the ed25519 public key compiled into this exe. A verified download is
-//! kept in `updates/` and swapped in the next time the app starts (or right away from the tray): Windows lets a
-//! running exe be renamed, so the swap is  exe → exe.old,  new → exe,  relaunch.
+//! On a slow schedule (weekly by default) it fetches a small manifest (`latest.json`) and only announces what it
+//! found. Nothing is downloaded until the user picks Install. Then the new `WidgetBoard.exe` is checked against the
+//! ed25519 public key compiled into this exe, kept in `updates/`, and swapped in on the restart that follows:
+//! Windows lets a running exe be renamed, so the swap is  exe → exe.old,  new → exe,  relaunch.
 //!
 //! The signature covers `widgetboard-update:v1\n{version}\n{sha256 hex}\n`, so a signed file can't be passed off as
 //! another version, and nothing older than the running version is ever installed.
@@ -188,35 +188,53 @@ fn write_json(p: &Path, v: &Value) -> Result<(), String> {
 pub fn last_check(dir: &Path) -> u64 {
     read_json(&dir.join("state.json")).and_then(|v| v["last_check"].as_u64()).unwrap_or(0)
 }
-pub fn record(dir: &Path, now: u64, result: &Result<Option<String>, String>) {
+/// Remember a check's outcome. An error keeps the last found version, so a failed check doesn't hide it.
+pub fn record(dir: &Path, now: u64, result: &Result<Option<Manifest>, String>) {
     let _ = fs::create_dir_all(dir);
-    let v = json!({
-        "last_check": now,
-        "last_error": result.as_ref().err(),
-        "last_found": result.as_ref().ok().cloned().flatten(),
-    });
+    let mut v = state(dir);
+    v["last_check"] = json!(now);
+    v["last_error"] = json!(result.as_ref().err());
+    if let Ok(found) = result {
+        v["last_found"] = json!(found.as_ref().map(|m| &m.version));
+        v["notes"] = json!(found.as_ref().map(|m| &m.notes));
+    }
     let _ = write_json(&dir.join("state.json"), &v);
 }
 pub fn state(dir: &Path) -> Value {
     read_json(&dir.join("state.json")).unwrap_or(json!({}))
 }
-
-/// The verified download waiting to be installed: `{version, notes, sha256, signature}` (only if newer).
-pub fn pending(dir: &Path) -> Option<Value> {
-    let p = read_json(&dir.join("pending.json"))?;
-    let v = p["version"].as_str()?;
-    (is_newer(v, CURRENT) && dir.join("pending.exe").exists()).then_some(p)
+/// "Skip this version": stay quiet about `version` (a newer one is announced again). None = forget the skip.
+pub fn skip(dir: &Path, version: Option<&str>) {
+    let _ = fs::create_dir_all(dir);
+    let mut v = state(dir);
+    v["skipped"] = json!(version);
+    let _ = write_json(&dir.join("state.json"), &v);
+}
+/// The newer version the last check found, unless the user skipped it: `{version, notes}`.
+pub fn available(dir: &Path) -> Option<Value> {
+    available_as(dir, CURRENT)
+}
+pub fn available_as(dir: &Path, current: &str) -> Option<Value> {
+    let s = state(dir);
+    let v = s["last_found"].as_str()?;
+    (is_newer(v, current) && s["skipped"].as_str() != Some(v)).then(|| json!({ "version": v, "notes": s["notes"] }))
 }
 
-/// Check the manifest; download + verify when newer. Ok(Some(version)) = an update is ready to install.
+/// Fetch only the manifest (a few KB). Ok(Some) = a newer version exists; nothing is downloaded.
+pub fn check(manifest_url: &str) -> Result<Option<Manifest>, String> {
+    check_as(manifest_url, CURRENT)
+}
+pub fn check_as(manifest_url: &str, current: &str) -> Result<Option<Manifest>, String> {
+    let m = parse_manifest(&fetch(manifest_url, MAX_MANIFEST)?, manifest_url)?;
+    Ok(is_newer(&m.version, current).then_some(m))
+}
+
+/// After the user said Install: check again, download + verify. Ok(Some(version)) = ready for the swap.
 pub fn check_and_download(dir: &Path, manifest_url: &str, public_key: &str) -> Result<Option<String>, String> {
     check_and_download_as(dir, manifest_url, public_key, CURRENT)
 }
 pub fn check_and_download_as(dir: &Path, manifest_url: &str, public_key: &str, current: &str) -> Result<Option<String>, String> {
-    let m = parse_manifest(&fetch(manifest_url, MAX_MANIFEST)?, manifest_url)?;
-    if !is_newer(&m.version, current) {
-        return Ok(None);
-    }
+    let Some(m) = check_as(manifest_url, current)? else { return Ok(None) };
     if let Some(p) = read_json(&dir.join("pending.json")) {
         if p["version"].as_str() == Some(m.version.as_str()) && dir.join("pending.exe").exists() {
             return Ok(Some(m.version)); // already downloaded

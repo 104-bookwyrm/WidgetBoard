@@ -1145,7 +1145,7 @@ fn update_info(st: &AppState) -> Value {
         "configured": !url.is_empty(),
         "lastCheck": s["last_check"],
         "lastError": s["last_error"],
-        "pending": updater::pending(&dir),
+        "available": updater::available(&dir),
         "busy": st.update_busy.load(Ordering::Relaxed),
     })
 }
@@ -1157,7 +1157,8 @@ fn refresh_tray(app: &AppHandle) {
         }
     });
 }
-/// Check → download → verify. `manual` = the user asked, so also report "up to date" and errors.
+/// Look at the manifest only; announce a newer version. `manual` = the user asked, so a skipped version is
+/// shown again and "up to date" and errors are reported too.
 fn run_update_check(app: &AppHandle, manual: bool) {
     let st = app.state::<AppState>();
     if st.update_busy.swap(true, Ordering::SeqCst) {
@@ -1166,21 +1167,20 @@ fn run_update_check(app: &AppHandle, manual: bool) {
     let _ = app.emit("update-status", update_info(&st));
     let dir = st.dir.join("updates");
     let (_, url) = update_config(&st.dir);
-    let res = if url.is_empty() {
-        Err("not_configured".to_string())
-    } else {
-        updater::check_and_download(&dir, &url, updater::PUBLIC_KEY)
-    };
+    let res = if url.is_empty() { Err("not_configured".to_string()) } else { updater::check(&url) };
     if !url.is_empty() {
         updater::record(&dir, now_secs(), &res);
+    }
+    if manual && matches!(res, Ok(Some(_))) {
+        updater::skip(&dir, None);
     }
     st.update_busy.store(false, Ordering::SeqCst);
     let info = update_info(&st);
     let _ = app.emit("update-status", info.clone());
+    refresh_tray(app);
     match (&res, st.primary_label()) {
-        (Ok(Some(_)), Some(label)) => {
-            refresh_tray(app);
-            let _ = app.emit_to(&label, "update-ready", info["pending"].clone());
+        (Ok(Some(_)), Some(label)) if !info["available"].is_null() => {
+            let _ = app.emit_to(&label, "update-available", info["available"].clone());
         }
         (Ok(None), Some(label)) if manual => {
             let _ = app.emit_to(&label, "toast", "upd.latest");
@@ -1427,13 +1427,12 @@ fn spawn_updater(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(180));
         loop {
-            let (due, dir) = {
+            let due = {
                 let st = app.state::<AppState>();
                 let (check, url) = update_config(&st.dir);
-                let dir = st.dir.join("updates");
-                (!url.is_empty() && updater::is_due(&check, updater::last_check(&dir), now_secs()), dir)
+                !url.is_empty() && updater::is_due(&check, updater::last_check(&st.dir.join("updates")), now_secs())
             };
-            if due && updater::pending(&dir).is_none() {
+            if due {
                 run_update_check(&app, false);
             }
             std::thread::sleep(Duration::from_secs(3600));
@@ -1507,13 +1506,43 @@ fn update_status(state: State<AppState>) -> Value {
 fn update_check(app: AppHandle) {
     std::thread::spawn(move || run_update_check(&app, true));
 }
+/// The user picked Install: back up, download + verify, then restart into the swap (install_pending_update).
+/// Backup comes first so a verified download never sits waiting without one.
 #[tauri::command]
-fn update_restart(app: AppHandle, state: State<AppState>) -> Result<(), String> {
-    if updater::pending(&state.dir.join("updates")).is_none() {
-        return Err("nothing to install".into());
-    }
-    restart_for_update(&app);
-    Ok(())
+fn update_install(app: AppHandle) {
+    std::thread::spawn(move || {
+        let st = app.state::<AppState>();
+        if st.update_busy.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let _ = app.emit("update-status", update_info(&st));
+        let dir = st.dir.join("updates");
+        let (_, url) = update_config(&st.dir);
+        let _ = app.emit("flush-saves", ());
+        std::thread::sleep(Duration::from_millis(300));
+        let res = backup_to(&st.dir, &backups_root(&app, &st.dir), "pre-update")
+            .and_then(|_| updater::check_and_download(&dir, &url, updater::PUBLIC_KEY));
+        st.update_busy.store(false, Ordering::SeqCst);
+        match res {
+            Ok(Some(_)) => restart_for_update(&app),
+            Ok(None) => updater::record(&dir, now_secs(), &Ok(None)), // withdrawn or already current
+            Err(e) => {
+                updater::record(&dir, now_secs(), &Err(format!("install: {e}")));
+                let _ = app.emit("update-failed", e);
+            }
+        }
+        let _ = app.emit("update-status", update_info(&st));
+        refresh_tray(&app);
+    });
+}
+/// "Skip this version".
+#[tauri::command]
+fn update_skip(app: AppHandle, state: State<AppState>, version: String) -> Value {
+    updater::skip(&state.dir.join("updates"), Some(&version));
+    refresh_tray(&app);
+    let info = update_info(&state);
+    let _ = app.emit("update-status", info.clone());
+    info
 }
 
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
@@ -1548,19 +1577,19 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let settings = MenuItem::with_id(app, "settings", t("tray.settings"), true, None::<&str>)?;
     let layouts = MenuItem::with_id(app, "layouts", t("tray.layouts"), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", t("tray.quit"), true, None::<&str>)?;
-    let update = match updater::pending(&st.dir.join("updates")) {
-        Some(p) => {
-            let text = t("tray.update_apply").replace("{v}", p["version"].as_str().unwrap_or(""));
-            MenuItem::with_id(app, "update-apply", text, true, None::<&str>)?
-        }
-        None => MenuItem::with_id(app, "update", t("tray.update_check"), true, None::<&str>)?,
-    };
+    let update = MenuItem::with_id(app, "update", t("tray.update_check"), true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
 
     let menu = Menu::with_items(
         app,
         &[&add, &edit, &motion, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
     )?;
+    // a found (not skipped) update sits at the very bottom until it is installed or skipped
+    if let Some(a) = updater::available(&st.dir.join("updates")) {
+        let text = t("tray.update_available").replace("{v}", a["version"].as_str().unwrap_or(""));
+        menu.append(&sep()?)?;
+        menu.append(&MenuItem::with_id(app, "update-available", text, true, None::<&str>)?)?;
+    }
     *st.tray_items.lock().unwrap() = Some(TrayItems { edit });
     Ok(menu)
 }
@@ -1613,7 +1642,9 @@ fn on_menu(app: &AppHandle, id: &str) {
             let h = app.clone();
             std::thread::spawn(move || run_update_check(&h, true));
         }
-        "update-apply" => restart_for_update(app),
+        "update-available" => {
+            let _ = open_settings_window(app, "about");
+        }
         _ => {} // e.g. widget right-click menus, handled in JS
     }
 }
@@ -1724,7 +1755,8 @@ fn main() {
             replace_widgets,
             update_status,
             update_check,
-            update_restart,
+            update_install,
+            update_skip,
             set_hit_rects,
             set_interacting,
             set_edit_mode,

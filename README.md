@@ -409,7 +409,7 @@ All in `%APPDATA%\app.widgetboard.desktop\`:
 | `diary/YYYY-MM-DD.md` | diary pages                                                                                                                                |
 | `assets/`             | uploaded images, named by content hash (the same image is stored once)                                                                     |
 | `archive/memos.jsonl` | the memo archive (only when turned on): one JSON line per saved version                                                                    |
-| `updates/`            | `state.json` (last check), a verified download waiting to install (`pending.exe` + `pending.json`)                                         |
+| `updates/`            | `state.json` (last check, found and skipped versions); `pending.exe` + `pending.json` during an install                                    |
 
 Backups go to `Documents\WidgetBoard\Backups\WidgetBoard-backup-YYYYMMDD-HHMM[-auto|-pre-restore]\`.
 
@@ -428,11 +428,16 @@ Backups go to `Documents\WidgetBoard\Backups\WidgetBoard-backup-YYYYMMDD-HHMM[-a
 WidgetBoard looks for a new version **once a week** (Settings → 정보 · 업데이트: weekly · daily · off; or
 _지금 확인_, or tray → _업데이트 확인_). The first look is 3 minutes after start, never during startup.
 
-- A new version is downloaded quietly and **checked against the release key built into the app** — an exe that isn't
-  signed for exactly that version, or is older than what you have, is thrown away. Only `https://` addresses are used.
-- It installs **the next time WidgetBoard starts**; _재시작_ (toast, Settings or tray) does it right away.
-  The old exe is kept as `WidgetBoard.exe.old` until the new one is running, and put back if the swap fails
-  (e.g. the folder is read-only — then you're told and keep the current version).
+- A check reads only a small `latest.json`. Nothing is downloaded or installed until you choose to.
+- When there is a new version, a toast appears on the board and _업데이트 있음_ shows at the bottom of the tray menu.
+  Both open Settings → 정보 · 업데이트 with the release notes and three choices:
+  - _v… 설치 및 재시작_ backs up your data, downloads the new exe, checks it, and restarts into it.
+  - _나중에_ closes the window. You're reminded at the next check.
+  - _이 버전 건너뛰기_ stays quiet about that version. A newer one is shown again.
+- Every download is **checked against the release key built into the app**. An exe that isn't signed for exactly
+  that version, or is older than yours, is thrown away. Only `https://` addresses are used.
+- The old exe is kept as `WidgetBoard.exe.old` until the new one is running. It's put back if the swap fails, for
+  example in a read-only folder. You're told, and you keep the current version.
 - Your widgets, notes and settings live in `%APPDATA%` and are not touched by an update.
 - Releases come from this repo's GitHub Releases. `config.json` → `"update": { "url": "https://…/latest.json" }`
   points a copy somewhere else.
@@ -470,13 +475,14 @@ window is `settings.html` and has its own mock.
 (private key → `~/.widgetboard/updater.key`, public key → `src-tauri/updater.pub`, compiled into the app; builds with a
 different public key refuse your updates). For every release:
 
-1. bump `version` in `src-tauri/Cargo.toml` and `tauri.conf.json`, commit;
-2. `release.cmd 0.12.1 "what changed"` builds, signs and verifies into `dist\`, asks, then tags `v0.12.1` and creates
-   the GitHub release with `WidgetBoard.exe` + `latest.json`.
-   Builds check `https://github.com/104-bookwyrm/WidgetBoard/releases/latest/download/latest.json`; a fork builds with
+1. bump `version` in `src-tauri/Cargo.toml` and `tauri.conf.json`, commit, and build;
+2. `node tools/release.mjs sign target\release\widgetboard.exe --version 0.12.1 --notes "what changed"` writes
+   `latest.json` next to the exe;
+3. create a GitHub release tagged `v0.12.1` and upload `latest.json` and the exe, renamed to `WidgetBoard.exe`.
+   Builds check `https://github.com/104-bookwyrm/WidgetBoard/releases/latest/download/latest.json`. A fork builds with
    `WIDGETBOARD_UPDATE_URL=<its own>` or sets `config.json` → `update.url`.
    `node tools/release.mjs verify latest.json WidgetBoard.exe` checks a release the way the app will.
-   Updater logic tests (no Windows needed): `bash tools/updater-test/run.sh` (35 checks: signatures, relabelled or
+   Updater logic tests (no Windows needed): `bash tools/updater-test/run.sh` (44 checks: signatures, relabelled or
    foreign-key releases, downgrades, http, tampered downloads, the exe swap and rollback).
 
 **Tests**: `tests/stress.mjs` (Playwright) runs 185 checks — damaged saved data, HTML/CSS injection, push-aside

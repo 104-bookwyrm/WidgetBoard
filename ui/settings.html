@@ -101,6 +101,12 @@
         flex: 1;
         min-width: 140px;
       }
+      #about-update-notes {
+        white-space: pre-wrap;
+        font: inherit;
+        max-height: 40vh;
+        overflow: auto;
+      }
       .set-row .hint {
         flex-basis: 100%;
         font-size: 0.85em;
@@ -800,7 +806,15 @@
             <p class="hint" id="about-update-status" aria-live="polite"></p>
             <div class="set-row">
               <button id="about-update-now" data-i18n="upd.now"></button>
-              <button id="about-update-apply" class="primary" hidden></button>
+            </div>
+            <div id="about-update-offer" hidden>
+              <p id="about-update-title"></p>
+              <pre id="about-update-notes" class="hint"></pre>
+              <div class="set-row">
+                <button id="about-update-apply" class="primary"></button>
+                <button id="about-update-later" data-i18n="upd.later"></button>
+                <button id="about-update-skip" data-i18n="upd.skip"></button>
+              </div>
             </div>
           </fieldset>
           <details class="set-licenses">

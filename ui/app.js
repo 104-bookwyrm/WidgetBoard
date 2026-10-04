@@ -2024,12 +2024,12 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   else if (st.primary && !widgets.length) toast(t("toast.empty"));
 
   await listen("update-status", (e) => showUpdate(e.payload));
-  await listen("update-ready", (e) => {
+  await listen("update-available", (e) => {
     const v = e.payload?.version;
     if (v)
-      toast(t("upd.ready", { v }), {
-        label: t("upd.restart"),
-        fn: applyUpdate,
+      toast(t("upd.available", { v }), {
+        label: t("upd.details"),
+        fn: () => invoke("open_settings", { page: "about" }).catch(() => {}),
       });
   });
   await listen("update-failed", (e) =>
@@ -2054,10 +2054,10 @@ function showUpdate(info) {
     : "";
   const lines = [t("upd.current", { v: info.current })];
   if (info.busy) lines.push(t("upd.checking"));
-  else if (info.pending)
+  else if (info.available)
     lines.push(
-      t("upd.ready", { v: info.pending.version }) +
-        (info.pending.notes ? ` — ${info.pending.notes}` : ""),
+      t("upd.available", { v: info.available.version }) +
+        (info.available.notes ? ` — ${info.available.notes}` : ""),
     );
   else if (!info.configured) lines.push(t("upd.not_configured"));
   else if (info.lastError)
@@ -2066,14 +2066,14 @@ function showUpdate(info) {
   $("#update-status").textContent = lines.join(" · ");
   $("#update-now").disabled = !!info.busy;
   const a = $("#update-apply");
-  a.hidden = !info.pending;
-  a.textContent = info.pending
-    ? t("upd.apply", { v: info.pending.version })
+  a.hidden = !info.available;
+  a.textContent = info.available
+    ? t("upd.apply", { v: info.available.version })
     : "";
 }
 async function applyUpdate() {
   await flushSaves();
-  invoke("update_restart").catch((e) =>
+  invoke("update_install").catch((e) =>
     toast(t("upd.failed", { e: updateError(e) })),
   );
 }
@@ -2154,7 +2154,7 @@ function mockTauri() {
               configured: !!window.__mockUpdate,
               lastCheck: null,
               lastError: null,
-              pending: window.__mockUpdate?.pending ?? null,
+              available: window.__mockUpdate?.available ?? null,
               busy: false,
             };
           }
@@ -2162,13 +2162,14 @@ function mockTauri() {
             const u = window.__mockUpdate;
             if (!u) return emit("update-failed", "not_configured");
             if (u.found) {
-              u.pending = { version: u.found, notes: u.notes || "" };
+              u.available = { version: u.found, notes: u.notes || "" };
               emit("update-status", await this.invoke("update_status"));
-              return emit("update-ready", u.pending);
+              return emit("update-available", u.available);
             }
             return emit("toast", "upd.latest");
           }
-          case "update_restart":
+          case "update_install":
+          case "open_settings":
             (window.__native ||= []).push([cmd, args]);
             return;
           case "replace_widgets":

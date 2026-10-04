@@ -74,11 +74,29 @@ fn main() {
     check_and_download_as(&d, &url("good.json"), &pubk, "0.10.0").unwrap();
     ok(apply_pending_as(&d, &exe, &pubk, "0.11.0") == Ok(None) && !d.join("pending.json").exists(), "stale pending tidied");
 
-    // status helpers
-    record(&d, 12345, &Ok(Some("0.11.0".into())));
-    ok(last_check(&d) == 12345 && state(&d)["last_found"] == "0.11.0", "state.json round-trip");
-    record(&d, 12346, &Err("HTTP 404".into()));
-    ok(state(&d)["last_error"] == "HTTP 404", "errors recorded");
+    // a check alone downloads nothing
+    let c = fx.join("c");
+    let m = check_as(&url("good.json"), "0.10.0");
+    ok(matches!(&m, Ok(Some(m)) if m.version == "0.11.0") && !c.join("pending.exe").exists(), "check finds it, downloads nothing");
+    ok(check_as(&url("good.json"), "0.11.0") == Ok(None), "check: same version → none");
+
+    // status helpers, skip, available
+    record(&c, 12345, &m);
+    ok(last_check(&c) == 12345 && state(&c)["last_found"] == "0.11.0", "state.json round-trip");
+    ok(available_as(&c, "0.10.0").map(|v| v["version"] == "0.11.0") == Some(true), "found version is available");
+    ok(available_as(&c, "0.11.0").is_none(), "not available once installed");
+    record(&c, 12346, &Err("HTTP 404".into()));
+    ok(state(&c)["last_error"] == "HTTP 404" && available_as(&c, "0.10.0").is_some(), "error recorded, found version kept");
+    skip(&c, Some("0.11.0"));
+    ok(available_as(&c, "0.10.0").is_none(), "skipped version stays quiet");
+    record(&c, 12347, &m);
+    ok(available_as(&c, "0.10.0").is_none(), "skip survives the next check");
+    skip(&c, None);
+    ok(available_as(&c, "0.10.0").is_some(), "unskip shows it again");
+    skip(&c, Some("0.10.5"));
+    ok(available_as(&c, "0.10.0").is_some(), "skipping an older version doesn't hide a newer one");
+    record(&c, 12348, &Ok(None));
+    ok(available_as(&c, "0.10.0").is_none(), "nothing newer → nothing available");
 
     println!("\n{pass} passed, {fail} failed");
     std::process::exit(if fail == 0 { 0 } else { 1 });

@@ -92,14 +92,14 @@ const openSettings = async (p) => {
   await p.waitForTimeout(250);
   const tt = await p.$eval("#toast", (e) => e.textContent);
   ok(
-    /v0\.12\.0 준비 완료/.test(tt) && /재시작/.test(tt),
-    "ready toast offers restart",
+    /0\.12\.0/.test(tt) && /자세히/.test(tt),
+    "found toast offers details",
     tt,
   );
   const st2 = await p.$eval("#update-status", (e) => e.textContent);
   ok(
     /0\.12\.0/.test(st2) && /버그 수정/.test(st2),
-    "settings status shows the pending version + notes",
+    "settings status shows the found version + notes",
     st2,
   );
   ok(
@@ -123,9 +123,9 @@ const openSettings = async (p) => {
   ok(saved === "저장돼야 함", "pending saves flushed before restarting", saved);
   ok(
     (await p.evaluate(() => window.__native || [])).some(
-      ([c]) => c === "update_restart",
+      ([c]) => c === "update_install",
     ),
-    "restart requested",
+    "install requested",
   );
   // flush-saves from the tray path
   await p.fill(".memo textarea", "트레이에서도");

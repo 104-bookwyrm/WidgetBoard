@@ -185,6 +185,7 @@ function fillA11y() {
 }
 
 // ---- About & updates page ----
+let offered = null; // version shown in the update offer
 function showUpdate(info) {
   if (!info) return;
   const sel = $("#about-update");
@@ -199,11 +200,6 @@ function showUpdate(info) {
     : "";
   const lines = [t("upd.current", { v: info.current })];
   if (info.busy) lines.push(t("upd.checking"));
-  else if (info.pending)
-    lines.push(
-      t("upd.ready", { v: info.pending.version }) +
-        (info.pending.notes ? ` — ${info.pending.notes}` : ""),
-    );
   else if (!info.configured) lines.push(t("upd.not_configured"));
   else if (info.lastError)
     lines.push(
@@ -217,11 +213,17 @@ function showUpdate(info) {
   else if (when) lines.push(t("upd.last", { when }));
   $("#about-update-status").textContent = lines.join(" · ");
   $("#about-update-now").disabled = !!info.busy;
+  // the offer: notes as plain text, then Install / Later / Skip this version
+  const av = info.available;
+  $("#about-update-offer").hidden = !av;
+  offered = av ? av.version : null;
+  if (!av) return;
+  $("#about-update-title").textContent = t("upd.available", { v: av.version });
+  $("#about-update-notes").textContent = av.notes || "";
+  $("#about-update-notes").hidden = !av.notes;
   const a = $("#about-update-apply");
-  a.hidden = !info.pending;
-  a.textContent = info.pending
-    ? t("upd.apply", { v: info.pending.version })
-    : "";
+  a.textContent = t("upd.apply", { v: av.version });
+  a.disabled = $("#about-update-skip").disabled = !!info.busy;
 }
 function bindAbout() {
   $("#about-update").onchange = () =>
@@ -234,9 +236,15 @@ function bindAbout() {
         .catch(() => {});
     });
   $("#about-update-now").onclick = () => invoke("update_check").catch(() => {});
-  // Rust's restart_for_update emits flush-saves + waits 700ms, so boards persist first.
+  // Rust backs up, downloads + verifies, then restart_for_update flushes saves and relaunches.
   $("#about-update-apply").onclick = () =>
-    invoke("update_restart").catch(() => {});
+    invoke("update_install").catch(() => {});
+  $("#about-update-later").onclick = () => win.close();
+  $("#about-update-skip").onclick = () =>
+    offered &&
+    invoke("update_skip", { version: offered })
+      .then(showUpdate)
+      .catch(() => {});
 }
 function fillAbout() {
   $("#about-version").textContent = `WidgetBoard v${data.version || ""}`.trim();
@@ -1147,6 +1155,16 @@ init();
 
 // ---- browser mock (mirrors the app's mock contract; used when window.__TAURI__ is absent) ----
 function settingsMock() {
+  const upd = () => {
+    const f = window.__updFound;
+    return {
+      configured: true,
+      current: "0.12.0",
+      check: (cfg().update && cfg().update.check) || "weekly",
+      lastCheck: 0,
+      available: f && f.version !== window.__updSkipped ? f : null,
+    };
+  };
   const handlers = {};
   const ls = {
     get: (k) => {
@@ -1221,23 +1239,21 @@ function settingsMock() {
             return emit("config-changed", c);
           }
           case "update_status":
-            return {
-              configured: true,
-              current: "0.12.0",
-              check: (cfg().update && cfg().update.check) || "weekly",
-              lastCheck: 0,
-            };
+            return upd();
           case "update_check":
-            emit("update-status", {
-              configured: true,
-              current: "0.12.0",
-              check: (cfg().update && cfg().update.check) || "weekly",
-              pending: { version: "0.12.1", notes: "" },
-            });
+            window.__updSkipped = null;
+            window.__updFound = {
+              version: "0.12.1",
+              notes: "New: x\nFixed: y",
+            };
+            emit("update-status", upd());
             return;
-          case "update_restart":
-            window.__restarted = true;
+          case "update_install":
+            window.__installed = true;
             return;
+          case "update_skip":
+            window.__updSkipped = args.version;
+            return upd();
           case "save_theme":
             ls.set("wb-theme", args.css);
             (window.__native ||= []).push(["save_theme", args.css]);

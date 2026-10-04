@@ -253,18 +253,45 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     "update schedule saved to config.update.check",
   );
 
-  // check-now surfaces a pending install; apply triggers update_restart
+  // nothing offered until a check finds something
+  ok(
+    await p.$eval("#about-update-offer", (e) => e.hidden),
+    "no update offer before a check",
+  );
+  // check-now finds a version: notes as plain text + Install / Later / Skip
   await p.click("#about-update-now");
   await p.waitForTimeout(100);
   ok(
-    await p.$eval("#about-update-apply", (a) => !a.hidden),
-    "apply button appears when an update is pending",
+    await p.$eval("#about-update-offer", (e) => !e.hidden),
+    "offer appears when an update is found",
+  );
+  ok(
+    /0\.12\.1/.test(
+      await p.$eval("#about-update-title", (e) => e.textContent),
+    ) &&
+      (await p.$eval("#about-update-notes", (e) => e.textContent)) ===
+        "New: x\nFixed: y",
+    "offer shows the version and the notes",
+  );
+  // skip hides it; a manual check shows it again
+  await p.click("#about-update-skip");
+  await p.waitForTimeout(50);
+  ok(
+    (await p.evaluate(() => window.__updSkipped)) === "0.12.1" &&
+      (await p.$eval("#about-update-offer", (e) => e.hidden)),
+    "skip this version hides the offer",
+  );
+  await p.click("#about-update-now");
+  await p.waitForTimeout(100);
+  ok(
+    await p.$eval("#about-update-offer", (e) => !e.hidden),
+    "manual check shows a skipped version again",
   );
   await p.click("#about-update-apply");
   await p.waitForTimeout(50);
   ok(
-    await p.evaluate(() => window.__restarted === true),
-    "apply triggers update_restart",
+    await p.evaluate(() => window.__installed === true),
+    "install triggers update_install",
   );
   await p.close();
 }
