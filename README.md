@@ -434,8 +434,8 @@ _지금 확인_, or tray → _업데이트 확인_). The first look is 3 minutes
   The old exe is kept as `WidgetBoard.exe.old` until the new one is running, and put back if the swap fails
   (e.g. the folder is read-only — then you're told and keep the current version).
 - Your widgets, notes and settings live in `%APPDATA%` and are not touched by an update.
-- Until a release address is set (`config.json` → `"update": { "url": "https://…/latest.json" }`, or built in),
-  the updater does nothing and Settings says so.
+- Releases come from this repo's GitHub Releases. `config.json` → `"update": { "url": "https://…/latest.json" }`
+  points a copy somewhere else.
 
 ## Languages
 
@@ -470,11 +470,11 @@ window is `settings.html` and has its own mock.
 (private key → `~/.widgetboard/updater.key`, public key → `src-tauri/updater.pub`, compiled into the app; builds with a
 different public key refuse your updates). For every release:
 
-1. bump `version` in `src-tauri/Cargo.toml` and `tauri.conf.json`, build;
-2. `node tools/release.mjs sign target\release\widgetboard.exe --version 0.12.0 --notes "what changed"` → `latest.json`;
-3. upload **both** `latest.json` and the exe (named `WidgetBoard.exe`) to the release. With GitHub Releases the app's
-   address is `https://github.com/<you>/<repo>/releases/latest/download/latest.json` — build with
-   `WIDGETBOARD_UPDATE_URL=<that>` or put it in `config.json` → `update.url`.
+1. bump `version` in `src-tauri/Cargo.toml` and `tauri.conf.json`, commit;
+2. `release.cmd 0.12.1 "what changed"` builds, signs and verifies into `dist\`, asks, then tags `v0.12.1` and creates
+   the GitHub release with `WidgetBoard.exe` + `latest.json`.
+   Builds check `https://github.com/104-bookwyrm/WidgetBoard/releases/latest/download/latest.json`; a fork builds with
+   `WIDGETBOARD_UPDATE_URL=<its own>` or sets `config.json` → `update.url`.
    `node tools/release.mjs verify latest.json WidgetBoard.exe` checks a release the way the app will.
    Updater logic tests (no Windows needed): `bash tools/updater-test/run.sh` (35 checks: signatures, relabelled or
    foreign-key releases, downgrades, http, tampered downloads, the exe swap and rollback).

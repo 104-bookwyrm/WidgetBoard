@@ -7,7 +7,7 @@ use updater::*;
 fn main() {
     let fx = PathBuf::from(std::env::var("FIXTURES").expect("run via run.sh"));
     let pubk = fs::read_to_string(fx.join("pub.txt")).unwrap();
-    let url = |n: &str| format!("file://{}", fx.join(n).display());
+    let url = |n: &str| format!("file://{}", fx.join(n).display().to_string().replace('\\', "/"));
     let (mut pass, mut fail) = (0, 0);
     let mut ok = |c: bool, m: &str| if c { pass += 1 } else { fail += 1; println!("FAIL: {m}") };
 
