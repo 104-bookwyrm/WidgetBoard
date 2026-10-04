@@ -16,3 +16,6 @@ memory.md
 plan.md
 dist/
 tools/updater-test/target/
+
+# dev only files
+release.cmd
