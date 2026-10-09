@@ -14,6 +14,9 @@ import {
   wheelScrollX,
   deferWhileEditing,
   throttle,
+  occursOn,
+  tzOptions,
+  TZ_BASELINE,
 } from "../util.js";
 import { loadHolidays, holidayName } from "../holidays.js";
 
@@ -22,6 +25,17 @@ export function parseEntry(text) {
   text = String(text ?? "").slice(0, 500);
   const tags = [...text.matchAll(/#([^\s#]+)/g)].map((m) => m[1].slice(0, 40));
   let rest = text.replace(/#[^\s#]+/g, " ");
+  // "@yearly" / "@weekly" mark a repeating entry (birthdays & anniversaries, or a weekly routine).
+  let repeat = null;
+  for (const [token, kind] of [
+    [/(^|\s)@yearly(?=\s|$)/i, "yearly"],
+    [/(^|\s)@weekly(?=\s|$)/i, "weekly"],
+  ]) {
+    if (token.test(rest)) {
+      repeat = kind;
+      rest = rest.replace(token, " ");
+    }
+  }
   let time = null;
   const tm = rest.match(/(^|\s)([01]?\d|2[0-3]):([0-5]\d)(?=\s|$)/);
   if (tm) {
@@ -32,12 +46,21 @@ export function parseEntry(text) {
     title: rest.replace(/\s+/g, " ").trim(),
     time,
     tags: [...new Set(tags)],
+    repeat, // 'yearly' | 'weekly' | null — null so editing clears a previously-repeating entry
   };
 }
 const unparse = (ev) =>
-  [ev.time, ev.title, ...(ev.tags || []).map((x) => "#" + x)]
+  [
+    ev.time,
+    ev.title,
+    ...(ev.tags || []).map((x) => "#" + x),
+    ev.repeat === "yearly" ? "@yearly" : ev.repeat === "weekly" ? "@weekly" : "",
+  ]
     .filter(Boolean)
     .join(" ");
+// Title for the repeat marker (↻) shown on a recurring entry.
+const repeatLabel = (t, ev) =>
+  t(ev.repeat === "weekly" ? "cal.weekly" : "cal.yearly");
 const isEvent = (e) =>
   e &&
   typeof e === "object" &&
@@ -83,13 +106,31 @@ export default {
     .ev { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; min-width: 0; }
     .ev:hover { background: color-mix(in srgb, var(--c3) 8%, transparent); }
     .ev input[type=checkbox] { accent-color: var(--c2); margin: 0; flex: none; }
+    .ev-rep { flex: none; opacity: .55; color: var(--c2); width: 1.1em; text-align: center; }
+    .bc-ev .ev-rep { font-size: .95em; width: .95em; }
     .ev-time { color: var(--c2); font-size: .85em; font-variant-numeric: tabular-nums; flex: none; }
     .ev-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
     .ev-title input, .bc-t input { width: 100%; box-sizing: border-box; font-size: 1em; }
     .ev-tags { font-size: .75em; opacity: .6; white-space: nowrap; max-width: 35%; overflow: hidden; text-overflow: ellipsis; }
     .ev.done .ev-title, .ev.done .ev-time { text-decoration: line-through; opacity: .45; }
-    .ev-del { padding: 0 6px; font-size: .75em; opacity: 0; flex: none; }
-    .ev:hover .ev-del { opacity: .8; }
+    .ev-bell { flex: none; font-size: .8em; opacity: .8; }
+    .ev-link, .ev-cfg, .ev-del { padding: 0 5px; font-size: .75em; opacity: 0; flex: none; background: none; border: 0; cursor: pointer; }
+    .ev:hover .ev-link, .ev:hover .ev-cfg, .ev:hover .ev-del { opacity: .8; }
+    .ev-link { opacity: .55; }
+    .ev:hover .ev-link { opacity: 1; }
+
+    /* event details editor (url / time / zone / reminder) */
+    .cal-ed { position: absolute; inset: calc(var(--head-h) + 2px) 6px 6px; z-index: 7; padding: 10px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin;
+      background: color-mix(in srgb, var(--c1) 97%, transparent); border: var(--line-width) var(--line-style) var(--line-color);
+      border-radius: calc(var(--radius) * .6); box-shadow: 0 8px 24px rgb(0 0 0 / .45); }
+    .cal-ed label { display: flex; flex-direction: column; gap: 3px; font-size: .85em; opacity: .85; }
+    .cal-ed label.cal-ed-chk { flex-direction: row; align-items: center; gap: 6px; opacity: 1; }
+    .cal-ed label.cal-ed-chk input { width: auto; flex: none; }
+    .cal-ed input, .cal-ed select { width: 100%; box-sizing: border-box; font-size: 1em; }
+    .cal-ed-lead input { width: 5em; }
+    .cal-ed-btns { display: flex; gap: 6px; margin-top: auto; }
+    .cal-ed-btns .sp { flex: 1; }
     .cal-empty { opacity: .5; font-size: .85em; padding: 6px 4px; }
     .cal-add { flex: none; width: 100%; box-sizing: border-box; }
 
@@ -136,6 +177,7 @@ export default {
     let hol = {};
     let month = ymd().slice(0, 7) + "-01";
     let popDate = null;
+    const defaultTz = () => api.config?.ui?.currentTz || TZ_BASELINE;
 
     root.innerHTML = `
       <div class="cal">
@@ -147,6 +189,7 @@ export default {
         <div class="cal-filter" title="${esc(t("cal.filter_hint"))}"></div>
         <div class="cal-body"></div>
         <div class="cal-pop" hidden></div>
+        <div class="cal-ed" hidden></div>
       </div>`;
     const box = root.firstElementChild;
     const q = (c) => box.querySelector(c);
@@ -165,9 +208,10 @@ export default {
       const only = Object.keys(s.filter).filter((k) => s.filter[k] === "only");
       return !only.length || tags.some((x) => only.includes(x));
     }
+    // occursOn (yearly + weekly recurrence) is shared from util.js so the reminder engine agrees.
     const dayEvents = (d) =>
       events
-        .filter((e) => e.date === d && shown(e))
+        .filter((e) => occursOn(e, d) && shown(e))
         .sort(
           (a, b) =>
             !!a.done - !!b.done ||
@@ -241,10 +285,19 @@ export default {
             .map(
               (e) => `
             <div class="ev ${e.done ? "done" : ""}" data-id="${esc(e.id)}">
-              <input type="checkbox" ${e.done ? "checked" : ""}>
+              ${
+                e.dday
+                  ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">📌</span>`
+                  : e.repeat
+                    ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">↻</span>`
+                    : `<input type="checkbox" ${e.done ? "checked" : ""}>`
+              }
               ${e.time ? `<span class="ev-time">${esc(e.time)}</span>` : ""}
+              ${e.notify ? `<span class="ev-bell" title="${esc(t("cal.notify"))}">🔔</span>` : ""}
               <span class="ev-title" title="${esc(e.title)} — ${esc(t("cal.edit_hint"))}">${esc(e.title)}</span>
               <span class="ev-tags" title="${esc((e.tags || []).map((x) => "#" + x).join(" "))}">${esc((e.tags || []).map((x) => "#" + x).join(" "))}</span>
+              ${e.url ? `<button class="ev-link" title="${esc(e.url)}">🔗</button>` : ""}
+              <button class="ev-cfg" title="${esc(t("cal.details"))}">⚙</button>
               <button class="ev-del" title="${esc(t("dday.delete"))}">✕</button>
             </div>`,
             )
@@ -297,7 +350,13 @@ export default {
               .map(
                 (e) => `
               <div class="bc-ev ${e.done ? "done" : ""}" data-id="${esc(e.id)}" title="${esc(unparse(e))}">
-                <input type="checkbox" ${e.done ? "checked" : ""}><span class="bc-t">${e.time ? `<b>${esc(e.time)}</b> ` : ""}${esc(e.title)}</span>
+                ${
+                  e.dday
+                    ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">📌</span>`
+                    : e.repeat
+                      ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">↻</span>`
+                      : `<input type="checkbox" ${e.done ? "checked" : ""}>`
+                }<span class="bc-t">${e.time ? `<b>${esc(e.time)}</b> ` : ""}${esc(e.title)}</span>
               </div>`,
               )
               .join("")}</div>
@@ -427,8 +486,54 @@ export default {
       });
     }
 
+    /** Details editor for one entry: time, link, time zone, reminder (+ lead minutes). */
+    function closeDetails() {
+      const ed = q(".cal-ed");
+      ed.hidden = true;
+      ed.innerHTML = "";
+    }
+    function openDetails(ev) {
+      if (!ev) return;
+      const ed = q(".cal-ed");
+      const tz = ev.tz || defaultTz();
+      ed.innerHTML = `
+        <div class="pop-head"><b>${esc(t("cal.details"))}</b>
+          <button data-a="ed-close" title="${esc(t("theme.close"))}">✕</button></div>
+        <label>${esc(t("cal.time"))}<input data-f="time" type="time" value="${esc(ev.time || "")}"></label>
+        <label>${esc(t("cal.url"))}<input data-f="url" type="url" inputmode="url" value="${esc(ev.url || "")}" placeholder="https://"></label>
+        <label>${esc(t("clock.zone"))}<select data-f="tz">${tzOptions(tz, { common: t("set.tz_common"), all: t("set.tz_all") })}</select></label>
+        <label class="cal-ed-chk"><input data-f="notify" type="checkbox" ${ev.notify ? "checked" : ""}> ${esc(t("cal.notify"))}</label>
+        <label class="cal-ed-lead">${esc(t("cal.lead"))}<span><input data-f="lead" type="number" min="0" step="5" inputmode="numeric" value="${ev.lead ?? ""}" placeholder="0"> ${esc(t("cal.lead_min"))}</span></label>
+        <div class="cal-ed-btns"><span class="sp"></span><button class="primary" data-a="ed-save">${esc(t("cal.save"))}</button></div>`;
+      ed.hidden = false;
+      ed.querySelector("[data-f=tz]").value = tz;
+      const f = (n) => ed.querySelector(`[data-f=${n}]`);
+      ed.onclick = (e) => {
+        const a = e.target.closest("[data-a]")?.dataset.a;
+        if (a === "ed-close") return closeDetails();
+        if (a === "ed-save") {
+          ev.time = f("time").value || null;
+          ev.url = f("url").value.trim() || null;
+          ev.tz = f("tz").value || defaultTz();
+          ev.notify = f("notify").checked;
+          ev.lead = Math.max(0, Math.floor(+f("lead").value || 0)) || null;
+          persist();
+          closeDetails();
+          render();
+        }
+      };
+      ed.onkeydown = (e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          closeDetails();
+        }
+      };
+      f("time").focus();
+    }
+
     /** Open a day's list (from the mini grid, a "+N", or ‹ › inside the list). */
     function openDay(d) {
+      closeDetails();
       popDate = d;
       if (d.slice(0, 7) !== month.slice(0, 7)) month = d.slice(0, 7) + "-01";
       render();
@@ -465,6 +570,7 @@ export default {
       if (a === "view") return toggleView();
       if (a === "pop-close") {
         popDate = null;
+        closeDetails();
         return render();
       }
       if (a === "pop-prev" || a === "pop-next")
@@ -480,6 +586,13 @@ export default {
         api.save();
         return render();
       }
+      if (e.target.closest(".ev-link")) {
+        const ev = byId(e.target.closest("[data-id]").dataset.id);
+        if (ev?.url) api.openUrl(ev.url);
+        return;
+      }
+      if (e.target.closest(".ev-cfg"))
+        return openDetails(byId(e.target.closest("[data-id]").dataset.id));
       if (e.target.closest(".ev-del")) {
         const ev = byId(e.target.closest("[data-id]").dataset.id);
         events = events.filter((x) => x !== ev);
@@ -601,10 +714,13 @@ export default {
         const d = ymd();
         const label = (e) =>
           (e.time ? e.time + " " : "") + e.title + (e.done ? " ✓" : "");
-        const today = events.filter((e) => e.date === d);
-        const next = events
-          .filter((e) => e.date > d)
-          .sort((a, b) => a.date.localeCompare(b.date))[0];
+        const today = events.filter((e) => occursOn(e, d));
+        let next = null;
+        for (let i = 1; i <= 366 && !next; i++) {
+          const dd = addDays(d, i);
+          const hit = events.find((e) => occursOn(e, dd));
+          if (hit) next = { date: dd, title: hit.title };
+        }
         const h = holName(d);
         return [
           h ? t("sum.cal_hol", { name: h }) : "",

@@ -19,3 +19,8 @@ tools/updater-test/target/
 
 # dev only files
 release.cmd
+
+# local tooling / scratch
+.claude/
+.vscode/
+shots/

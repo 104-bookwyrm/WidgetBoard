@@ -1,6 +1,7 @@
 // Standalone settings window. Plain module, no build step (like the rest of ui/).
 // Reads everything once via get_settings, applies changes instantly, mirrors the app's a11y settings.
 import { loadLang, t, applyStatic } from "./i18n.js";
+import { tzOptions, osZone } from "./util.js";
 
 const T = window.__TAURI__ ?? settingsMock();
 const invoke = (cmd, args) => T.core.invoke(cmd, args);
@@ -137,6 +138,19 @@ function fillGeneral() {
   week.value = cfgUi().weekStart || "default";
   week.onchange = () =>
     invoke("save_config", { patch: { ui: { weekStart: week.value } } }).then(
+      saved,
+    );
+
+  const tz = $("#set-tz");
+  const cur = cfgUi().currentTz || "";
+  tz.innerHTML = tzOptions(cur, {
+    auto: t("set.tz_auto", { zone: osZone() }),
+    common: t("set.tz_common"),
+    all: t("set.tz_all"),
+  });
+  tz.value = cur;
+  tz.onchange = () =>
+    invoke("save_config", { patch: { ui: { currentTz: tz.value } } }).then(
       saved,
     );
 }

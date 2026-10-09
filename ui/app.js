@@ -1,6 +1,14 @@
 // WidgetBoard front end (one instance per monitor): grid layout, drag/resize, theme, widget host.
 import { loadLang, t } from "./i18n.js";
-import { esc, wheelScrollX } from "./util.js";
+import {
+  esc,
+  wheelScrollX,
+  osZone,
+  occursOn,
+  zonedToInstant,
+  ymd,
+  addDays,
+} from "./util.js";
 import timer from "./widgets/timer.js";
 import image from "./widgets/image.js";
 import dday from "./widgets/dday.js";
@@ -10,6 +18,10 @@ import memo from "./widgets/memo.js";
 import nowplaying from "./widgets/nowplaying.js";
 import calendar from "./widgets/calendar.js";
 import diary from "./widgets/diary.js";
+import showcase from "./widgets/showcase.js";
+import audioplayer from "./widgets/audioplayer.js";
+import collection from "./widgets/collection.js";
+import clock from "./widgets/clock.js";
 
 /** Widget registry. Add a widget = add a module here and an id in main.rs WIDGETS. */
 const REGISTRY = {
@@ -22,6 +34,10 @@ const REGISTRY = {
   timer,
   stopwatch,
   image,
+  showcase,
+  audioplayer,
+  collection,
+  clock,
 };
 
 const T = window.__TAURI__ ?? mockTauri();
@@ -421,6 +437,8 @@ function mount(w) {
       return config;
     },
     setInteracting: (on) => invoke("set_interacting", { on }),
+    /** Open an http(s) link in the default browser (event links; the native side guards the scheme). */
+    openUrl: (url) => invoke("open_url", { url }).catch(() => {}),
     listAssets: () => invoke("list_assets"),
     store: {
       get: (key) => invoke("store_get", { key }),
@@ -763,59 +781,90 @@ const displayName = (d) =>
   t("menu.display", { n: d.index }) +
   (d.primary ? " " + t("menu.primary") : "");
 
-// Right-click menu on every widget (native Windows menu).
+// Right-click menu on a widget. Lean while viewing; arrangement tools appear in edit mode.
 let lastMenu;
 async function openMenu(w, el) {
-  const others = displays.filter((d) => d.display !== myDisplay);
-  const items = [
-    { text: t("menu.set_bg"), action: () => setBg(w, el) },
-    ...(w.bg
-      ? [
-          {
-            text: t("menu.clear_bg"),
-            action: () => {
-              delete w.bg;
-              applyBg(el, w);
-              save(w);
-            },
-          },
-        ]
-      : []),
-    ...(others.length
-      ? [
-          {
-            text: t("menu.move_to"),
-            items: others.map((d) => ({
-              text: displayName(d),
-              action: () => moveTo(w, d.display),
-            })),
-          },
-        ]
-      : []),
-    ...(mounted.get(w.id)?.inst.menu?.() ?? []),
-    {
-      text: t("menu.change_type"),
-      items: Object.keys(REGISTRY)
-        .filter((k) => k !== w.type)
-        .map((k) => ({
-          text: t("widget." + k),
-          action: () => changeType(w, k),
-        })),
-    },
-    { text: t("menu.look"), action: () => openFontPanel(w, el) },
-    { text: t("menu.summary"), action: () => announceSummary(w) },
-    document.body.classList.contains("focus-mode")
-      ? { text: t("focus.exit"), action: exitFocus }
-      : { text: t("focus.enter"), action: () => enterFocus(w.id) },
-    {
-      text: t("menu.edit_layout"),
-      action: () => invoke("set_edit_mode", { on: !editMode }),
-    },
+  const own = mounted.get(w.id)?.inst.menu?.() ?? [];
+  const ownBlock = own.length ? [...own, { item: "Separator" }] : [];
+  const manage = [
     { item: "Separator" },
     w.hidden
       ? { text: t("menu.show"), action: () => setHidden(w, false) }
       : { text: t("menu.hide"), action: () => setHidden(w, true) },
     { text: t("menu.close"), action: () => removeWidget(w) },
+  ];
+  let items;
+  if (editMode) {
+    // Edit layout: customise and arrange this widget.
+    const others = displays.filter((d) => d.display !== myDisplay);
+    items = [
+      ...ownBlock,
+      { text: t("menu.look"), action: () => openFontPanel(w, el) },
+      { text: t("menu.set_bg"), action: () => setBg(w, el) },
+      ...(w.bg
+        ? [
+            {
+              text: t("menu.clear_bg"),
+              action: () => {
+                delete w.bg;
+                applyBg(el, w);
+                save(w);
+              },
+            },
+          ]
+        : []),
+      {
+        text: t("menu.change_type"),
+        items: Object.keys(REGISTRY)
+          .filter((k) => k !== w.type)
+          .map((k) => ({
+            text: t("widget." + k),
+            action: () => changeType(w, k),
+          })),
+      },
+      ...(others.length
+        ? [
+            {
+              text: t("menu.move_to"),
+              items: others.map((d) => ({
+                text: displayName(d),
+                action: () => moveTo(w, d.display),
+              })),
+            },
+          ]
+        : []),
+      ...manage,
+    ];
+  } else {
+    // Viewing: the widget's own options plus the few things people reach for.
+    items = [
+      ...ownBlock,
+      { text: t("menu.look"), action: () => openFontPanel(w, el) },
+      document.body.classList.contains("focus-mode")
+        ? { text: t("focus.exit"), action: exitFocus }
+        : { text: t("focus.enter"), action: () => enterFocus(w.id) },
+      ...(ui().announceSummary
+        ? [{ text: t("menu.summary"), action: () => announceSummary(w) }]
+        : []),
+      ...manage,
+    ];
+  }
+  try {
+    await lastMenu?.close();
+  } catch {}
+  lastMenu = await T.menu.Menu.new({ items });
+  await lastMenu.popup();
+}
+
+// Right-click menu on empty board space (edit mode only): add a widget where clicked.
+async function openAddMenu(cell) {
+  const items = [
+    ...Object.keys(REGISTRY).map((k) => ({
+      text: t("widget." + k),
+      action: () => addWidgetAt(k, cell),
+    })),
+    { item: "Separator" },
+    { text: t("edit.done"), action: () => invoke("set_edit_mode", { on: false }) },
   ];
   try {
     await lastMenu?.close();
@@ -991,10 +1040,9 @@ function findRoom(def, pref) {
   return null;
 }
 
-function addWidget(type) {
+function placeWidget(type, room) {
   const def = REGISTRY[type];
   if (!def) return;
-  const room = findRoom(def, def.size);
   if (!room) return toast(t("toast.no_space"));
   const w = {
     id: crypto.randomUUID(),
@@ -1007,6 +1055,64 @@ function addWidget(type) {
   mount(w);
   save(w);
   syncHits();
+}
+
+// Tray / keyboard add: first free spot.
+function addWidget(type) {
+  const def = REGISTRY[type];
+  if (def) placeWidget(type, findRoom(def, def.size));
+}
+
+// Board grid cell under a client point, clamped to the grid (null if no board).
+function cellAt(clientX, clientY) {
+  if (!board) return null;
+  const m = metrics();
+  const b = board.getBoundingClientRect();
+  const cs = getComputedStyle(document.documentElement);
+  const gap = parseFloat(cs.getPropertyValue("--gap")) || 10;
+  const x = Math.floor((clientX - b.left - gap) / m.step);
+  const y = Math.floor((clientY - b.top - gap) / m.step);
+  return {
+    x: Math.max(0, Math.min(m.cols - 1, x)),
+    y: Math.max(0, Math.min(m.rows - 1, y)),
+  };
+}
+
+// Nearest free w×h spot to target cell (0 distance if the target sits inside it); null if none fits.
+function nearestSpot(w, h, tx, ty) {
+  const m = metrics();
+  let best = null,
+    bestD = Infinity;
+  for (let y = 0; y + h <= m.rows; y++)
+    for (let x = 0; x + w <= m.cols; x++) {
+      if (!fits({ x, y, w, h })) continue;
+      const dx = tx < x ? x - tx : tx >= x + w ? tx - (x + w - 1) : 0;
+      const dy = ty < y ? y - ty : ty >= y + h ? ty - (y + h - 1) : 0;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = { x, y };
+      }
+    }
+  return best;
+}
+
+// Add at the cursor: land in the nearest fitting spot to the clicked cell when that cell is
+// open; if the cell is occupied (no room there), fall back to the first free spot.
+function addWidgetAt(type, cell) {
+  const def = REGISTRY[type];
+  if (!def) return;
+  let room = null;
+  if (cell && fits({ x: cell.x, y: cell.y, w: 1, h: 1 })) {
+    for (const size of [def.size, def.min].filter(Boolean)) {
+      const spot = nearestSpot(size.w, size.h, cell.x, cell.y);
+      if (spot) {
+        room = { ...spot, w: size.w, h: size.h };
+        break;
+      }
+    }
+  }
+  placeWidget(type, room || findRoom(def, def.size));
 }
 
 // A widget moved here from another monitor.
@@ -1337,8 +1443,12 @@ const UI_DEFAULTS = {
   readableFont: "none",
   shortLines: false,
   reminderTime: "", // cognitive load
+  announceSummary: false, // show "Announce summary" in the widget right-click menu
+  currentTz: "", // the viewer's timezone for display/countdowns; "" = follow the OS
   frame: "none", // decoration default for every widget
 };
+/** The viewer's effective timezone: their chosen one, or the OS zone when on Auto. */
+const currentTz = () => ui().currentTz || osZone();
 const ui = () => ({
   ...UI_DEFAULTS,
   ...(config.ui && typeof config.ui === "object" ? config.ui : {}),
@@ -1479,7 +1589,7 @@ async function checkReminder() {
           : !i.repeat && !i.done && (i.date || today) <= today),
     ).length +
     (Array.isArray(events) ? events : []).filter(
-      (e) => e && e.date === today && !e.done,
+      (e) => e && !e.done && occursOn(e, today),
     ).length;
   if (!left) return;
   const msg = t("remind.left", { n: left });
@@ -1488,7 +1598,83 @@ async function checkReminder() {
     invoke("notify", { title: "WidgetBoard", body: msg }).catch(() => {});
   announce(msg);
 }
-setInterval(checkReminder, 20000);
+
+// Per-event reminders: an event with `notify` fires at its wall-time (in its own zone) minus
+// `lead` minutes — a desktop notification plus a clickable toast that opens the event's link.
+// De-dupe per occurrence (id + date) so each fires once; primary board only.
+const FIRED_KEY = "wb-reminder-fired";
+let firedSet = (() => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(FIRED_KEY) || "[]"));
+  } catch {
+    return new Set();
+  }
+})();
+const saveFired = () => {
+  try {
+    localStorage.setItem(FIRED_KEY, JSON.stringify([...firedSet]));
+  } catch {}
+};
+function fireEventReminder(e) {
+  const title = (e.time ? e.time + " " : "") + e.title;
+  const body = t("remind.event", { title });
+  if (e.url) lastReminderUrl = e.url; // for a native OS-toast click (see wiring below)
+  invoke("notify", { title: "WidgetBoard", body }).catch(() => {});
+  if (e.url)
+    toast(body, {
+      label: t("remind.open"),
+      fn: () => invoke("open_url", { url: e.url }).catch(() => {}),
+    });
+  else toast(body);
+  announce(body);
+}
+// Native OS-notification click → open the reminded event's link via the notification plugin's JS
+// onAction. ponytail: single-slot (one live reminder at a time) and MANUAL-VERIFY-ONLY — the headless
+// suite can't trigger a real OS toast click. Guarded so a missing/changed plugin API can't break boot.
+let lastReminderUrl = null;
+(async () => {
+  try {
+    const notif = window.__TAURI__?.notification;
+    if (typeof notif?.onAction !== "function") return;
+    await notif.onAction(() => {
+      if (!lastReminderUrl) return;
+      invoke("open_url", { url: lastReminderUrl }).catch(() => {});
+      lastReminderUrl = null;
+    });
+  } catch {}
+})();
+async function checkEventReminders() {
+  if (!isPrimary) return;
+  const events = await invoke("store_get", { key: "events" }).catch(() => null);
+  if (!Array.isArray(events)) return;
+  const now = Date.now();
+  const today = ymd();
+  const days = [today, addDays(today, 1)]; // tomorrow too, so a long lead can fire early
+  for (const e of events) {
+    if (!e || !e.notify || e.done) continue;
+    for (const d of days) {
+      if (!occursOn(e, d)) continue;
+      const tz = e.tz || currentTz();
+      // ponytail: notify without a time fires at 09:00 of its own zone (an all-day nudge).
+      const fireAt =
+        zonedToInstant(d, e.time || "09:00", tz) - (+e.lead || 0) * 60000;
+      if (now < fireAt) continue;
+      const key = e.id + "|" + d;
+      if (firedSet.has(key)) continue;
+      firedSet.add(key);
+      saveFired();
+      // don't flood with stale reminders after the app was closed a long while
+      if (now - fireAt <= 12 * 3600000) fireEventReminder(e);
+    }
+  }
+  // prune keys for days already past so the set can't grow without bound
+  for (const key of firedSet)
+    if (key.slice(key.indexOf("|") + 1) < today) firedSet.delete(key);
+}
+setInterval(() => {
+  checkReminder();
+  checkEventReminders();
+}, 20000);
 
 // keyboard mode (global shortcut): widgets come forward and take the keyboard; Esc leaves
 function setKbd(on) {
@@ -1893,8 +2079,17 @@ function openSettings() {
 addEventListener("dragover", (e) => e.preventDefault());
 addEventListener("drop", (e) => e.preventDefault());
 addEventListener("contextmenu", (e) => {
-  if (!e.target.closest("input, textarea, [contenteditable]"))
-    e.preventDefault();
+  const editable = e.target.closest("input, textarea, [contenteditable]");
+  if (!editable) e.preventDefault();
+  // Edit mode: right-click on empty board space adds a widget there. (In normal mode the
+  // window is click-through over empty space, so this event only ever arrives while editing.)
+  if (
+    editMode &&
+    !editable &&
+    !e.target.closest(".widget") &&
+    e.target.closest("#board")
+  )
+    openAddMenu(cellAt(e.clientX, e.clientY));
 });
 addEventListener("resize", () => {
   syncHits();

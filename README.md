@@ -1,7 +1,8 @@
 # WidgetBoard
 
-Grid-based desktop widgets for Windows: a checklist, calendar, D-days, diary, memos, timer, stopwatch, Now Playing
-and photo slideshows that live on your desktop, snap to a grid and stay out of the way of your other windows.
+Grid-based desktop widgets for Windows: a checklist, calendar, D-days, diary, memos, timer, stopwatch, Now Playing,
+photo slideshows, a world clock, and a set of oshi (최애) shrine widgets — a showcase card, an audio player and a
+collection grid — that live on your desktop, snap to a grid and stay out of the way of your other windows.
 Korean by default, English available. Version 0.12.
 
 Built with Tauri 2: a small Rust core and a plain HTML/CSS/JS interface with no build step. One ~5 MB exe, no
@@ -15,9 +16,15 @@ installer, nothing running in the background except the app itself.
 
 ## Features
 
-- **Nine widgets**: checklist (today / week / month, routines, carry-over), month calendar with tags and Korean public
-  holidays, D-day countdowns, a daily diary, sticky memos, timer, stopwatch with a lifetime total, Now Playing for any
-  media app (YouTube, Spotify, Melon…) and an image slideshow that can sit frameless on the desktop like a sticker.
+- **Thirteen widgets**: checklist (today / week / month, routines, carry-over), month calendar with tags and Korean
+  public holidays, D-day countdowns, a daily diary, sticky memos, timer, stopwatch with a lifetime total, Now Playing
+  for any media app (YouTube, Spotify, Melon…), an image slideshow that can sit frameless on the desktop like a sticker,
+  a world **clock** in any timezone, and three **oshi (최애) shrine** widgets — a **showcase** card (image, name,
+  rotating quotes, birthday countdown), an **audio player** for voicelines and character songs, and a **collection**
+  thumbnail grid for goods and cards.
+- **Event reminders**: give a calendar entry a time, a timezone and a link, and it fires a desktop notification at the
+  right local moment (handy for streams in another timezone); clicking the notification opens the link. Weekly and
+  yearly repeats. Times are correct across timezones and daylight-saving changes.
 - **A grid that makes room**: drag a widget onto others and they slide aside; nothing ever overlaps. Empty space is
   click-through, so the desktop and windows behind keep working.
 - **Every monitor gets its own board**; monitors added or removed while running are picked up.
@@ -48,7 +55,7 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
 **Tray icon** (bottom-right, maybe under `^`)
 
 - right-click → **위젯 추가 / Add widget ›** (Checklist, Calendar, D-day, Diary, Memo, Now Playing, Timer, Stopwatch,
-  Image), **레이아웃 편집 / Edit layout**, **움직임 감소 / Reduce motion**, **테마 / Theme…**,
+  Image, Clock, Showcase, Audio, Collection), **레이아웃 편집 / Edit layout**, **움직임 감소 / Reduce motion**, **테마 / Theme…**,
   **설정창 / Settings**, **레이아웃 / Layouts…**, **언어 / Language ›**, show/hide, open data folder,
   **설정 파일 열기 / Open settings file** (config.json), check for updates, quit.
   _Theme colours…_ and _Layouts…_ open the matching page of the settings window.
@@ -60,7 +67,8 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
 - Dropping onto other widgets **pushes them aside** to make room — you see them slide while you drag, and they slide
   back if you move on. If there's truly no room the widget turns red and everything snaps back when you let go.
 - **Edit layout** shows the grid, brings the widgets in front of every window while you arrange them, shows hidden
-  widgets as faint ghosts and adds ✕ to each. `Esc` or **완료** ends it.
+  widgets as faint ghosts and adds ✕ to each. **Right-click an empty cell** to add a widget right there. `Esc` or
+  **완료** ends it.
 - Empty space is click-through: the desktop (or the windows behind) keep working.
 
 **Layer** — widgets behave like any other window. Click a widget and that monitor's widgets come forward; click
@@ -109,7 +117,7 @@ contrast, font and motion settings.
 
 | page                    | what's there                                                                                                                                                                                                          |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 일반 · General          | language, start with Windows, week start (default: calendar Sunday, checklist Monday · Sunday · Monday)                                                                                                               |
+| 일반 · General          | language, start with Windows, week start (default: calendar Sunday, checklist Monday · Sunday · Monday), your timezone (for reminders; defaults to this computer's)                                                   |
 | 모양 · Appearance       | theme colours, font, text size, corner radius, outline, opacity, cell size with live preview; top strip (on hover · always · hidden), spacing, default frame; reset theme; AI theme copy/paste/undo; open `theme.css` |
 | 위젯 · 배치 · Widgets   | every widget on every monitor (name, hide/show, move to another monitor, close); add a widget; lock layout; edit layout; Work/Study presets; saved layouts; the closed widgets bin; the memo archive                  |
 | 타이머 · 달력 · Timer   | timer sound, volume and repeats; timer presets (label + time, reorder); holiday country, your own holidays, days that aren't holidays                                                                                 |
@@ -176,6 +184,7 @@ screen-reader names and announcements, and a focus ring that only appears when y
 |                        | 읽기 쉬운 글꼴 (`readableFont`: Atkinson Hyperlegible · Lexend · OpenDyslexic)    | bundled, for Latin letters and digits; Korean stays Malgun Gothic. A per-widget font still wins.                                                                                                                                                                         |
 |                        | 줄 길이 짧게 (`shortLines`)                                                       | memo and diary lines stop at ~60 characters                                                                                                                                                                                                                              |
 |                        | 남은 할 일 알려주기 (`reminderTime`, e.g. `"18:00"`)                              | once a day at that time: "오늘 남은 할 일 3개" (toast; also a Windows notification if that's on)                                                                                                                                                                         |
+|                        | 요약 읽기 메뉴 (`announceSummary`)                                               | adds _요약 읽기 / Read summary_ to a widget's normal right-click menu (off by default; summaries are always available by keyboard **S**)                                                                                                                                  |
 |                        | 집중 모드 (right-click)                                                           | hides every other widget until you press Esc or _집중 모드 종료_                                                                                                                                                                                                         |
 
 Always available:
@@ -207,8 +216,10 @@ Your to-dos, in three tabs. Every tab shows progress (`2/5` and a bar) and says 
   themselves when a new week starts (Monday; can be Sunday — Settings → 일반).
 - **이번 달 · This month** — tasks you do once a month (bills, backups); they untick on the 1st.
 - Double-click a task to edit it (erase the text to delete), ✕ to delete.
+- **Day-well-done stamp**: when every Today item is done, a "참 잘했어요 / Well done!" stamp drops onto the list. Right-click →
+  _스탬프_ turns it on/off, sets the tilt (slight / random / straight) and lets you use your own image.
 - Right-click: hide/show completed, clear completed, calendar entries on/off. Every checklist widget shows the same
-  tasks; each remembers which tab it is on.
+  tasks; each remembers which tab it is on. (D-day countdowns stay out of this list — they live in the D-day widget.)
 
 ### 달력 · Calendar (4×5 / 3×3)
 
@@ -222,6 +233,10 @@ A month calendar for to-dos and appointments, in two views (switch with ▦ / �
   when done. When a day is full the rest collapse into **+N개 더**, which opens the whole list. Switching to this view
   enlarges a small widget, pushing neighbours aside.
 - **Typing**: `14:00 회의 #업무` → time 14:00, title "회의", tag #업무. Time and tags are optional.
+- **Repeat**: an entry can repeat **weekly** (same weekday) or **yearly** (same date); repeating entries show ↻.
+- **Reminders & links** (⚙ on an entry): set a time, a timezone, a link (URL) and a lead time, and tick _remind me_.
+  The app fires a desktop notification at that local moment and clicking it opens the link. Entries show 🔔 when a
+  reminder is set and 🔗 when a link is set. Useful for a stream in another timezone.
 - **Tags**: chips above the calendar cycle _normal → only this tag → hidden_.
 - **Holidays**: Korean public holidays 2020–2050, including the lunar holidays, substitute holidays (대체공휴일), 노동절
   and 제헌절 (public holidays from 2026). Red = Sunday/holiday, blue = Saturday; hover a day for its name.
@@ -234,10 +249,16 @@ Countdowns, listed like a Discord member list: round icon, name, date and tag, a
 
 - **+ D-day 추가**: name, date, optional tag, icon, and mode — _countdown_ (D-12, D+3) or _anniversary_ (N일째,
   counting the start date as day 1).
+- **Milestones** (anniversary mode): mark the 100-day steps (백일: D+100, D+200, D+300…) or month anniversaries, with
+  the next one counted down. Korean day-1 counting is the default; a hidden per-item option counts from zero.
 - **Icons**: click the circle to pick any image you've uploaded before (several D-days can share one; it's stored once),
   upload a new one, or use none (the first letter of the name is shown).
-- Click a row to edit or delete it. **Drag a row** to reorder, or drop it onto another D-day widget to move it there.
+- **Two views** (🗓 / ≡): the **countdown** list, or a **schedule** of everything coming up — D-days and calendar
+  entries together, soonest first.
+- Click a row to edit or delete it. **Drag a row** to reorder.
 - **Filters**: the first chip cycles 전체 → 다가오는 → 지난 (all / upcoming / past); tag chips show only those tags.
+- D-days and the calendar share one list: a D-day shows on its date in the calendar (📌), and every D-day widget shows
+  the same countdowns. Each widget keeps its own view and filters.
 
 ### 다이어리 · Diary (4×4 / 3×3)
 
@@ -297,6 +318,37 @@ One picture, or a **slideshow** of many.
   picture switches to _fit_, so a transparent PNG / WebP / GIF / SVG sits directly on the desktop like a sticker.
   A faint dashed outline shows the widget's edge only while you hover or edit the layout.
 
+### 시계 · Clock (3×2 / 2×1)
+
+The time and date in any timezone — "what time is it for my oshi right now".
+
+- Right-click → _시간대_ to pick this computer's zone or one of the common zones (KST, JST, UTC, New York, Los Angeles,
+  London, Paris); _초 표시_ shows seconds.
+- The date rolls over correctly when a zone is a day ahead or behind, and daylight-saving is handled automatically.
+
+### 쇼케이스 · Showcase (3×4 / 2×2)
+
+A shrine card for a favourite character or person (오시 · oshi): a big image or slideshow, a name band, rotating
+quotes and a birthday countdown.
+
+- Click the image to add or change pictures; right-click sets the name, quotes, birthday, accent colour and frameless mode.
+- The birthday auto-syncs as a yearly calendar entry, so it shows up in the calendar and D-day schedule too.
+- **Export / Import data** (right-click) copies the card as JSON to share or back up.
+
+### 오디오 · Audio Player (2×2 / 2×1)
+
+A small player for local audio — voicelines, character songs, BGM.
+
+- Drop audio files (mp3, wav, ogg, flac, m4a…) onto it or use ＋; files are kept in the shared assets folder.
+- Playlist with shuffle and loop (off / all / one), volume, and a frameless mode for a narrow desktop strip.
+
+### 컬렉션 · Collection (2×3 / 1×2)
+
+A thumbnail grid for goods, figures, merch and cards.
+
+- Drop images or use ＋; each item takes an optional label. Click a thumbnail to view it full-size, drag to reorder.
+- Column count auto-fits or can be set; frameless mode for transparent desktop display.
+
 ## Customising the look
 
 Three ways, from easiest to most flexible:
@@ -320,7 +372,8 @@ Three ways, from easiest to most flexible:
 ### Theme format (contract v1)
 
 Only CSS custom properties, in `:root { }` and optional `[data-widget="TYPE"] { }` blocks
-(TYPE: checklist, calendar, dday, diary, memo, nowplaying, timer, stopwatch, image). This set is kept stable across versions.
+(TYPE: checklist, calendar, dday, diary, memo, nowplaying, timer, stopwatch, image, clock, showcase, audioplayer,
+collection). This set is kept stable across versions.
 
 | variable                                     | controls                                                                     |
 | -------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -402,7 +455,7 @@ All in `%APPDATA%\app.widgetboard.desktop\`:
 | `config.json`         | `app` (language, reduce motion), `ui` (appearance & accessibility), timer presets, holidays, `backup`, `archive`, `update`                 |
 | `settings.json`       | legacy app settings (pre-0.12); read once and merged into `config.json`                                                                    |
 | `theme.css`           | the theme                                                                                                                                  |
-| `data/events.json`    | calendar entries (also used by the checklist)                                                                                              |
+| `data/events.json`    | calendar entries, D-days and showcase birthdays (shared by the calendar, checklist and D-day); holds any time, timezone, link and reminder on an entry |
 | `data/checklist.json` | checklist tasks                                                                                                                            |
 | `data/bin.json`       | closed widgets waiting to be restored or erased                                                                                            |
 | `data/layouts.json`   | saved layouts; `layouts_shelf.json` widgets put away by a layout; `layouts_undo.json` the arrangement before the last switch               |
@@ -493,11 +546,13 @@ with simulated media, the AI theme flow (prompt copy, pasting AI answers, reject
 warnings, undo), every setting, keyboard move/resize/menu, change type round trips, undo close, accessible names for
 every control, Windows forced-colours mode, large text at minimum sizes, save failures. With the UI served on port 8765:
 `npm install && npx playwright install chromium && node tests/stress.mjs` (set `PW_CHROMIUM` to use another
-Chromium). Boards in the stress suite run with the date pinned to 26 September 2026, which its calendar checks expect. `tests/v10.mjs` (121 checks) covers v0.10: every accessibility option
+Chromium). Boards in the stress suite run with the date pinned to 26 September 2026, which its calendar checks expect. `tests/v10.mjs` (135 checks) covers v0.10: every accessibility option
 is off on a fresh board and switches on/off cleanly, keyboard mode / overview / summaries / focus mode, click-to-carry,
 timer flash + notification + captions, the reminder (simulated clock), per-widget colours, all frames (pixel check),
-custom SVG frames and hostile values, layout presets, saved layouts, the shelf and undo, and English without raw keys.
-`tests/v11.mjs` (16 checks) covers the update UI. `tests/v12.mjs` (92 checks) covers the settings window: every page
+custom SVG frames and hostile values, layout presets, saved layouts, the shelf and undo, English without raw keys,
+weekly/yearly recurrence and event reminders (zoned fire time, notification link open, de-dupe), and the D-day ↔
+calendar unification (lossless migration, shared store, schedule view).
+`tests/v11.mjs` (16 checks) covers the update UI. `tests/v12.mjs` (96 checks) covers the settings window: every page
 in Korean and English without raw keys, each control writing the right config key, keyboard navigation and the
 narrow layout, backup/restore, widget names, hiding, locating, the closed widgets bin and the memo archive on both
 the settings and the board side. Rust unit tests (`cargo test` in `src-tauri`): backup/restore round trip, the

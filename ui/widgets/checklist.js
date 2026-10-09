@@ -16,11 +16,25 @@ import {
 
 const TABS = ["today", "week", "month"];
 const REPEAT_OF_TAB = { week: "weekly", month: "monthly" };
+const TILTS = ["tilt", "random", "straight"];
+// stable per-day angle for the "random" tilt so it doesn't jump on every render
+const seed = (str) => {
+  let h = 0;
+  for (const c of str) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return Math.abs(h);
+};
 
 export default {
   size: { w: 3, h: 4 },
   min: { w: 2, h: 2 },
-  defaults: { sync: true, hideDone: false, tab: "today" },
+  defaults: {
+    sync: true,
+    hideDone: false,
+    tab: "today",
+    stamp: false, // "day well done" stamp when every Today item is finished
+    stampTilt: "tilt", // tilt | random | straight
+    stampImg: "", // optional custom stamp image (asset name); empty = drawn default
+  },
   css: `
     .ck { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
       display: flex; flex-direction: column; gap: 6px; }
@@ -52,6 +66,15 @@ export default {
     .ck-empty { opacity: .5; font-size: .85em; padding: 6px 4px; }
     .ck-alldone { color: var(--c2); font-size: .85em; padding: 4px; text-align: center; }
     .ck-add { flex: none; width: 100%; box-sizing: border-box; }
+    .ck-stamp { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 4; }
+    .ck-stamp .mark { transform: rotate(var(--rot, -8deg)); animation: ck-stamp-in .25s ease-out; }
+    .ck-stamp img { max-width: 72%; max-height: 62%; object-fit: contain; }
+    .ck-stamp .drawn { width: 6.5em; height: 6.5em; max-width: 72%; box-sizing: border-box; border-radius: 50%;
+      border: .16em solid var(--stamp-c, #d8343a); box-shadow: inset 0 0 0 .14em var(--stamp-c, #d8343a);
+      color: var(--stamp-c, #d8343a); display: grid; place-items: center; text-align: center;
+      font-weight: 800; line-height: 1.15; padding: .5em; opacity: .9; }
+    @keyframes ck-stamp-in { from { transform: rotate(var(--rot, -8deg)) scale(1.5); opacity: 0; } }
+    body.reduce-motion .ck-stamp .mark { animation: none; }
     @container (max-width: 12em) { .ck-meta, .ck-tabs small { display: none; } }
   `,
   mount(root, s, api) {
@@ -122,7 +145,7 @@ export default {
       if (tab === "today") {
         const cal = s.sync
           ? events
-              .filter((e) => e.date === d)
+              .filter((e) => e.date === d && !e.dday) // d-day items are countdowns, not to-dos
               .sort(
                 (a, b) =>
                   (a.time ? 0 : 1) - (b.time ? 0 : 1) ||
@@ -205,6 +228,24 @@ export default {
         (rows.length && done === rows.length
           ? `<div class="ck-alldone">${esc(t("ck.all_done." + s.tab))}</div>`
           : "");
+
+      // "day well done" stamp — only the Today tab, only when everything's ticked
+      box.querySelector(".ck-stamp")?.remove();
+      if (s.stamp && s.tab === "today" && rows.length && done === rows.length) {
+        const rot =
+          s.stampTilt === "straight"
+            ? 0
+            : s.stampTilt === "random"
+              ? (seed(d) % 25) - 12
+              : -8;
+        const inner = s.stampImg
+          ? `<img src="${esc(api.assetUrl(s.stampImg))}" alt="${esc(t("ck.stamp_text"))}">`
+          : `<div class="drawn">${esc(t("ck.stamp_text"))}</div>`;
+        const stamp = document.createElement("div");
+        stamp.className = "ck-stamp";
+        stamp.innerHTML = `<div class="mark" style="--rot:${rot}deg">${inner}</div>`;
+        box.appendChild(stamp);
+      }
     }
 
     // ---- saving / interaction ----
@@ -363,6 +404,46 @@ export default {
       text: t(s[k] ? on : off),
       action: () => ((s[k] = !s[k]), api.save(), render()),
     });
+    async function setStampImage() {
+      const f = await api.pickImage();
+      if (!f) return;
+      try {
+        s.stampImg = await api.uploadImage(f);
+        api.save();
+        render();
+      } catch {}
+    }
+    const stampMenu = () => ({
+      text: t("ck.stamp"),
+      items: [
+        {
+          text: (s.stamp ? "✓ " : "") + t("ck.stamp_enable"),
+          action: () => ((s.stamp = !s.stamp), api.save(), render()),
+        },
+        ...(s.stamp
+          ? [
+              { item: "Separator" },
+              ...TILTS.map((m) => ({
+                text: (s.stampTilt === m ? "✓ " : "") + t("ck.tilt_" + m),
+                action: () => ((s.stampTilt = m), api.save(), render()),
+              })),
+              { item: "Separator" },
+              {
+                text: t(s.stampImg ? "ck.stamp_image_change" : "ck.stamp_image"),
+                action: setStampImage,
+              },
+              ...(s.stampImg
+                ? [
+                    {
+                      text: t("ck.stamp_default"),
+                      action: () => ((s.stampImg = ""), api.save(), render()),
+                    },
+                  ]
+                : []),
+            ]
+          : []),
+      ],
+    });
     return {
       destroy: () => clearInterval(tick),
       summary: () => {
@@ -391,6 +472,7 @@ export default {
             render();
           },
         },
+        stampMenu(),
       ],
     };
   },

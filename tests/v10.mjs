@@ -1256,6 +1256,232 @@ const BASE = [
   await p.close();
 }
 
+// ===== 10. per-event reminders + weekly recurrence (v0.13 Phase 3) =====
+{
+  const p = await b.newPage({
+    viewport: { width: 1440, height: 810 },
+    timezoneId: "Asia/Seoul",
+  });
+  p.on("pageerror", (e) => errs.push(e.message));
+  // 13:59:45 KST — 15s before a 14:00 Asia/Seoul reminder fires
+  await p.clock.install({ time: new Date("2026-09-26T13:59:45+09:00") });
+  await p.goto("http://localhost:8765/index.html");
+  await seed(
+    p,
+    [
+      {
+        id: "cm",
+        type: "calendar",
+        x: 0,
+        y: 0,
+        w: 7,
+        h: 6,
+        settings: { view: "board" },
+      },
+    ],
+    {
+      "wb-store-events": [
+        {
+          id: "rm",
+          date: "2026-09-26",
+          title: "치과 예약",
+          time: "14:00",
+          tz: "Asia/Seoul",
+          url: "https://example.com/appt",
+          notify: true,
+          lead: 0,
+          tags: [],
+          done: false,
+        },
+        {
+          id: "wk",
+          date: "2026-09-07",
+          title: "주간 회의",
+          time: "10:00",
+          repeat: "weekly",
+          tags: [],
+          done: false,
+        },
+      ],
+    },
+  );
+  // weekly entry recurs on its weekday (2026-09-07 anchor → +7, +14 same weekday, all in view)
+  const c07 = await p.textContent(`${W("calendar", 0)} .bc[data-d="2026-09-07"]`);
+  const c14 = await p.textContent(`${W("calendar", 0)} .bc[data-d="2026-09-14"]`);
+  ok(
+    /주간 회의/.test(c07) && /주간 회의/.test(c14),
+    "10: weekly entry recurs on its weekday",
+    JSON.stringify([c07, c14]),
+  );
+  // the notify event shows a 🔔 bell + ↻ marker only when recurring (here a one-off, so a checkbox)
+  await p.waitForTimeout(100);
+  // before the fire instant: no reminder yet
+  ok(
+    (await native(p)).filter(([c]) => c === "notify").length === 0,
+    "10: no reminder before its time",
+  );
+  // cross 14:00 KST — the 20s scan fires once
+  await p.clock.fastForward("00:20");
+  await p.waitForTimeout(300);
+  const notifs = (await native(p)).filter(([c]) => c === "notify");
+  ok(
+    notifs.some(([, a]) => /치과 예약/.test(a.body)),
+    "10: reminder fires a desktop notification at the event's wall-time",
+    JSON.stringify(notifs),
+  );
+  // in-app toast carries an "open link" action
+  const toastTxt = await p.$eval("#toast", (e) => (e.hidden ? "" : e.textContent));
+  ok(/치과 예약/.test(toastTxt), "10: reminder also shows an in-app toast", toastTxt);
+  await p.click("#toast button");
+  await p.waitForTimeout(100);
+  const calls = await p.evaluate(() => window.__calls || []);
+  ok(
+    calls.some(
+      ([c, a]) => c === "open_url" && a.url === "https://example.com/appt",
+    ),
+    "10: clicking the reminder opens the event link",
+    JSON.stringify(calls),
+  );
+  // de-dupe: a later scan on the same day does not fire again
+  const before = (await native(p)).filter(([c]) => c === "notify").length;
+  await p.clock.fastForward("00:40");
+  await p.waitForTimeout(200);
+  ok(
+    (await native(p)).filter(([c]) => c === "notify").length === before,
+    "10: each occurrence fires only once",
+  );
+  await p.close();
+}
+
+// ===== 11. d-day ↔ calendar unify + migration + schedule (v0.13 Phase 4) =====
+{
+  const p = await page(); // ko, real clock (today = 2026-10-09)
+  // legacy d-day items live in widget settings; the shared events store is empty
+  await seed(p, [
+    {
+      id: "dd",
+      type: "dday",
+      x: 0,
+      y: 0,
+      w: 3,
+      h: 5,
+      settings: {
+        items: [
+          {
+            id: "m1",
+            name: "기념일",
+            date: "2027-03-14",
+            tag: "love",
+            mode: "since",
+            mstep: 100,
+            munit: "days",
+            countFrom: "zero",
+          },
+          { id: "m2", name: "시험", date: "2026-12-01" },
+        ],
+      },
+    },
+    {
+      id: "cal",
+      type: "calendar",
+      x: 3,
+      y: 0,
+      w: 7,
+      h: 6,
+      settings: { view: "board" },
+    },
+  ]);
+  // migration: legacy items are now events carrying a dday marker, losslessly
+  const migrated = await p.evaluate(() =>
+    JSON.parse(localStorage.getItem("wb-store-events") || "[]"),
+  );
+  const m1 = migrated.find((e) => e.id === "m1");
+  ok(
+    migrated.length === 2 &&
+      m1 &&
+      m1.title === "기념일" &&
+      m1.date === "2027-03-14" &&
+      (m1.tags || [])[0] === "love" &&
+      m1.dday &&
+      m1.dday.mode === "since" &&
+      m1.dday.mstep === 100 &&
+      m1.dday.munit === "days" &&
+      m1.dday.countFrom === "zero",
+    "11: legacy d-day items migrated losslessly into the shared events store",
+    JSON.stringify(m1),
+  );
+  const ddWidget = (await layout(p)).find((w) => w.id === "dd");
+  ok(
+    Array.isArray(ddWidget.settings.items) &&
+      ddWidget.settings.items.length === 0,
+    "11: legacy settings.items cleared after migration",
+    JSON.stringify(ddWidget.settings.items),
+  );
+  ok(
+    (await p.$$eval(`${W("dday")} .dd-row`, (r) => r.length)) === 2,
+    "11: d-day shows its items from the shared store",
+  );
+  // migrated d-day item shows in the calendar grid (2026-12) with a marker
+  await p.click(`${W("calendar")} [data-a=next]`);
+  await p.click(`${W("calendar")} [data-a=next]`);
+  await p.waitForTimeout(120);
+  const cell = await p.$eval(
+    `${W("calendar")} .bc[data-d="2026-12-01"]`,
+    (e) => e.innerHTML,
+  );
+  ok(
+    /시험/.test(cell) && /📌/.test(cell),
+    "11: d-day item shows in the calendar grid with a d-day marker",
+    cell,
+  );
+  // idempotent: reload must not duplicate the migrated events
+  await p.reload();
+  await p.waitForTimeout(700);
+  const after = await p.evaluate(() =>
+    JSON.parse(localStorage.getItem("wb-store-events") || "[]"),
+  );
+  ok(
+    after.length === 2,
+    "11: migration is idempotent (no duplication on reload)",
+    String(after.length),
+  );
+  // a plain calendar event (no dday marker) appears in the SCHEDULE view, not the countdown list
+  await p.evaluate(() => {
+    const evs = JSON.parse(localStorage.getItem("wb-store-events"));
+    evs.push({ id: "cev", date: "2026-12-20", title: "먼 일정", tags: [], done: false });
+    localStorage.setItem("wb-store-events", JSON.stringify(evs));
+    window.__mock.emit("store-changed", { key: "events", src: "other" });
+  });
+  await p.waitForTimeout(200);
+  ok(
+    (await p.$$eval(`${W("dday")} .dd-row`, (r) => r.length)) === 2,
+    "11: a plain calendar event does NOT become a countdown row",
+  );
+  await p.click(`${W("dday")} .dd-view`);
+  await p.waitForTimeout(150);
+  const sched = await p.$$eval(`${W("dday")} .dd-row`, (rs) =>
+    rs.map((r) => r.querySelector(".dd-name").textContent),
+  );
+  ok(
+    sched.length === 3 &&
+      /시험/.test(sched[0]) &&
+      /먼 일정/.test(sched[1]) &&
+      /기념일/.test(sched[2]),
+    "11: schedule lists all upcoming shared events, sorted by next occurrence",
+    JSON.stringify(sched),
+  );
+  const badges = await p.$$eval(
+    `${W("dday")} .dd-sched .dd-badge`,
+    (b) => b.length,
+  );
+  ok(
+    badges === 2,
+    "11: d-day items are badged in the schedule; plain events are not",
+    String(badges),
+  );
+  await p.close();
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", JSON.stringify(errs));
 await b.close();

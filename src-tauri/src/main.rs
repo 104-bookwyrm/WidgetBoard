@@ -32,7 +32,7 @@ const DEFAULT_CONFIG: &str = include_str!("default-config.json");
 const TRAY_ID: &str = "main";
 
 /// Widget types offered in the tray; ids must match the REGISTRY in ui/app.js.
-const WIDGETS: &[&str] = &["checklist", "calendar", "dday", "diary", "memo", "nowplaying", "timer", "stopwatch", "image"];
+const WIDGETS: &[&str] = &["checklist", "calendar", "dday", "diary", "memo", "nowplaying", "timer", "stopwatch", "image", "showcase", "audioplayer", "collection", "clock"];
 
 /// Embedded translations (same files the UI loads). First entry is the default language.
 const LOCALES: &[(&str, &str)] = &[
@@ -160,6 +160,20 @@ fn open_path(p: &Path) {
     let _ = std::process::Command::new("explorer").arg(p).spawn();
     #[cfg(not(windows))]
     let _ = std::process::Command::new("xdg-open").arg(p).spawn();
+}
+
+/// Open an http(s) link in the default browser (event reminder / calendar links). Only http(s) is
+/// allowed so we never hand an arbitrary scheme (file:, javascript:, …) to the shell.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("unsupported url scheme".into());
+    }
+    #[cfg(windows)]
+    let _ = std::process::Command::new("explorer").arg(&url).spawn();
+    #[cfg(not(windows))]
+    let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+    Ok(())
 }
 
 fn boards(app: &AppHandle) -> Vec<WebviewWindow> {
@@ -1558,7 +1572,6 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let add = Submenu::with_items(app, t("tray.add_widget"), true, &add_refs)?;
 
     let edit = CheckMenuItem::with_id(app, "edit", t("tray.edit_layout"), true, st.edit.load(Ordering::Relaxed), None::<&str>)?;
-    let motion = CheckMenuItem::with_id(app, "motion", t("tray.reduce_motion"), true, s.reduce_motion, None::<&str>)?;
     let theme = MenuItem::with_id(app, "theme", t("tray.theme"), true, None::<&str>)?;
 
     let lang_items = LOCALES
@@ -1582,7 +1595,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
     let menu = Menu::with_items(
         app,
-        &[&add, &edit, &motion, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
+        &[&add, &edit, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
     )?;
     // a found (not skipped) update sits at the very bottom until it is installed or skipped
     if let Some(a) = updater::available(&st.dir.join("updates")) {
@@ -1616,15 +1629,6 @@ fn on_menu(app: &AppHandle, id: &str) {
     }
     match id {
         "edit" => apply_edit_mode(app, !st.edit.load(Ordering::Relaxed)),
-        "motion" => {
-            let on = {
-                let mut s = st.settings.lock().unwrap();
-                s.reduce_motion = !s.reduce_motion;
-                s.reduce_motion
-            };
-            st.persist_settings();
-            let _ = app.emit("motion-changed", on);
-        }
         "settings" => {
             let _ = open_settings_window(app, "general");
         }
@@ -1751,6 +1755,7 @@ fn main() {
             set_kbd_mode,
             set_hotkey,
             notify,
+            open_url,
             get_all_widgets,
             replace_widgets,
             update_status,

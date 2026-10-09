@@ -936,6 +936,9 @@ async function dragResize(p, sel, dw, dh) {
   });
   p.on("pageerror", (e) => errs.push(e.message));
   await p.clock.install({ time: new Date("2026-09-26T09:00:00+09:00") });
+  // freeze auto-advance: time moves only via runFor/fastForward/setFixedTime, so nothing drifts with
+  // real wall-clock time (otherwise a slow click/reload leaks real seconds into the stopwatch reading)
+  await p.clock.pauseAt(new Date("2026-09-26T09:00:00+09:00"));
   await p.goto("http://localhost:8765/index.html");
   await seed(p, [{ id: "sw", type: "stopwatch", x: 0, y: 0, w: 3, h: 4 }]);
   const main = () => p.textContent(".sw-main"),
@@ -965,11 +968,14 @@ async function dragResize(p, sel, dw, dh) {
     "O: total keeps accumulating across sessions",
     await total(),
   );
-  // app closed for an hour while running
-  await p.waitForTimeout(400);
-  await p.clock.fastForward("01:00:00");
+  // app closed for an hour while running. Pin the fake clock to an exact instant after the reload,
+  // so the real (load-dependent) time the reload takes can't leak into the reading.
+  await p.waitForTimeout(400); // let the running state flush to disk
   await p.reload();
-  await p.waitForTimeout(600);
+  await p.waitForTimeout(400); // widget mounts and reads the saved start time
+  const t0 = new Date("2026-09-26T09:00:00+09:00").getTime();
+  await p.clock.setFixedTime(new Date(t0 + 70000 + 10000 + 3600000)); // go + 10s run + 1h closed
+  await p.clock.runFor(200); // re-render the running display at the pinned time
   ok(
     (await main()).startsWith("1:00:1"),
     "O: keeps running while the app is closed",
@@ -1833,6 +1839,8 @@ async function dragResize(p, sel, dw, dh) {
   await p.waitForTimeout(450);
   l = await L();
   ok(l.t.h === 3, "W: Shift+arrow resizes");
+  // change type / set background now live in edit mode
+  await p.evaluate(() => __mock.emit("edit-mode", true));
   // menu key
   await p.evaluate(() => (__mock.menus.length = 0));
   await p.keyboard.press("Shift+F10");
@@ -1935,6 +1943,7 @@ async function dragResize(p, sel, dw, dh) {
     JSON.stringify([l.k.w, l.k.h]),
   );
   await invariants(p, "W after type changes");
+  await p.evaluate(() => __mock.emit("edit-mode", false));
   // Delete closes, toast offers undo
   await p.focus(".widget[data-id=z] .grip");
   await p.keyboard.press("Delete");

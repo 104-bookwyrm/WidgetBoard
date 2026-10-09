@@ -277,6 +277,10 @@
                 <option value="sun" data-i18n="set.weekStart.sun"></option>
               </select>
             </div>
+            <div class="set-row">
+              <label for="set-tz" data-i18n="set.general.tz">내 시간대</label>
+              <select id="set-tz"></select>
+            </div>
           </fieldset>
         </section>
 
@@ -708,6 +712,14 @@
             <div class="set-row">
               <label for="a11y-showHints" data-i18n="set.hints"></label>
               <input type="checkbox" id="a11y-showHints" data-ui="showHints" />
+            </div>
+            <div class="set-row">
+              <label for="a11y-announceSummary" data-i18n="set.announce"></label>
+              <input
+                type="checkbox"
+                id="a11y-announceSummary"
+                data-ui="announceSummary"
+              />
             </div>
             <div class="set-row">
               <label for="a11y-readableFont" data-i18n="set.readable"></label>

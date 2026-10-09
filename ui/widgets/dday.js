@@ -1,18 +1,36 @@
-// D-day list: Discord-member-list style rows with circular icons.
-// Drag rows to reorder, or drop them onto another D-day widget. Filter by status and tag.
-import { esc, ymd, daysBetween, uid, wheelScrollX } from "../util.js";
+// D-day list: Discord-member-list style rows with circular icons. Two views: the countdown
+// LIST (filter by status/tag, drag to reorder) and a SCHEDULE of upcoming shared events.
+// D-day items live in the shared `events` store (unified with the calendar): each is an event
+// carrying a `dday:{mode,icon,mstep,munit,countFrom}` marker, so an item shows in both widgets.
+import {
+  esc,
+  ymd,
+  daysBetween,
+  addDays,
+  addMonths,
+  uid,
+  wheelScrollX,
+  occursOn,
+} from "../util.js";
 
 const STATUSES = ["all", "upcoming", "past"];
 
 export default {
   size: { w: 3, h: 4 },
   min: { w: 2, h: 2 },
-  defaults: { items: [], filter: { status: "all", tags: [] } },
+  // `items` persists only to carry legacy (pre-unify) data forward one last time; the live data is `events`.
+  defaults: { items: [], filter: { status: "all", tags: [] }, view: "list" },
   css: `
     .dd { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
       display: flex; flex-direction: column; gap: 6px; }
+    .dd-top { display: flex; gap: 4px; align-items: center; flex: none; min-width: 0; }
+    .dd-view { flex: none; padding: 0 7px; font-size: .85em; }
+    .dd-top .dd-filter { flex: 1; min-width: 0; }
     .dd-filter { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; flex: none;
       mask-image: linear-gradient(to right, #000 88%, transparent); }
+    .dd-badge { font-size: .7em; color: var(--c2); border: 1px solid var(--c2); border-radius: 4px;
+      padding: 0 3px; margin-left: 4px; opacity: .8; vertical-align: middle; }
+    .dd-row.dd-sched { cursor: default; touch-action: auto; }
     .dd-filter .chip { max-width: 9em; overflow: hidden; text-overflow: ellipsis; flex: none; }
     .dd-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px;
       scrollbar-width: thin; }
@@ -43,6 +61,13 @@ export default {
     .dd-ed-top .dd-av { width: 3.4em; height: 3.4em; cursor: pointer; border: 0; padding: 0; font-size: 1em; }
     .dd-ed-fields { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
     .dd-editor input, .dd-editor select { width: 100%; box-sizing: border-box; }
+    .dd-ms { display: flex; flex-direction: column; gap: 5px; }
+    .dd-ms-row { display: flex; gap: 6px; align-items: center; }
+    .dd-ms-row > span { flex: none; opacity: .7; }
+    .dd-ms-row input[data-f=mstep] { width: 4em; flex: none; }
+    .dd-ms-row select { flex: 1; }
+    .dd-ms-cf { display: flex; gap: 6px; align-items: center; font-size: .82em; opacity: .65; }
+    .dd-ms-cf input { width: auto; flex: none; }
     .dd-icons { display: flex; flex-wrap: wrap; gap: 6px; max-height: 8.5em; overflow-y: auto; }
     .dd-icons .dd-av { width: 2.2em; height: 2.2em; cursor: pointer; font-size: .8em; border: 0; padding: 0; }
     .dd-icons .dd-av.sel { outline: 2px solid var(--c2); outline-offset: 1px; }
@@ -70,14 +95,90 @@ export default {
         name: String(i.name ?? ""),
         tag: String(i.tag ?? ""),
         date: validDate(i.date) ? i.date : ymd(),
+        // milestone: celebrate every `mstep` days/months (0 = off). countFrom 'one' = Korean inclusive count.
+        mstep: Number.isFinite(+i.mstep) && +i.mstep > 0 ? Math.floor(+i.mstep) : 0,
+        munit: i.munit === "months" ? "months" : "days",
+        countFrom: i.countFrom === "zero" ? "zero" : "one",
       }));
     if (!s.filter || typeof s.filter !== "object") s.filter = {};
     if (!STATUSES.includes(s.filter.status)) s.filter.status = "all";
     if (!Array.isArray(s.filter.tags)) s.filter.tags = [];
+    if (!["list", "schedule"].includes(s.view)) s.view = "list";
+
+    // ---- shared-store data layer ----
+    // `events` is the whole shared store; `items` is the d-day view over it (events with a marker).
+    let events = [];
+    let items = [];
+    const isDday = (e) =>
+      e && typeof e === "object" && e.dday && typeof e.dday === "object";
+    const normMode = (m) => (m === "since" ? "since" : "until");
+    const normUnit = (u) => (u === "months" ? "months" : "days");
+    const normStep = (n) =>
+      Number.isFinite(+n) && +n > 0 ? Math.floor(+n) : 0;
+    const normCF = (c) => (c === "zero" ? "zero" : "one");
+    // event -> the item shape the rest of the widget works with (name↔title, tag↔tags[0])
+    const toItem = (e) => ({
+      id: e.id,
+      name: String(e.title ?? ""),
+      date: validDate(e.date) ? e.date : ymd(),
+      tag: String((e.tags || [])[0] ?? ""),
+      icon: e.dday.icon ?? null,
+      mode: normMode(e.dday.mode),
+      mstep: normStep(e.dday.mstep),
+      munit: normUnit(e.dday.munit),
+      countFrom: normCF(e.dday.countFrom),
+    });
+    // item -> event, keeping any extra fields the same event picked up in the calendar (time/url/…)
+    const toEvent = (it, prev) => ({
+      ...(prev || {}),
+      id: it.id,
+      date: it.date,
+      title: String(it.name ?? ""),
+      tags: it.tag ? [it.tag] : [],
+      done: prev?.done ?? false,
+      dday: {
+        mode: normMode(it.mode),
+        icon: it.icon ?? null,
+        mstep: normStep(it.mstep),
+        munit: normUnit(it.munit),
+        countFrom: normCF(it.countFrom),
+      },
+    });
+    // write d-day items back into the shared store, leaving every non-d-day event untouched
+    const persist = () => {
+      const prev = new Map(events.map((e) => [e.id, e]));
+      events = [
+        ...events.filter((e) => !isDday(e)),
+        ...items.map((it) => toEvent(it, prev.get(it.id))),
+      ];
+      return api.store.set("events", events).catch(() => {});
+    };
+    // one-time, idempotent-by-id migration of legacy settings-stored items into the shared store
+    function migrateLegacy() {
+      if (!Array.isArray(s.items) || !s.items.length) return false;
+      const seen = new Set(events.map((e) => e.id));
+      let added = 0;
+      for (const it of s.items) {
+        if (!it || !it.id || seen.has(it.id)) continue;
+        events.push(toEvent(it));
+        seen.add(it.id);
+        added++;
+      }
+      s.items = []; // drop the legacy copy so it can't resurrect or double-count
+      api.save();
+      // ponytail: defer the store write to a macrotask so it lands after boot wires the
+      // store-changed listener and sibling widgets finish their first load — otherwise a
+      // calendar mounted in the same tick keeps its empty startup snapshot and misses the migration.
+      if (added) setTimeout(() => api.store.set("events", events).catch(() => {}), 0);
+      return added > 0;
+    }
 
     root.innerHTML = `
       <div class="dd">
-        <div class="dd-filter"></div>
+        <div class="dd-top">
+          <button class="dd-view"></button>
+          <div class="dd-filter"></div>
+        </div>
         <div class="dd-list"></div>
         <button class="dd-add">+ ${t("dday.add")}</button>
         <div class="dd-editor" hidden></div>
@@ -86,21 +187,63 @@ export default {
     const bar = box.querySelector(".dd-filter");
     const list = box.querySelector(".dd-list");
     const editor = box.querySelector(".dd-editor");
+    const viewBtn = box.querySelector(".dd-view");
     wheelScrollX(bar);
+    viewBtn.addEventListener("click", () => {
+      s.view = s.view === "list" ? "schedule" : "list";
+      api.save();
+      render();
+    });
 
     const today = () => ymd();
     const diffOf = (it) => daysBetween(today(), it.date);
+
+    // Running "days elapsed" label for a since-item, honouring its counting convention.
+    function sinceCount(it) {
+      const elapsed = daysBetween(it.date, today()); // today - anchor
+      return it.countFrom === "zero"
+        ? t("dday.plus", { n: Math.max(0, elapsed) }) // D+100 = anchor + 100
+        : t("dday.since", { n: elapsed + 1 }); // 101일째 = anchor + 100 (day 1 = anchor)
+    }
+
+    // Next upcoming milestone for a since-item: { label, date, countdown } or null.
+    function milestone(it) {
+      if (it.mode !== "since" || !it.mstep) return null;
+      const step = it.mstep;
+      if (it.munit === "months") {
+        const [ay, am] = it.date.split("-").map(Number);
+        const [ty, tm] = today().split("-").map(Number);
+        const elapsed = Math.max(0, (ty - ay) * 12 + (tm - am));
+        let k = Math.max(step, Math.ceil(elapsed / step) * step);
+        // correct for day-of-month: the clamped date may land just before/after today
+        while (daysBetween(today(), addMonths(it.date, k)) < 0) k += step;
+        while (k > step && daysBetween(today(), addMonths(it.date, k - step)) >= 0)
+          k -= step;
+        const date = addMonths(it.date, k);
+        return { label: t("dday.ms_month", { n: k }), date, countdown: daysBetween(today(), date) };
+      }
+      // days — 'one' counts day 1 as the anchor (Nth day = anchor + N-1); 'zero' = exact days
+      const base = it.countFrom === "zero" ? 0 : 1;
+      const need = daysBetween(it.date, today()) + base;
+      let m = Math.max(step, Math.ceil(need / step) * step);
+      while (daysBetween(today(), addDays(it.date, m - base)) < 0) m += step;
+      const date = addDays(it.date, m - base);
+      return { label: t("dday.ms_day", { n: m }), date, countdown: daysBetween(today(), date) };
+    }
+
     function dLabel(it) {
+      const ms = milestone(it);
+      if (ms) return ms.countdown > 0 ? `D-${ms.countdown}` : "D-Day";
       const diff = diffOf(it);
       if (it.mode === "since" && diff <= 0)
         return t("dday.since", { n: 1 - diff });
       return diff > 0 ? `D-${diff}` : diff === 0 ? "D-Day" : `D+${-diff}`;
     }
     const tagsOf = () =>
-      [...new Set(s.items.map((i) => i.tag).filter(Boolean))].sort();
+      [...new Set(items.map((i) => i.tag).filter(Boolean))].sort();
     function visible() {
       const f = s.filter;
-      return s.items.filter((it) => {
+      return items.filter((it) => {
         const diff = diffOf(it);
         if (f.status === "upcoming" && diff < 0) return false;
         if (f.status === "past" && diff >= 0) return false;
@@ -112,8 +255,51 @@ export default {
       `<div class="dd-av ${cls}">${it.icon ? `<img src="${esc(api.assetUrl(it.icon))}" alt="">` : esc((it.name || "?").trim().charAt(0))}</div>`;
 
     function render() {
+      viewBtn.textContent = s.view === "list" ? "🗓" : "≡";
+      viewBtn.title = t(s.view === "list" ? "dday.view_schedule" : "dday.view_list");
+      if (s.view === "schedule") {
+        bar.hidden = true;
+        return renderSchedule();
+      }
+      renderList();
+    }
+
+    // Schedule: every upcoming shared event (d-day items + calendar entries), by next occurrence.
+    function renderSchedule() {
+      const t0 = today();
+      const rows = [];
+      for (const e of events) {
+        if (!e || typeof e.date !== "string") continue;
+        let next = null;
+        for (let i = 0; i <= 366 && !next; i++) {
+          const d = addDays(t0, i);
+          if (occursOn(e, d)) next = d;
+        }
+        if (next) rows.push({ e, date: next, days: daysBetween(t0, next) });
+      }
+      rows.sort(
+        (a, b) =>
+          a.date.localeCompare(b.date) ||
+          (a.e.time || "").localeCompare(b.e.time || ""),
+      );
+      list.innerHTML = rows.length
+        ? rows
+            .map(({ e, date, days }) => {
+              const label = days === 0 ? "D-Day" : `D-${days}`;
+              const when =
+                date.replaceAll("-", ".") + (e.time ? " " + e.time : "");
+              const name = e.title || "";
+              return `<div class="dd-row dd-sched" title="${esc(name)}\n${esc(when)}">
+              <div class="dd-text"><div class="dd-name">${esc(name)}${isDday(e) ? `<span class="dd-badge">${esc(t("dday.badge"))}</span>` : ""}</div><div class="dd-sub">${esc(when)}</div></div>
+              <div class="dd-d ${days === 0 ? "today" : ""}">${esc(label)}</div></div>`;
+            })
+            .join("")
+        : `<div class="dd-empty">${t("dday.schedule_empty")}</div>`;
+    }
+
+    function renderList() {
       s.filter.tags = s.filter.tags.filter((tg) => tagsOf().includes(tg));
-      bar.hidden = !s.items.length;
+      bar.hidden = !items.length;
       bar.innerHTML =
         `<button class="chip on" data-status>${t("dday.status." + s.filter.status)}</button>` +
         tagsOf()
@@ -126,19 +312,28 @@ export default {
       list.innerHTML = vis.length
         ? vis
             .map((it) => {
+              const ms = milestone(it);
               const diff = diffOf(it);
-              const cls =
-                diff === 0
+              const cls = ms
+                ? ms.countdown === 0
+                  ? "today"
+                  : ""
+                : diff === 0
                   ? "today"
                   : diff < 0 && it.mode !== "since"
                     ? "past"
                     : "";
-              const sub = [
-                it.date.replaceAll("-", "."),
-                it.tag ? "#" + it.tag : "",
-              ]
-                .filter(Boolean)
-                .join(" · ");
+              const sub = ms
+                ? [
+                    sinceCount(it),
+                    t("dday.next", { m: ms.label }),
+                    it.tag ? "#" + it.tag : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                : [it.date.replaceAll("-", "."), it.tag ? "#" + it.tag : ""]
+                    .filter(Boolean)
+                    .join(" · ");
               return `<div class="dd-row" data-id="${esc(it.id)}" role="button" tabindex="0" aria-label="${esc(it.name + ", " + dLabel(it) + ", " + sub)}" title="${esc(it.name)}\n${esc(sub)}">${avatar(it)}
               <div class="dd-text"><div class="dd-name">${esc(it.name)}</div><div class="dd-sub">${esc(sub)}</div></div>
               <div class="dd-d ${cls}">${esc(dLabel(it))}</div></div>`;
@@ -163,28 +358,24 @@ export default {
       render();
     });
 
-    // ---- drag rows (reorder, or drop onto another D-day widget) ----
-    list.__dday = {
-      accept(item, beforeId) {
-        insert(item, beforeId);
-        api.save();
-        render();
-      },
-    };
+    // ---- drag rows to reorder ----
+    // All d-day widgets now share one list, so a drop onto any d-day list is just a reorder of the
+    // shared order (the marker lets the drag code recognise a d-day list as a drop target).
+    list.__dday = true;
     function insert(item, beforeId) {
-      let idx = beforeId ? s.items.findIndex((i) => i.id === beforeId) : -1;
+      let idx = beforeId ? items.findIndex((i) => i.id === beforeId) : -1;
       if (idx < 0) {
         // after the last visible item (keeps filtered views sensible), else at the end
         const vis = visible();
-        idx = vis.length ? s.items.indexOf(vis.at(-1)) + 1 : s.items.length;
+        idx = vis.length ? items.indexOf(vis.at(-1)) + 1 : items.length;
       }
-      s.items.splice(idx, 0, item);
+      items.splice(idx, 0, item);
     }
 
     list.addEventListener("pointerdown", (e) => {
       const row = e.target.closest(".dd-row");
-      if (!row || e.button !== 0) return;
-      const item = s.items.find((i) => i.id === row.dataset.id);
+      if (!row || e.button !== 0 || s.view !== "list") return;
+      const item = items.find((i) => i.id === row.dataset.id);
       const sx = e.clientX,
         sy = e.clientY;
       let ghost = null,
@@ -248,10 +439,9 @@ export default {
         row.classList.remove("dragging");
         api.setInteracting(false);
         if (!target || target.beforeId === item.id) return;
-        s.items = s.items.filter((i) => i.id !== item.id);
-        if (target.list === list) insert(item, target.beforeId);
-        else target.list.__dday.accept(item, target.beforeId);
-        api.save();
+        items = items.filter((i) => i.id !== item.id);
+        insert(item, target.beforeId);
+        persist();
         render();
       };
       row.addEventListener("pointermove", move);
@@ -262,8 +452,8 @@ export default {
     // keyboard: Enter opens the editor, Alt+↑/↓ moves the D-day up/down (same as dragging)
     list.addEventListener("keydown", (e) => {
       const row = e.target.closest(".dd-row");
-      if (!row) return;
-      const item = s.items.find((i) => i.id === row.dataset.id);
+      if (!row || s.view !== "list") return;
+      const item = items.find((i) => i.id === row.dataset.id);
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         return openEditor(item);
@@ -274,10 +464,10 @@ export default {
         const j = vis.indexOf(item) + (e.key === "ArrowUp" ? -1 : 1);
         if (j < 0 || j >= vis.length) return;
         const other = vis[j];
-        const a = s.items.indexOf(item),
-          b = s.items.indexOf(other);
-        [s.items[a], s.items[b]] = [s.items[b], s.items[a]];
-        api.save();
+        const a = items.indexOf(item),
+          b = items.indexOf(other);
+        [items[a], items[b]] = [items[b], items[a]];
+        persist();
         render();
         list.querySelector(`[data-id="${CSS.escape(item.id)}"]`)?.focus();
         api.announce?.(`${item.name} ${j + 1}/${vis.length}`);
@@ -296,6 +486,9 @@ export default {
             icon: null,
             tag: "",
             mode: "until",
+            mstep: 0,
+            munit: "days",
+            countFrom: "one",
           };
       const tagOpts = tagsOf()
         .map((tg) => `<option value="${esc(tg)}">`)
@@ -315,6 +508,17 @@ export default {
           <option value="until">${t("dday.mode_until")}</option>
           <option value="since">${t("dday.mode_since")}</option>
         </select>
+        <div class="dd-ms" hidden>
+          <div class="dd-ms-row">
+            <span>${t("dday.milestone")}</span>
+            <input data-f="mstep" type="number" min="0" step="1" inputmode="numeric" value="${it.mstep || ""}" placeholder="0">
+            <select data-f="munit">
+              <option value="days">${t("dday.unit_days")}</option>
+              <option value="months">${t("dday.unit_months")}</option>
+            </select>
+          </div>
+          <label class="dd-ms-cf" hidden><input data-f="countFrom" type="checkbox"> ${t("dday.count_from_zero")}</label>
+        </div>
         <div class="dd-ed-btns">
           ${existing ? `<button data-a="del">${t("dday.delete")}</button>` : ""}
           <span class="sp"></span>
@@ -324,6 +528,23 @@ export default {
       editor.hidden = false;
       const f = (n) => editor.querySelector(`[data-f=${n}]`);
       f("mode").value = it.mode || "until";
+      f("munit").value = it.munit === "months" ? "months" : "days";
+      f("countFrom").checked = it.countFrom === "zero";
+      // milestone options only for 'since'; the count-from-0 escape hatch only for day-milestones
+      const msBlock = editor.querySelector(".dd-ms");
+      const cfLabel = editor.querySelector(".dd-ms-cf");
+      const syncMs = () => {
+        msBlock.hidden = f("mode").value !== "since";
+        cfLabel.hidden = !(
+          f("mode").value === "since" &&
+          +f("mstep").value > 0 &&
+          f("munit").value === "days"
+        );
+      };
+      syncMs();
+      f("mode").addEventListener("change", syncMs);
+      f("mstep").addEventListener("input", syncMs);
+      f("munit").addEventListener("change", syncMs);
       const iconBtn = editor.querySelector("[data-a=icon]");
       const paintIcon = () =>
         (iconBtn.innerHTML = it.icon
@@ -334,7 +555,7 @@ export default {
 
       const icons = editor.querySelector(".dd-icons");
       async function showIcons() {
-        const used = s.items.map((i) => i.icon).filter(Boolean);
+        const used = items.map((i) => i.icon).filter(Boolean);
         const all = [
           ...new Set([...used, ...(await api.listAssets().catch(() => []))]),
         ].slice(0, 60);
@@ -370,23 +591,28 @@ export default {
         it.date = f("date").value;
         it.tag = f("tag").value.trim().replace(/^#/, "");
         it.mode = f("mode").value;
+        it.mstep =
+          it.mode === "since" ? Math.max(0, Math.floor(+f("mstep").value || 0)) : 0;
+        it.munit = f("munit").value === "months" ? "months" : "days";
+        it.countFrom = f("countFrom").checked ? "zero" : "one";
         if (!it.name || !it.date) return api.toast(t("dday.need_name"));
         if (!validDate(it.date)) return api.toast(t("dday.need_name"));
-        const i = s.items.findIndex((x) => x.id === it.id);
-        if (i >= 0) s.items[i] = it;
-        else s.items.push(it);
-        api.save();
+        const i = items.findIndex((x) => x.id === it.id);
+        if (i >= 0) items[i] = it;
+        else items.push(it);
+        persist();
         close();
         render();
-        if (!visible().includes(it)) api.toast(t("dday.hidden_by_filter"));
+        if (s.view === "list" && !visible().includes(it))
+          api.toast(t("dday.hidden_by_filter"));
       };
       editor.onclick = (e) => {
         const a = e.target.closest("button")?.dataset.a;
         if (a === "ok") ok();
         if (a === "cancel") close();
         if (a === "del") {
-          s.items = s.items.filter((x) => x.id !== it.id);
-          api.save();
+          items = items.filter((x) => x.id !== it.id);
+          persist();
           close();
           render();
         }
@@ -406,7 +632,18 @@ export default {
       if (today() !== day) ((day = today()), render());
     }, 60000);
 
+    // load the shared store (migrating any legacy items once) and stay in sync with the calendar
+    const load = async () => {
+      const data = await api.store.get("events").catch(() => null);
+      events = Array.isArray(data) ? data : [];
+      migrateLegacy();
+      items = events.filter(isDday).map(toItem);
+      render();
+    };
+    api.onStore("events", load);
+
     render();
+    load();
     return {
       destroy: () => clearInterval(tick),
       summary: () => {
