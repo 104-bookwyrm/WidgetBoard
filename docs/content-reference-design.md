@@ -99,6 +99,8 @@ Placement           { id, type, display, x, y, w, h, name?, settings: {...} }
 
 ## Implementation sequence
 
+Status 2026-10-12: steps 1-7 done. Final regression: full `npm test` and `cargo test` green; native devtest pass green across two restarts and two backup restores (memo, weekly tick, closed/deleted/restored timer, cross-monitor move, backup listed and restored, pre-restore snapshot).
+
 1. Content contracts, revision-safe persistence and migration/recovery tests.
 2. Convert content-bearing widgets and layouts; verify restart, multi-monitor state, asset retention and interrupted migration.
 3. Library recovery and persistent preset bindings.
