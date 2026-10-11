@@ -552,5 +552,15 @@
   "lib.history_none": "저장된 기록이 없습니다. 설정 > 위젯에서 메모 기록을 켜세요.",
   "lib.copied": "복사했습니다",
   "lib.copy_failed": "복사하지 못했습니다",
-  "set.cal.legend": "달력"
+  "set.cal.legend": "달력",
+  "set.backup.policy": "매일 백업은 최근 {n}개, 매주·매월 백업은 1개씩 보관합니다. 복원 전 백업은 최근 5개를 보관하고, 직접 만든 백업과 데이터 변환 전 백업은 지우지 않습니다.",
+  "set.backup.policy_off": "자동 백업이 꺼져 있습니다. 직접 만든 백업은 보관됩니다.",
+  "set.backup.status_error": "마지막 자동 백업에 실패했습니다: {e}",
+  "set.backup.damaged": "이 백업은 손상되어 있어({file}) 복원하지 않았습니다. 다른 백업을 고르세요.",
+  "set.backup.kind.daily": "매일",
+  "set.backup.kind.weekly": "매주",
+  "set.backup.kind.monthly": "매월",
+  "set.backup.kind.pre-restore": "복원 전",
+  "set.backup.kind.pre-migration": "데이터 변환 전",
+  "set.backup.kind.manual": "직접 백업"
 }

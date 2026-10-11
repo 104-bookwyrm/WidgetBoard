@@ -1371,6 +1371,30 @@ fn backup_to(src_dir: &Path, root: &Path, tag: &str) -> Result<PathBuf, String> 
     Ok(completed)
 }
 
+/// A restore point must be whole before it may replace anything: every file its manifest lists is there, and
+/// layout.json and data/*.json parse. (config.json is left out: a hand-edited typo is restored as it was and the
+/// app already handles it.) Err("damaged:<file>") names the first problem.
+fn validate_backup(src: &Path) -> Result<(), String> {
+    let m: Value = read_json(&src.join("manifest.json")).ok_or("damaged:manifest.json")?;
+    let files = m["files"].as_array().ok_or("damaged:manifest.json")?;
+    for f in files.iter().filter_map(Value::as_str) {
+        if !src.join(f.trim_end_matches('/')).exists() {
+            return Err(format!("damaged:{f}"));
+        }
+    }
+    let data = fs::read_dir(src.join("data")).into_iter().flatten().flatten().map(|e| e.path());
+    for path in std::iter::once(src.join("layout.json")).chain(data) {
+        if path.extension().is_some_and(|x| x == "json") && path.exists() {
+            let text = fs::read_to_string(&path).unwrap_or_default();
+            if serde_json::from_str::<Value>(&text).is_err() {
+                let name = path.strip_prefix(src).unwrap_or(&path).to_string_lossy().replace('\\', "/");
+                return Err(format!("damaged:{name}"));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Overwrite the live data from a backup folder (an exact snapshot: content dirs are replaced wholesale).
 fn restore_from(src: &Path, dir: &Path) -> Result<(), String> {
     for f in BACKUP_FILES {
@@ -1424,8 +1448,19 @@ fn list_backups(app: AppHandle, state: State<AppState>) -> Value {
         .filter(|p| !p.extension().is_some_and(|e| e == "partial") && p.join("manifest.json").exists())
         .map(|p| {
             let m: Value = read_json(&p.join("manifest.json")).unwrap_or(json!({}));
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string();
+            // what made it: a schedule tier, a restore / data upgrade safety net, or the user
+            let kind = match m.get("tier").and_then(Value::as_str).unwrap_or("") {
+                "" if name.contains("-pre-migration") => "pre-migration",
+                "" if name.contains("-pre-restore") => "pre-restore",
+                "" if name.contains("-auto") => "daily",
+                "" => "manual",
+                "fortnight" => "weekly",
+                t => t,
+            };
             json!({
-                "name": p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_string(),
+                "name": name,
+                "kind": kind,
                 "path": p.to_string_lossy(),
                 "created": m.get("created").and_then(|v| v.as_str()).unwrap_or(""),
                 "app": m.get("app").and_then(|v| v.as_str()).unwrap_or(""),
@@ -1448,9 +1483,7 @@ fn open_backups_folder(app: AppHandle, state: State<AppState>) {
 #[tauri::command]
 fn restore_backup(app: AppHandle, state: State<AppState>, path: String) -> Result<(), String> {
     let src = PathBuf::from(&path);
-    if !src.join("manifest.json").exists() {
-        return Err("not a backup folder".into());
-    }
+    validate_backup(&src)?; // nothing is touched for a damaged restore point
     // Flush, snapshot, copy, relaunch — off-thread so the flush lands before the snapshot.
     let dir = state.dir.clone();
     let root = backups_root(&app, &state.dir);
@@ -1932,6 +1965,44 @@ mod tests {
             "content dirs are replaced wholesale, so files added after the backup are gone"
         );
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_damaged_backup_is_refused_before_anything_is_touched() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-artifacts/native").join(format!("wb-validate-{}", now_secs()));
+        let (live, backups) = (base.join("live"), base.join("backups"));
+        fs::create_dir_all(live.join("data")).unwrap();
+        fs::write(live.join("layout.json"), br#"{"version":3,"widgets":[]}"#).unwrap();
+        fs::write(live.join("data").join("content.json"), br#"{"version":1,"items":{}}"#).unwrap();
+        let good = backup_to(&live, &backups, "").unwrap();
+        assert_eq!(validate_backup(&good), Ok(()));
+        let broken = backup_to(&live, &backups, "").unwrap();
+        fs::write(broken.join("data").join("content.json"), b"{ cut off").unwrap();
+        assert_eq!(validate_backup(&broken), Err("damaged:data/content.json".into()));
+        let partial = backup_to(&live, &backups, "").unwrap();
+        fs::remove_file(partial.join("layout.json")).unwrap();
+        assert_eq!(validate_backup(&partial), Err("damaged:layout.json".into()));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn restoring_a_pre_library_backup_is_converted_on_the_next_start() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-artifacts/native").join(format!("wb-oldrestore-{}", now_secs()));
+        let (live, backups) = (base.join("live"), base.join("backups"));
+        fs::create_dir_all(live.join("data")).unwrap();
+        // an old (schema 2) state, backed up
+        fs::write(live.join("layout.json"), br#"{"version":2,"widgets":[{"id":"m","type":"memo","settings":{"text":"old note"}}]}"#).unwrap();
+        let old = backup_to(&live, &backups, "").unwrap();
+        // the app moved on: schema 3 with a content store
+        fs::write(live.join("layout.json"), br#"{"version":3,"widgets":[]}"#).unwrap();
+        fs::write(live.join("data").join("content.json"), br#"{"version":1,"items":{"x":{"id":"x"}}}"#).unwrap();
+        validate_backup(&old).unwrap();
+        restore_from(&old, &live).unwrap();
+        assert!(!live.join("data").join("content.json").exists(), "the old state has no content store");
+        assert!(migrate::run(&live, &backups).unwrap(), "the relaunch converts it");
+        let content: Value = read_json(&live.join("data").join("content.json")).unwrap();
+        assert_eq!(content["items"]["m"]["data"]["text"], "old note");
         let _ = fs::remove_dir_all(&base);
     }
 

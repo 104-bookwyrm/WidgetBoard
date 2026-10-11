@@ -365,6 +365,7 @@ export function createMockTauri() {
           root: "C:/mock/Backups",
           items: get("wb-backups", []),
           backup: config().backup || { auto: "off", keep: 7, dir: "" },
+          status: get("wb-backup-status"),
         };
       case "backup_now": {
         await flushBoards();

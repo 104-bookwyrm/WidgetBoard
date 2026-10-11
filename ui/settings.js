@@ -481,7 +481,10 @@ function renderBackupList(items) {
     row.className = "set-list-row";
     const txt = document.createElement("span");
     txt.className = "grow";
-    txt.textContent = prettyStamp(it.created) + (it.app ? ` · v${it.app}` : "");
+    txt.textContent =
+      prettyStamp(it.created) +
+      (it.kind ? ` · ${t("set.backup.kind." + it.kind)}` : "") +
+      (it.app ? ` · v${it.app}` : "");
     row.append(
       txt,
       btn(t("set.backup.restore"), () => confirmRestore(row, it.path), ""),
@@ -500,7 +503,7 @@ function confirmRestore(row, path) {
     () => {
       invoke("restore_backup", { path })
         .then(() => (msg.textContent = t("set.backup.restoring")))
-        .catch((e) => (msg.textContent = String(e)));
+        .catch((e) => (msg.textContent = restoreError(e)));
     },
     "primary",
   );
@@ -522,13 +525,16 @@ function bindBackup() {
       })
       .catch((e) => ($("#backup-now-msg").textContent = String(e)));
   };
-  $("#backup-auto").onchange = () =>
+  $("#backup-auto").onchange = () => {
+    showBackupPolicy();
     invoke("save_config", {
       patch: { backup: { auto: $("#backup-auto").value } },
     }).then(saved);
+  };
   $("#backup-keep").onchange = () => {
     const n = Math.max(1, Math.min(99, +$("#backup-keep").value || 7));
     $("#backup-keep").value = n;
+    showBackupPolicy();
     invoke("save_config", { patch: { backup: { keep: n } } }).then(saved);
   };
 }
@@ -541,8 +547,28 @@ async function fillBackup() {
     ? b.auto
     : "off";
   $("#backup-keep").value = b.keep != null ? b.keep : 7;
+  showBackupPolicy();
+  showBackupStatus(info.status);
   renderBackupList(info.items || []);
 }
+/** What the schedule keeps, so nobody has to guess which restore points exist. */
+function showBackupPolicy() {
+  $("#backup-policy").textContent =
+    $("#backup-auto").value === "off"
+      ? t("set.backup.policy_off")
+      : t("set.backup.policy", { n: $("#backup-keep").value || 7 });
+}
+/** The scheduler's last failure (disk gone, folder not writable...) stays visible until a run succeeds. */
+function showBackupStatus(status) {
+  $("#backup-status").textContent = status?.error
+    ? t("set.backup.status_error", { e: status.error })
+    : "";
+}
+/** Rust's "damaged:<file>" -> a sentence; anything else as it came. */
+const restoreError = (e) =>
+  String(e).startsWith("damaged:")
+    ? t("set.backup.damaged", { file: String(e).slice(8) })
+    : String(e);
 
 // ---- Appearance page (theme editor; helpers in theme.js) ----
 // theme.css is the source of truth; save_theme persists and emits theme-changed for instant board preview.
@@ -749,8 +775,9 @@ async function init() {
     document.body.inert = false;
     document.getElementById("restoring")?.remove();
     fillBackup(); // drop the stuck "restoring…" row
-    $("#backup-now-msg").textContent = String(e);
+    $("#backup-now-msg").textContent = restoreError(e);
   });
+  await listen("backup-status", showBackupStatus);
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") win.close();

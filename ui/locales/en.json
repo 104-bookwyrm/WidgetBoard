@@ -552,5 +552,15 @@
   "lib.history_none": "No saved versions yet. Turn on memo history in Settings > Widgets.",
   "lib.copied": "Copied",
   "lib.copy_failed": "Couldn't copy",
-  "set.cal.legend": "Calendar"
+  "set.cal.legend": "Calendar",
+  "set.backup.policy": "Keeps the last {n} daily backups plus one weekly and one monthly backup. Of the backups made before a restore, the newest 5 are kept. Backups you make yourself and the one made before a data upgrade are never deleted.",
+  "set.backup.policy_off": "Automatic backups are off. Backups you make yourself are kept.",
+  "set.backup.status_error": "The last automatic backup failed: {e}",
+  "set.backup.damaged": "This backup is damaged ({file}), so nothing was restored. Pick another one.",
+  "set.backup.kind.daily": "Daily",
+  "set.backup.kind.weekly": "Weekly",
+  "set.backup.kind.monthly": "Monthly",
+  "set.backup.kind.pre-restore": "Before a restore",
+  "set.backup.kind.pre-migration": "Before the data upgrade",
+  "set.backup.kind.manual": "Made by you"
 }
