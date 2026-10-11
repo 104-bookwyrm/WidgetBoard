@@ -19,6 +19,96 @@
         display: flex;
         flex-direction: column;
       }
+      .lib-tabs {
+        display: flex;
+        gap: 4px;
+        padding: 10px 16px 0;
+        border-bottom: var(--line-width) var(--line-style) var(--line-color);
+      }
+      .lib-tabs button {
+        border-radius: 6px 6px 0 0;
+        border-bottom: 0;
+      }
+      .lib-tabs button[aria-selected="true"] {
+        background: var(--c2);
+        color: #fff;
+      }
+      .lib-items {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .lib-layouts {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px 16px 16px;
+      }
+      .lib-layouts h2 {
+        font-size: 1em;
+        margin: 16px 0 6px;
+      }
+      .lay-presets {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 8px;
+      }
+      .lay-presets button {
+        text-align: start;
+        padding: 8px 10px;
+      }
+      .lay-presets small {
+        display: block;
+        color: var(--text-muted);
+      }
+      .lay-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 6px 0;
+      }
+      .lay-row .grow {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .lay-name {
+        flex: 1;
+        font: inherit;
+      }
+      .lib-history {
+        position: fixed;
+        inset: 24px;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 14px;
+        overflow-y: auto;
+        border-radius: var(--radius, 8px);
+        background: var(--c1);
+        border: var(--line-width) var(--line-style) var(--line-color);
+        box-shadow: 0 8px 30px rgb(0 0 0 / 0.35);
+      }
+      .lib-history .head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .lib-history .head b {
+        flex: 1;
+      }
+      .lib-history .ver {
+        border-top: var(--line-width) var(--line-style) var(--line-color);
+        padding-top: 6px;
+      }
+      .lib-history pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin: 4px 0;
+        font: inherit;
+      }
       .lib-top {
         padding: 12px 16px 0;
       }
@@ -165,11 +255,30 @@
     </style>
   </head>
   <body>
-    <div class="lib-top">
-      <input class="lib-search" type="search" data-i18n-placeholder="lib.search" />
+    <div class="lib-tabs" role="tablist">
+      <button role="tab" data-tab="items" data-i18n="lib.items_tab"></button>
+      <button role="tab" data-tab="layouts" data-i18n="lib.layouts_tab"></button>
     </div>
-    <nav class="lib-chips" role="toolbar"></nav>
-    <main class="lib-grid" aria-live="polite"></main>
+    <div class="lib-items">
+      <div class="lib-top">
+        <input class="lib-search" type="search" data-i18n-placeholder="lib.search" />
+      </div>
+      <nav class="lib-chips" role="toolbar"></nav>
+      <main class="lib-grid" aria-live="polite"></main>
+    </div>
+    <main class="lib-layouts" hidden>
+      <p class="hint" data-i18n="lay.help"></p>
+      <h2 data-i18n="lay.builtin"></h2>
+      <div class="lay-presets"></div>
+      <h2 data-i18n="lay.saved"></h2>
+      <div class="lay-saved"></div>
+      <div class="lay-row">
+        <input class="lay-name" maxlength="40" data-i18n-placeholder="lay.name" />
+        <button class="lay-save primary" data-i18n="lay.save"></button>
+        <button class="lay-undo" data-i18n="lay.undo" hidden></button>
+      </div>
+    </main>
+    <div class="lib-history" role="dialog" aria-modal="true" hidden></div>
     <div class="lib-flash" role="status" hidden></div>
     <script type="module" src="library.js"></script>
   </body>

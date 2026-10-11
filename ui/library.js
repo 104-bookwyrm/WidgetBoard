@@ -2,7 +2,7 @@
 // Content lives in content.json (Rust); boards act on "widget-restore" / "widget-locate" and on content-changed.
 import { createMockTauri } from "./mock-tauri.js";
 import { loadLang, t, applyStatic } from "./i18n.js";
-import { sanitize } from "./theme.js";
+import { sanitize, copyText } from "./theme.js";
 import { syncScheme, esc, assetUrl, fold } from "./util.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import { COLORS } from "./widgets/memo.js";
@@ -24,6 +24,8 @@ let diary = null; // { date: text }, loaded on the first search
 let events = null; // calendar events, loaded on the first search
 let filter = "all"; // "all" | a type | "deleted"
 let assetsDir = "";
+let lang = "ko";
+let tab = "items"; // "items" | "layouts"
 let renaming = null; // id being renamed
 let confirming = null; // id asking "delete permanently?"
 
@@ -112,8 +114,101 @@ function actions(c) {
   const where = placed.has(c.id)
     ? `<span class="badge">${esc(t("lib.on_board"))}</span>${b("locate", t("lib.locate"))}`
     : b("show", t("lib.show"), "primary");
-  return where + b("rename", t("lib.rename")) + b("delete", t("lib.delete"));
+  const history = c.type === "memo" ? b("history", t("lib.history")) : "";
+  return where + history + b("rename", t("lib.rename")) + b("delete", t("lib.delete"));
 }
+
+const when = (secs) =>
+  new Date(secs * 1000).toLocaleString(lang === "ko" ? "ko-KR" : "en-US", { dateStyle: "medium", timeStyle: "short" });
+
+// ---- memo History: the archived versions of one memo ----
+async function openHistory(c) {
+  const all = await invoke("memo_archive_list").catch(() => []);
+  const versions = all.filter((v) => v.id === c.id).reverse();
+  const box = $(".lib-history");
+  const list = versions.length
+    ? versions
+        .map(
+          (v, i) =>
+            `<div class="ver"><span class="lib-type">${esc(when(v.t))}</span><pre>${esc(v.text)}</pre><button data-h="copy" data-i="${i}">${esc(t("set.archive.copy"))}</button></div>`,
+        )
+        .join("")
+    : `<p class="lib-empty">${esc(t("lib.history_none"))}</p>`;
+  box.innerHTML = `<div class="head"><b>${esc(t("lib.history"))} · ${esc(title(c))}</b><button data-h="close">${esc(t("theme.close"))}</button></div>${list}`;
+  box.hidden = false;
+  box.onclick = async (e) => {
+    const h = e.target.closest("[data-h]")?.dataset.h;
+    if (h === "close") box.hidden = true;
+    if (h === "copy") flash(t((await copyText(versions[+e.target.dataset.i].text)) ? "lib.copied" : "lib.copy_failed"));
+  };
+  box.querySelector("[data-h=close]").focus();
+}
+
+// ---- Layouts tab: built-in presets, saved layouts, undo (the board applies them) ----
+const PRESET_IDS = ["work", "study", "oshi"];
+const toBoard = (event, payload = null) =>
+  invoke("emit_primary", { event, payload })
+    .then(() => setTimeout(() => (load(), renderLayouts()), 500)) // board-side ops land asynchronously
+    .catch(() => {});
+let confirmingLayout = null; // layout name asking "delete?"
+async function renderLayouts() {
+  $(".lay-presets").innerHTML = PRESET_IDS.map(
+    (id) => `<button data-preset="${id}"><b>${esc(t("lay." + id))}</b><small>${esc(t("lay." + id + "_desc"))}</small></button>`,
+  ).join("");
+  const list = await invoke("store_get", { key: "layouts" }).catch(() => null);
+  const layouts = (Array.isArray(list) ? list : []).filter((l) => l && typeof l.name === "string" && Array.isArray(l.widgets));
+  const row = (l) =>
+    confirmingLayout === l.name
+      ? `<div class="lay-row"><span class="grow">${esc(t("lay.delete_confirm", { name: l.name }))}</span><button class="primary" data-lay="del-yes" data-name="${esc(l.name)}">${esc(t("lib.delete"))}</button><button data-lay="del-no">${esc(t("lib.cancel"))}</button></div>`
+      : `<div class="lay-row"><span class="grow">${esc(l.name)} · ${esc(t("lay.count", { n: l.widgets.length }))}</span><button data-lay="apply" data-name="${esc(l.name)}">${esc(t("lay.apply"))}</button><button data-lay="del" data-name="${esc(l.name)}" title="${esc(t("lay.delete", { name: l.name }))}">${esc(t("lib.delete"))}</button></div>`;
+  $(".lay-saved").innerHTML = layouts.length ? layouts.map(row).join("") : `<p class="hint">${esc(t("lay.none"))}</p>`;
+  const undo = await invoke("store_get", { key: "layouts_undo" }).catch(() => null);
+  $(".lay-undo").hidden = !Array.isArray(undo);
+}
+$(".lib-layouts").addEventListener("click", async (e) => {
+  const preset = e.target.closest("[data-preset]")?.dataset.preset;
+  if (preset) return toBoard("apply-preset", preset);
+  const el = e.target.closest("[data-lay]");
+  if (!el) return;
+  const name = el.dataset.name;
+  if (el.dataset.lay === "apply") return toBoard("apply-layout", name);
+  if (el.dataset.lay === "del") confirmingLayout = name;
+  if (el.dataset.lay === "del-no") confirmingLayout = null;
+  if (el.dataset.lay === "del-yes") {
+    confirmingLayout = null;
+    const list = (await invoke("store_get", { key: "layouts" }).catch(() => null)) || [];
+    await invoke("store_set", { key: "layouts", value: list.filter((l) => l?.name !== name), src: "library" }).catch(() => {});
+  }
+  renderLayouts();
+});
+$(".lay-save").addEventListener("click", async () => {
+  const all = await invoke("get_all_widgets").catch(() => []);
+  const now = new Date();
+  const p2 = (n) => String(n).padStart(2, "0");
+  const name =
+    $(".lay-name").value.trim().slice(0, 40) ||
+    t("lay.default_name", { date: `${now.getMonth() + 1}/${now.getDate()} ${p2(now.getHours())}:${p2(now.getMinutes())}` });
+  const list = (await invoke("store_get", { key: "layouts" }).catch(() => null)) || [];
+  const next = [...list.filter((l) => l?.name !== name), { name, saved: now.toISOString(), widgets: all }].slice(-20);
+  await invoke("store_set", { key: "layouts", value: next, src: "library" }).catch(() => {});
+  $(".lay-name").value = "";
+  flash(t("lay.saved_as", { name }));
+  renderLayouts();
+});
+// the board undoes it: positions go back, what was typed since stays
+$(".lay-undo").addEventListener("click", () => toBoard("undo-layout"));
+
+function showTab(name) {
+  tab = name === "layouts" ? "layouts" : "items";
+  for (const b of document.querySelectorAll(".lib-tabs [data-tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  $(".lib-items").hidden = tab !== "items";
+  $(".lib-layouts").hidden = tab !== "layouts";
+  if (tab === "layouts") renderLayouts();
+}
+$(".lib-tabs").addEventListener("click", (e) => {
+  const name = e.target.closest("[data-tab]")?.dataset.tab;
+  if (name) showTab(name);
+});
 
 function render() {
   const live = items.filter((c) => !c.deletedAt);
@@ -227,6 +322,9 @@ $(".lib-grid").addEventListener("click", async (e) => {
     case "locate":
       emit("widget-locate", c.id);
       break;
+    case "history":
+      openHistory(c);
+      break;
     case "rename":
       renaming = c.id;
       render();
@@ -288,6 +386,7 @@ function applyTheme(css) {
 (async function init() {
   const data = await invoke("get_settings");
   assetsDir = data.assetsDir || "";
+  lang = data.app.lang;
   applyTheme(data.theme);
   await loadLang(data.app.lang);
   applyStatic();
@@ -298,19 +397,26 @@ function applyTheme(css) {
     if (query && (p?.key === "diary" || p?.key === "events")) loadSearchData().then(render);
     else if (p?.key === "diary" || p?.key === "events") diary = events = null; // stale; reload on the next search
   });
-  const focusSearch = () => $(".lib-search").focus();
-  await listen("library-search", focusSearch);
-  if (new URLSearchParams(location.search).has("search")) focusSearch();
+  // which page the tray / menu asked for: items, search (cursor in the box) or layouts
+  const openPage = (page) => {
+    showTab(page === "layouts" ? "layouts" : "items");
+    if (page === "search") $(".lib-search").focus();
+  };
+  await listen("library-page", openPage);
+  openPage(new URLSearchParams(location.search).get("page") || "items");
   await listen("theme-changed", applyTheme);
   await listen("lang-changed", async (code) => {
+    lang = code;
     await loadLang(code);
     applyStatic();
     render();
+    if (tab === "layouts") renderLayouts();
   });
   addEventListener("focus", load); // widgets closed or opened on the board since
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || e.defaultPrevented) return;
     if (e.target.matches(".lib-search") && query) return; // the search box clears itself first
+    if (!$(".lib-history").hidden) return void ($(".lib-history").hidden = true);
     win.close();
   });
   document.documentElement.dataset.ready = ""; // tests wait on html[data-ready]

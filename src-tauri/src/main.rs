@@ -783,18 +783,16 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
 }
 
 /// The Library: every content item, on the board or not, plus Recently deleted.
-/// `search`: put the cursor in the search box (the "Search…" menu items).
-fn open_library_window(app: &AppHandle, search: bool) -> tauri::Result<()> {
+/// `page`: "items" (default), "search" (cursor in the search box) or "layouts" (the Layouts tab).
+fn open_library_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
+    let page = if ["search", "layouts"].contains(&page) { page } else { "items" };
     if let Some(w) = app.get_webview_window("library") {
         let _ = w.unminimize();
-        if search {
-            let _ = app.emit_to("library", "library-search", ());
-        }
+        let _ = app.emit_to("library", "library-page", page);
         return w.set_focus();
     }
     let lang = app.state::<AppState>().settings.lock().unwrap().lang.clone();
-    let url = if search { "library.html?search=1" } else { "library.html" };
-    let w = WebviewWindowBuilder::new(app, "library", WebviewUrl::App(url.into()))
+    let w = WebviewWindowBuilder::new(app, "library", WebviewUrl::App(format!("library.html?page={page}").into()))
         .title(tr(&lang, "lib.title"))
         .inner_size(760.0, 560.0)
         .min_inner_size(420.0, 360.0)
@@ -806,8 +804,8 @@ fn open_library_window(app: &AppHandle, search: bool) -> tauri::Result<()> {
 }
 
 #[tauri::command]
-async fn open_library(app: AppHandle, search: Option<bool>) -> Result<(), String> {
-    open_library_window(&app, search == Some(true)).map_err(|e| e.to_string())
+async fn open_library(app: AppHandle, page: Option<String>) -> Result<(), String> {
+    open_library_window(&app, page.as_deref().unwrap_or("items")).map_err(|e| e.to_string())
 }
 
 /// async: building a window inside a sync command deadlocks the IPC on Windows (tauri docs).
@@ -1719,13 +1717,13 @@ fn on_menu(app: &AppHandle, id: &str) {
             let _ = open_settings_window(app, "general");
         }
         "layouts" => {
-            let _ = open_settings_window(app, "widgets");
+            let _ = open_library_window(app, "layouts");
         }
         "library" => {
-            let _ = open_library_window(app, false);
+            let _ = open_library_window(app, "items");
         }
         "search" => {
-            let _ = open_library_window(app, true);
+            let _ = open_library_window(app, "search");
         }
         "theme" => {
             let _ = open_settings_window(app, "appearance");

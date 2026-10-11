@@ -920,7 +920,7 @@ async function openMenu(w, el) {
       : { text: t("menu.hide"), action: () => setHidden(w, true) },
     { text: t("menu.close"), action: () => removeWidget(w) },
     { text: t("menu.library"), action: () => invoke("open_library").catch(() => {}) },
-    { text: t("menu.search"), action: () => invoke("open_library", { search: true }).catch(() => {}) },
+    { text: t("menu.search"), action: () => invoke("open_library", { page: "search" }).catch(() => {}) },
   ];
   let items;
   if (editMode) {

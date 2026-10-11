@@ -560,5 +560,11 @@
   "cal.date": "날짜",
   "cal.tags": "태그",
   "cal.tag_add": "태그 입력 후 Enter",
-  "cal.tag_remove": "#{tag} 빼기"
+  "cal.tag_remove": "#{tag} 빼기",
+  "lib.items_tab": "항목",
+  "lib.layouts_tab": "배치",
+  "lib.history": "기록",
+  "lib.history_none": "저장된 기록이 없습니다. 설정 > 위젯에서 메모 기록을 켜세요.",
+  "lib.copied": "복사했습니다",
+  "lib.copy_failed": "복사하지 못했습니다"
 }

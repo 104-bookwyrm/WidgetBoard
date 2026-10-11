@@ -560,5 +560,11 @@
   "cal.date": "Date",
   "cal.tags": "Tags",
   "cal.tag_add": "Add a tag, then Enter",
-  "cal.tag_remove": "Remove #{tag}"
+  "cal.tag_remove": "Remove #{tag}",
+  "lib.items_tab": "Items",
+  "lib.layouts_tab": "Layouts",
+  "lib.history": "History",
+  "lib.history_none": "No saved versions yet. Turn on memo history in Settings > Widgets.",
+  "lib.copied": "Copied",
+  "lib.copy_failed": "Couldn't copy"
 }

@@ -994,9 +994,9 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   await settled(board); // the memo's content item is written on first mount
   const lib = await ctx.newPage();
   lib.on("pageerror", (e) => errs.push(e.message));
-  await lib.goto("http://localhost:8765/library.html?lang=ko&search=1");
+  await lib.goto("http://localhost:8765/library.html?lang=ko&page=search");
   await lib.waitForSelector("html[data-ready]", { state: "attached" });
-  ok(await lib.evaluate(() => document.activeElement?.matches(".lib-search")), "search=1 puts the cursor in the search box");
+  ok(await lib.evaluate(() => document.activeElement?.matches(".lib-search")), "page=search puts the cursor in the search box");
   await lib.fill(".lib-search", "도서관");
   await lib.waitForSelector(".lib-row");
   const rows = await lib.$$eval(".lib-row", (r) => r.map((x) => x.dataset.goto + ":" + x.dataset.date));
@@ -1016,6 +1016,51 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   ok(true, "a diary result opens that page in the diary widget");
   await lib.fill(".lib-search", "없는말");
   ok(/일치하는 항목이 없습니다/.test(await lib.textContent(".lib-grid")), "no match says so");
+  await ctx.close();
+}
+
+// --- Library: Layouts tab and memo History ---
+{
+  const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
+  const board = await ctx.newPage();
+  board.on("pageerror", (e) => errs.push(e.message));
+  await board.goto("http://localhost:8765/index.html?lang=en");
+  await board.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem("wb-widgets", JSON.stringify([
+      { id: "m", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: { text: "now" } },
+    ]));
+    localStorage.setItem("wb-archive", JSON.stringify([
+      { t: 1790000000, id: "m", name: "", text: "first draft" },
+      { t: 1790000600, id: "m", name: "", text: "second draft" },
+      { t: 1790000900, id: "other", name: "", text: "someone else" },
+    ]));
+  });
+  await board.reload();
+  await ready(board);
+  await settled(board);
+  const lib = await ctx.newPage();
+  lib.on("pageerror", (e) => errs.push(e.message));
+  await lib.goto("http://localhost:8765/library.html?lang=en&page=layouts");
+  await lib.waitForSelector("html[data-ready]", { state: "attached" });
+  ok(
+    !(await lib.isHidden(".lib-layouts")) && (await lib.$$(".lay-presets [data-preset]")).length === 3,
+    "page=layouts opens the Layouts tab with the built-in presets",
+  );
+  await lib.fill(".lay-name", "desk");
+  await lib.click(".lay-save");
+  await lib.waitForSelector('.lay-saved [data-lay="apply"][data-name="desk"]');
+  ok(true, "save current adds a saved layout");
+  await lib.click('[data-preset="work"]');
+  await board.waitForEvent("framenavigated");
+  await ready(board);
+  ok((await board.$$(".widget")).length >= 5, "a built-in preset from the Library reaches the board");
+  await lib.click('[data-tab="items"]');
+  await lib.click('.lib-card[data-id="m"] [data-act=history]');
+  const vers = await lib.$$eval(".lib-history pre", (p) => p.map((x) => x.textContent));
+  ok(JSON.stringify(vers) === '["second draft","first draft"]', "History lists this memo's versions, newest first", JSON.stringify(vers));
+  await lib.keyboard.press("Escape");
+  ok(await lib.isHidden(".lib-history"), "Esc closes History, not the window");
   await ctx.close();
 }
 
