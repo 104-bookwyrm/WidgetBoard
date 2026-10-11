@@ -3,7 +3,7 @@
 import { createMockTauri } from "./mock-tauri.js";
 import { loadLang, t, applyStatic } from "./i18n.js";
 import { sanitize } from "./theme.js";
-import { syncScheme, esc, assetUrl } from "./util.js";
+import { syncScheme, esc, assetUrl, fold } from "./util.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import { COLORS } from "./widgets/memo.js";
 import { fmt as fmtTimer } from "./widgets/timer.js";
@@ -17,7 +17,11 @@ const emit = (ev, payload) => T.event.emit(ev, payload).catch(() => {});
 const $ = (s) => document.querySelector(s);
 
 let items = [];
+let boardWidgets = []; // every placement on every board
 let placed = new Set(); // content ids with a placement on some board
+let query = ""; // search box
+let diary = null; // { date: text }, loaded on the first search
+let events = null; // calendar events, loaded on the first search
 let filter = "all"; // "all" | a type | "deleted"
 let assetsDir = "";
 let renaming = null; // id being renamed
@@ -56,6 +60,48 @@ function preview(c) {
   return `<div class="lib-preview"></div>`;
 }
 
+// ---- search: Library content, diary pages, calendar events (local scan) ----
+const ASSET = /^[0-9a-f]{8,}\.\w+$/; // uploaded file names are not text worth matching
+const strings = (v) =>
+  typeof v === "string" ? (ASSET.test(v) ? [] : [v])
+  : Array.isArray(v) ? v.flatMap(strings)
+  : v && typeof v === "object" ? Object.values(v).flatMap(strings)
+  : [];
+const hit = (text) => !!query && fold(text).includes(fold(query));
+const matchesItem = (c) => hit([title(c), ...strings(c.data)].join("\n"));
+/** Text around the first match, the match marked. Original text is shown (NFC), never the folded copy. */
+function snippet(text, radius = 40) {
+  const shown = String(text).normalize("NFC").replace(/\s+/g, " ");
+  const at = fold(shown).indexOf(fold(query));
+  if (at < 0 || fold(shown).length !== shown.length) return esc(shown.slice(0, radius * 2));
+  const from = Math.max(0, at - radius);
+  const end = at + query.normalize("NFC").length;
+  return (from ? "…" : "") + esc(shown.slice(from, at)) + "<mark>" + esc(shown.slice(at, end)) + "</mark>" +
+    esc(shown.slice(end, end + radius)) + (end + radius < shown.length ? "…" : "");
+}
+async function loadSearchData() {
+  [diary, events] = await Promise.all([
+    invoke("diary_all").catch(() => ({})),
+    invoke("store_get", { key: "events" }).catch(() => []),
+  ]);
+  if (!Array.isArray(events)) events = [];
+}
+function resultRows() {
+  if (!query || !diary) return "";
+  const days = Object.entries(diary).filter(([, text]) => hit(text)).sort((a, b) => b[0].localeCompare(a[0]));
+  const evs = events.filter((e) => hit([e.title, ...(e.tags || [])].join(" "))).sort((a, b) => b.date.localeCompare(a.date));
+  const row = (type, date, html) =>
+    `<button class="lib-row" data-goto="${type}" data-date="${esc(date)}"><span class="when">${esc(date)}</span><span class="what">${html}</span></button>`;
+  return (
+    (days.length
+      ? `<section class="lib-results"><h2>${esc(t("lib.diary"))}</h2>${days.map(([d, text]) => row("diary", d, snippet(text))).join("")}</section>`
+      : "") +
+    (evs.length
+      ? `<section class="lib-results"><h2>${esc(t("lib.calendar"))}</h2>${evs.map((e) => row("calendar", e.date, snippet(e.title))).join("")}</section>`
+      : "")
+  );
+}
+
 function actions(c) {
   const b = (act, label, cls = "") => `<button data-act="${act}" class="${cls}">${esc(label)}</button>`;
   if (c.deletedAt) {
@@ -81,11 +127,14 @@ function render() {
       .map((ty) => chip(ty, t("widget." + ty), live.filter((c) => c.type === ty).length))
       .join("") +
     chip("deleted", t("lib.deleted"), deleted.length);
-  const shown =
+  const shown = (
     filter === "deleted"
       ? deleted.sort((a, b) => b.deletedAt - a.deletedAt)
-      : live.filter((c) => filter === "all" || c.type === filter).sort((a, b) => b.updated - a.updated);
-  $(".lib-grid").innerHTML = shown.length
+      : live.filter((c) => filter === "all" || c.type === filter).sort((a, b) => b.updated - a.updated)
+  ).filter((c) => !query || matchesItem(c));
+  const rows = filter === "deleted" ? "" : resultRows();
+  const empty = query ? "lib.no_results" : filter === "deleted" ? "lib.deleted_empty" : "lib.empty";
+  $(".lib-grid").innerHTML = (shown.length || rows
     ? shown
         .map(
           (c) => `<article class="lib-card" data-id="${esc(c.id)}">
@@ -96,7 +145,7 @@ function render() {
           </article>`,
         )
         .join("")
-    : `<p class="lib-empty">${esc(t(filter === "deleted" ? "lib.deleted_empty" : "lib.empty"))}</p>`;
+    : `<p class="lib-empty">${esc(t(empty))}</p>`) + rows;
   if (renaming) {
     const input = $(".lib-name");
     input?.focus();
@@ -110,7 +159,9 @@ async function load() {
     invoke("get_all_widgets").catch(() => []),
   ]);
   items = list;
+  boardWidgets = widgets;
   placed = new Set(widgets.map((w) => w.id));
+  if (query) await loadSearchData();
   if (filter !== "all" && filter !== "deleted" && !items.some((c) => c.type === filter && !c.deletedAt)) filter = "all";
   render();
 }
@@ -145,7 +196,23 @@ $(".lib-chips").addEventListener("click", (e) => {
   render();
 });
 
+$(".lib-search").addEventListener("input", async (e) => {
+  query = e.target.value.trim();
+  if (query && !diary) await loadSearchData();
+  render();
+});
+
 $(".lib-grid").addEventListener("click", async (e) => {
+  // a diary/calendar result: that widget opens the date and is pointed out
+  const go = e.target.closest("[data-goto]");
+  if (go) {
+    const type = go.dataset.goto;
+    const w = boardWidgets.find((x) => x.type === type);
+    if (!w) return flash(t("lib.no_widget", { type: t("widget." + type) }));
+    emit("widget-locate", w.id);
+    emit("goto-date", { type, date: go.dataset.date });
+    return;
+  }
   const act = e.target.closest("[data-act]")?.dataset.act;
   const c = items.find((x) => x.id === e.target.closest(".lib-card")?.dataset.id);
   if (!act || !c) return;
@@ -227,6 +294,13 @@ function applyTheme(css) {
   await load();
   await listen("content-changed", load);
   await listen("content-erased", load);
+  await listen("store-changed", (p) => {
+    if (query && (p?.key === "diary" || p?.key === "events")) loadSearchData().then(render);
+    else if (p?.key === "diary" || p?.key === "events") diary = events = null; // stale; reload on the next search
+  });
+  const focusSearch = () => $(".lib-search").focus();
+  await listen("library-search", focusSearch);
+  if (new URLSearchParams(location.search).has("search")) focusSearch();
   await listen("theme-changed", applyTheme);
   await listen("lang-changed", async (code) => {
     await loadLang(code);
@@ -235,7 +309,9 @@ function applyTheme(css) {
   });
   addEventListener("focus", load); // widgets closed or opened on the board since
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !e.defaultPrevented) win.close();
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    if (e.target.matches(".lib-search") && query) return; // the search box clears itself first
+    win.close();
   });
   document.documentElement.dataset.ready = ""; // tests wait on html[data-ready]
 })();

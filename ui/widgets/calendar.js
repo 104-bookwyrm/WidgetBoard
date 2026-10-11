@@ -528,6 +528,8 @@ export default {
       render();
       q(".cal-pop .cal-add")?.focus(); // type right away; Esc closes
     }
+    // a search result in the Library: open that day
+    api.on("goto-date", (p) => p?.type === "calendar" && openDay(p.date));
     function go(dir) {
       const d = parseYmd(month);
       d.setDate(1);

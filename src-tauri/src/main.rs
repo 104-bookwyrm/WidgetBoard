@@ -434,6 +434,15 @@ fn diary_set(app: AppHandle, state: State<AppState>, date: String, text: String,
     Ok(rev)
 }
 
+/// Every diary page as { date: text }, for search.
+#[tauri::command]
+fn diary_all(state: State<AppState>) -> serde_json::Map<String, Value> {
+    diary_dates(state.clone())
+        .into_iter()
+        .filter_map(|d| Some((d.clone(), json!(fs::read_to_string(state.dir.join("diary").join(format!("{d}.md"))).ok()?))))
+        .collect()
+}
+
 /// Dates that have a diary page, sorted ascending.
 #[tauri::command]
 fn diary_dates(state: State<AppState>) -> Vec<String> {
@@ -774,13 +783,18 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
 }
 
 /// The Library: every content item, on the board or not, plus Recently deleted.
-fn open_library_window(app: &AppHandle) -> tauri::Result<()> {
+/// `search`: put the cursor in the search box (the "Search…" menu items).
+fn open_library_window(app: &AppHandle, search: bool) -> tauri::Result<()> {
     if let Some(w) = app.get_webview_window("library") {
         let _ = w.unminimize();
+        if search {
+            let _ = app.emit_to("library", "library-search", ());
+        }
         return w.set_focus();
     }
     let lang = app.state::<AppState>().settings.lock().unwrap().lang.clone();
-    let w = WebviewWindowBuilder::new(app, "library", WebviewUrl::App("library.html".into()))
+    let url = if search { "library.html?search=1" } else { "library.html" };
+    let w = WebviewWindowBuilder::new(app, "library", WebviewUrl::App(url.into()))
         .title(tr(&lang, "lib.title"))
         .inner_size(760.0, 560.0)
         .min_inner_size(420.0, 360.0)
@@ -792,8 +806,8 @@ fn open_library_window(app: &AppHandle) -> tauri::Result<()> {
 }
 
 #[tauri::command]
-async fn open_library(app: AppHandle) -> Result<(), String> {
-    open_library_window(&app).map_err(|e| e.to_string())
+async fn open_library(app: AppHandle, search: Option<bool>) -> Result<(), String> {
+    open_library_window(&app, search == Some(true)).map_err(|e| e.to_string())
 }
 
 /// async: building a window inside a sync command deadlocks the IPC on Windows (tauri docs).
@@ -1660,13 +1674,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let settings = MenuItem::with_id(app, "settings", t("tray.settings"), true, None::<&str>)?;
     let layouts = MenuItem::with_id(app, "layouts", t("tray.layouts"), true, None::<&str>)?;
     let library = MenuItem::with_id(app, "library", t("tray.library"), true, None::<&str>)?;
+    let search = MenuItem::with_id(app, "search", t("tray.search"), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", t("tray.quit"), true, None::<&str>)?;
     let update = MenuItem::with_id(app, "update", t("tray.update_check"), true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
 
     let menu = Menu::with_items(
         app,
-        &[&add, &edit, &library, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
+        &[&add, &edit, &library, &search, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
     )?;
     // a found (not skipped) update sits at the very bottom until it is installed or skipped
     if let Some(a) = updater::available(&st.dir.join("updates")) {
@@ -1707,7 +1722,10 @@ fn on_menu(app: &AppHandle, id: &str) {
             let _ = open_settings_window(app, "widgets");
         }
         "library" => {
-            let _ = open_library_window(app);
+            let _ = open_library_window(app, false);
+        }
+        "search" => {
+            let _ = open_library_window(app, true);
         }
         "theme" => {
             let _ = open_settings_window(app, "appearance");
@@ -1823,6 +1841,7 @@ fn main() {
             diary_read,
             diary_set,
             diary_dates,
+            diary_all,
             list_assets,
             list_fonts,
             open_config_file,

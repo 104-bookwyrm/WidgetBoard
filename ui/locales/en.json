@@ -545,5 +545,12 @@
   "lib.changed": "Changed elsewhere. The list is updated; try again.",
   "set.widgets.close": "Close {name} (its content stays in the Library)",
   "set.lib.hint": "Closed widgets keep their content in the Library. Bring them back or delete them there.",
-  "set.lib.open": "Open Library"
+  "set.lib.open": "Open Library",
+  "tray.search": "Search…",
+  "menu.search": "Search…",
+  "lib.search": "Search memos, diary, calendar…",
+  "lib.diary": "Diary",
+  "lib.calendar": "Calendar",
+  "lib.no_results": "Nothing matches.",
+  "lib.no_widget": "Add a {type} widget to open this."
 }

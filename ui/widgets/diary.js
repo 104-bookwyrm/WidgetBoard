@@ -161,6 +161,9 @@ export default {
       { passive: false },
     );
 
+    // a search result in the Library: open that page
+    api.on("goto-date", (p) => p?.type === "diary" && open(p.date));
+
     // another diary widget (or monitor) changed a page
     api.onStore("diary", async (p) => {
       dates = await api.diary.dates();

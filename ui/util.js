@@ -36,6 +36,9 @@ export const addMonths = (s, n) => {
 };
 export const uid = () => crypto.randomUUID();
 
+/** Search folding: NFC (composed and decomposed Hangul match) and case-insensitive. Display keeps the original. */
+export const fold = (s) => String(s ?? "").normalize("NFC").toLocaleLowerCase();
+
 /** An uploaded file's URL: `dir` is the assets folder ("" in the browser mock), `convert` Tauri's convertFileSrc. */
 export const assetUrl = (dir, name, convert) =>
   !name ? "" : !dir ? name : convert(dir + (dir.includes("\\") ? "\\" : "/") + name);

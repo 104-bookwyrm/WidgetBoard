@@ -285,6 +285,12 @@ export function createMockTauri() {
         emit("content-erased", { id: args.id });
         return;
       }
+      case "diary_all":
+        return Object.fromEntries(
+          Object.keys(localStorage)
+            .filter((k) => k.startsWith("wb-diary-"))
+            .map((k) => [k.slice(9), localStorage.getItem(k)]),
+        );
       case "diary_dates":
         return Object.keys(localStorage)
           .filter((k) => k.startsWith("wb-diary-"))

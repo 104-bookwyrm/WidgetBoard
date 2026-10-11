@@ -974,6 +974,51 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   await ctx.close();
 }
 
+// --- Library search: Korean substrings across memos, diary and calendar ---
+{
+  const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
+  const board = await ctx.newPage();
+  board.on("pageerror", (e) => errs.push(e.message));
+  await board.goto("http://localhost:8765/index.html?lang=ko");
+  await board.evaluate(() => {
+    localStorage.clear();
+    localStorage.setItem("wb-widgets", JSON.stringify([
+      { id: "m", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: { text: "장보기 목록: 우유, 계란" } },
+      { id: "dy", type: "diary", display: "D1", x: 4, y: 0, w: 4, h: 4, settings: {} },
+    ]));
+    localStorage.setItem("wb-diary-2026-10-01", "오늘은 도서관에 가서 책을 빌렸다.");
+    localStorage.setItem("wb-store-events", JSON.stringify([{ id: "e", date: "2026-10-05", title: "도서관 책 반납", done: false }]));
+  });
+  await board.reload();
+  await ready(board);
+  await settled(board); // the memo's content item is written on first mount
+  const lib = await ctx.newPage();
+  lib.on("pageerror", (e) => errs.push(e.message));
+  await lib.goto("http://localhost:8765/library.html?lang=ko&search=1");
+  await lib.waitForSelector("html[data-ready]", { state: "attached" });
+  ok(await lib.evaluate(() => document.activeElement?.matches(".lib-search")), "search=1 puts the cursor in the search box");
+  await lib.fill(".lib-search", "도서관");
+  await lib.waitForSelector(".lib-row");
+  const rows = await lib.$$eval(".lib-row", (r) => r.map((x) => x.dataset.goto + ":" + x.dataset.date));
+  ok(
+    rows.includes("diary:2026-10-01") && rows.includes("calendar:2026-10-05") && (await lib.$$(".lib-card")).length === 0,
+    "a Korean substring finds the diary page and the event, not the memo",
+    JSON.stringify(rows),
+  );
+  ok((await lib.$eval(".lib-row mark", (m) => m.textContent)) === "도서관", "the match is marked");
+  // decomposed Hangul (as some IMEs and pasted text produce) still matches composed text
+  await lib.fill(".lib-search", "우유".normalize("NFD"));
+  await lib.waitForSelector('.lib-card[data-id="m"]');
+  ok(true, "an NFD query matches the NFC memo text");
+  await lib.fill(".lib-search", "도서관");
+  await lib.click('.lib-row[data-goto="diary"]');
+  await board.waitForFunction(() => /도서관/.test(document.querySelector('.widget[data-id="dy"] textarea')?.value ?? ""));
+  ok(true, "a diary result opens that page in the diary widget");
+  await lib.fill(".lib-search", "없는말");
+  ok(/일치하는 항목이 없습니다/.test(await lib.textContent(".lib-grid")), "no match says so");
+  await ctx.close();
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", JSON.stringify(errs));
 await b.close();
