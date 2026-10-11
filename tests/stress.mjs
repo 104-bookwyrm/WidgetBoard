@@ -2341,6 +2341,56 @@ async function dragResize(p, sel, dw, dh) {
   await p.close();
 }
 
+// ===== Step 5: repeat controls, Korean shortcuts, done per occurrence =====
+{
+  const p = await b.newPage({ viewport: { width: 1440, height: 810 } });
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.clock.setSystemTime(new Date("2026-10-05T09:00:00+09:00")); // a Monday
+  await p.goto("http://localhost:8765/index.html?lang=ko");
+  await seed(p, [{ id: "ca", type: "calendar", x: 0, y: 0, w: 5, h: 5, settings: { view: "mini" } }], {
+    "wb-store-events": [{ id: "W", date: "2026-10-05", title: "주간 회의", repeat: "weekly", done: false }],
+  });
+  const events = () => p.evaluate(() => JSON.parse(localStorage.getItem("wb-store-events")));
+  // tick this week's occurrence only
+  await p.click('.cal-grid [data-d="2026-10-05"]');
+  await p.check('.cal-pop [data-id="W"] input[type=checkbox]');
+  await p.waitForTimeout(150);
+  let W = (await events()).find((e) => e.id === "W");
+  ok(JSON.stringify(W.doneDates) === '["2026-10-05"]' && !W.done, "S5: ticking a weekly entry marks this occurrence", JSON.stringify(W));
+  await p.evaluate(() => __mock.emit("goto-date", { type: "calendar", date: "2026-10-12" })); // the Library search hook
+  await p.waitForSelector('.cal-grid [data-d="2026-10-12"].sel');
+  ok(!(await p.isChecked('.cal-pop [data-id="W"] input[type=checkbox]')), "S5: next week's occurrence stays open");
+  // Korean shortcut
+  await p.fill(".cal-pop .cal-add", "운동 @매주 #건강");
+  await p.press(".cal-pop .cal-add", "Enter");
+  await p.waitForTimeout(150);
+  const gym = (await events()).find((e) => e.title === "운동");
+  ok(gym?.repeat === "weekly" && gym.tags?.[0] === "건강", "S5: @매주 and #tag are read from the add box", JSON.stringify(gym));
+  // Details: date, monthly repeat, tag chips
+  await p.click(`.cal-pop [data-id="${gym.id}"] .ev-cfg`, { force: true });
+  await p.fill(".cal-ed [data-f=date]", "2026-10-31");
+  await p.selectOption(".cal-ed [data-f=repeat]", "monthly");
+  await p.fill(".cal-ed [data-f=tag]", "아침");
+  await p.press(".cal-ed [data-f=tag]", "Enter");
+  await p.click('.cal-ed .chip:has-text("건강") [data-a=tag-del]');
+  await p.click(".cal-ed [data-a=ed-save]");
+  await p.waitForTimeout(150);
+  const g2 = (await events()).find((e) => e.id === gym.id);
+  ok(
+    g2.date === "2026-10-31" && g2.repeat === "monthly" && JSON.stringify(g2.tags) === '["아침"]',
+    "S5: Details sets date, repeat and tags",
+    JSON.stringify(g2),
+  );
+  // monthly on the 31st shows on November's last day
+  await p.evaluate(() => __mock.emit("goto-date", { type: "calendar", date: "2026-11-30" }));
+  await p.waitForSelector('.cal-grid [data-d="2026-11-30"].sel');
+  ok(
+    (await p.getAttribute('.cal-grid [data-d="2026-11-30"]', "class")).includes("has"),
+    "S5: a monthly 31st falls on November 30",
+  );
+  await p.close();
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", errs);
 await b.close();

@@ -552,5 +552,13 @@
   "lib.diary": "일기",
   "lib.calendar": "달력",
   "lib.no_results": "일치하는 항목이 없습니다.",
-  "lib.no_widget": "{type} 위젯을 추가하면 열 수 있습니다."
+  "lib.no_widget": "{type} 위젯을 추가하면 열 수 있습니다.",
+  "cal.daily": "매일 반복",
+  "cal.monthly": "매월 반복",
+  "cal.repeat": "반복",
+  "cal.repeat_none": "반복 안 함",
+  "cal.date": "날짜",
+  "cal.tags": "태그",
+  "cal.tag_add": "태그 입력 후 Enter",
+  "cal.tag_remove": "#{tag} 빼기"
 }

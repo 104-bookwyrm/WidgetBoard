@@ -13,6 +13,9 @@ import {
   uid,
   deferWhileEditing,
   editInlineText,
+  occursOn,
+  eventDone,
+  setEventDone,
 } from "../util.js";
 import { icon } from "../icons.js";
 
@@ -147,13 +150,13 @@ export default {
       if (tab === "today") {
         const cal = s.sync
           ? events
-              .filter((e) => e.date === d && !e.dday) // d-day items are countdowns, not to-dos
+              .filter((e) => occursOn(e, d) && !e.dday) // d-day items are countdowns, not to-dos
               .sort(
                 (a, b) =>
                   (a.time ? 0 : 1) - (b.time ? 0 : 1) ||
                   (a.time || "").localeCompare(b.time || ""),
               )
-              .map((e) => ({ kind: "cal", item: e, done: !!e.done }))
+              .map((e) => ({ kind: "cal", item: e, done: eventDone(e, d) }))
           : [];
         const own = items
           .filter(
@@ -263,7 +266,7 @@ export default {
       const on = e.target.checked;
       const ev = cal(e.target);
       if (ev) {
-        ev.done = on;
+        setEventDone(ev, today(), on); // a repeating entry: today's occurrence only
         saveEvents();
         return render();
       }

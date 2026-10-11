@@ -552,5 +552,13 @@
   "lib.diary": "Diary",
   "lib.calendar": "Calendar",
   "lib.no_results": "Nothing matches.",
-  "lib.no_widget": "Add a {type} widget to open this."
+  "lib.no_widget": "Add a {type} widget to open this.",
+  "cal.daily": "Repeats daily",
+  "cal.monthly": "Repeats monthly",
+  "cal.repeat": "Repeat",
+  "cal.repeat_none": "Doesn't repeat",
+  "cal.date": "Date",
+  "cal.tags": "Tags",
+  "cal.tag_add": "Add a tag, then Enter",
+  "cal.tag_remove": "Remove #{tag}"
 }

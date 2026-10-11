@@ -117,10 +117,26 @@ export function occursOn(e, d) {
   if (!e || typeof e.date !== "string") return false;
   if (e.date === d) return true;
   if (e.repeat === "yearly") return e.date.slice(5) === d.slice(5);
-  // weekly: same weekday, on or after the anchor (a recurrence starts at its first date)
-  if (e.repeat === "weekly")
-    return d >= e.date && parseYmd(d).getDay() === parseYmd(e.date).getDay();
+  if (d < e.date) return false; // daily / weekly / monthly start at their first date
+  if (e.repeat === "daily") return true;
+  if (e.repeat === "weekly") return parseYmd(d).getDay() === parseYmd(e.date).getDay();
+  if (e.repeat === "monthly") {
+    // the 29th-31st fall on a shorter month's last day (Microsoft To Do)
+    const day = parseYmd(d);
+    const last = new Date(day.getFullYear(), day.getMonth() + 1, 0).getDate();
+    return day.getDate() === Math.min(+e.date.slice(8), last);
+  }
   return false;
+}
+export const REPEATS = ["daily", "weekly", "monthly", "yearly"];
+
+/** A repeating entry is done per occurrence (its `doneDates`); a one-off by `done`. */
+export const eventDone = (e, d) => (e.repeat ? (e.doneDates || []).includes(d) : !!e.done);
+export function setEventDone(e, d, on) {
+  if (!e.repeat) return void (e.done = on);
+  const dates = new Set(e.doneDates || []);
+  on ? dates.add(d) : dates.delete(d);
+  e.doneDates = [...dates].sort();
 }
 
 // The short list shown on top of every zone picker.

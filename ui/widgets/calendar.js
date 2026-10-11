@@ -16,6 +16,9 @@ import {
   editInlineText,
   throttle,
   occursOn,
+  eventDone,
+  setEventDone,
+  REPEATS,
   tzOptions,
   osZone,
 } from "../util.js";
@@ -27,11 +30,13 @@ export function parseEntry(text) {
   text = String(text ?? "").slice(0, 500);
   const tags = [...text.matchAll(/#([^\s#]+)/g)].map((m) => m[1].slice(0, 40));
   let rest = text.replace(/#[^\s#]+/g, " ");
-  // "@yearly" / "@weekly" mark a repeating entry (birthdays & anniversaries, or a weekly routine).
+  // "@weekly" / "@매주" (and daily, monthly, yearly) mark a repeating entry.
   let repeat = null;
   for (const [token, kind] of [
-    [/(^|\s)@yearly(?=\s|$)/i, "yearly"],
-    [/(^|\s)@weekly(?=\s|$)/i, "weekly"],
+    [/(^|\s)@(daily|매일)(?=\s|$)/i, "daily"],
+    [/(^|\s)@(weekly|매주)(?=\s|$)/i, "weekly"],
+    [/(^|\s)@(monthly|매월)(?=\s|$)/i, "monthly"],
+    [/(^|\s)@(yearly|매년)(?=\s|$)/i, "yearly"],
   ]) {
     if (token.test(rest)) {
       repeat = kind;
@@ -48,7 +53,7 @@ export function parseEntry(text) {
     title: rest.replace(/\s+/g, " ").trim(),
     time,
     tags: [...new Set(tags)],
-    repeat, // 'yearly' | 'weekly' | null — null so editing clears a previously-repeating entry
+    repeat, // 'daily' | 'weekly' | 'monthly' | 'yearly' | null: null so editing clears a previous repeat
   };
 }
 const unparse = (ev) =>
@@ -56,13 +61,12 @@ const unparse = (ev) =>
     ev.time,
     ev.title,
     ...(ev.tags || []).map((x) => "#" + x),
-    ev.repeat === "yearly" ? "@yearly" : ev.repeat === "weekly" ? "@weekly" : "",
+    REPEATS.includes(ev.repeat) ? "@" + ev.repeat : "",
   ]
     .filter(Boolean)
     .join(" ");
 // Title for the repeat marker (↻) shown on a recurring entry.
-const repeatLabel = (t, ev) =>
-  t(ev.repeat === "weekly" ? "cal.weekly" : "cal.yearly");
+const repeatLabel = (t, ev) => t("cal." + ev.repeat);
 const isEvent = (e) =>
   e &&
   typeof e === "object" &&
@@ -131,6 +135,12 @@ export default {
     .cal-ed label.cal-ed-chk input { width: auto; flex: none; }
     .cal-ed input, .cal-ed select { width: 100%; box-sizing: border-box; font-size: 1em; }
     .cal-ed-lead input { width: 5em; }
+    .cal-ed-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+    .cal-ed-tags .chips { display: contents; }
+    .cal-ed-tags .chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 2px 0 6px; border-radius: 999px;
+      background: color-mix(in srgb, var(--c2) 18%, transparent); color: var(--c3); }
+    .cal-ed-tags .chip button { padding: 0 2px; background: none; border: 0; }
+    .cal-ed-tags input { flex: 1; min-width: 6em; width: auto; }
     .cal-ed-btns { display: flex; gap: var(--space-3); margin-top: auto; }
     .cal-ed-btns .sp { flex: 1; }
     .cal-empty { color: var(--text-faint); font-size: var(--fs-small); padding: 6px 4px; }
@@ -210,13 +220,13 @@ export default {
       const only = Object.keys(s.filter).filter((k) => s.filter[k] === "only");
       return !only.length || tags.some((x) => only.includes(x));
     }
-    // occursOn (yearly + weekly recurrence) is shared from util.js so the reminder engine agrees.
+    // occursOn and eventDone are shared from util.js so reminders and the checklist agree.
     const dayEvents = (d) =>
       events
         .filter((e) => occursOn(e, d) && shown(e))
         .sort(
           (a, b) =>
-            !!a.done - !!b.done ||
+            eventDone(a, d) - eventDone(b, d) ||
             (a.time ? 0 : 1) - (b.time ? 0 : 1) ||
             (a.time || "").localeCompare(b.time || ""),
         );
@@ -286,13 +296,11 @@ export default {
         ? evs
             .map(
               (e) => `
-            <div class="ev ${e.done ? "done" : ""}" data-id="${esc(e.id)}">
+            <div class="ev ${eventDone(e, d) ? "done" : ""}" data-id="${esc(e.id)}" data-d="${d}">
               ${
                 e.dday
                   ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
-                  : e.repeat
-                    ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">${icon("repeat")}</span>`
-                    : `<input type="checkbox" ${e.done ? "checked" : ""}>`
+                  : `<input type="checkbox" ${eventDone(e, d) ? "checked" : ""}>${e.repeat ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">${icon("repeat")}</span>` : ""}`
               }
               ${e.time ? `<span class="ev-time">${esc(e.time)}</span>` : ""}
               ${e.notify ? `<span class="ev-bell" title="${esc(t("cal.notify"))}">${icon("bell")}</span>` : ""}
@@ -322,7 +330,7 @@ export default {
           ...dayClasses(d, i),
           d === popDate && "sel",
           evs.length && "has",
-          evs.length && evs.every((e) => e.done) && "alldone",
+          evs.length && evs.every((e) => eventDone(e, d)) && "alldone",
         ]
           .filter(Boolean)
           .join(" ");
@@ -351,13 +359,11 @@ export default {
             <div class="bc-evs">${evs
               .map(
                 (e) => `
-              <div class="bc-ev ${e.done ? "done" : ""}" data-id="${esc(e.id)}" title="${esc(unparse(e))}">
+              <div class="bc-ev ${eventDone(e, d) ? "done" : ""}" data-id="${esc(e.id)}" title="${esc(unparse(e))}">
                 ${
                   e.dday
                     ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
-                    : e.repeat
-                      ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">${icon("repeat")}</span>`
-                      : `<input type="checkbox" ${e.done ? "checked" : ""}>`
+                    : `<input type="checkbox" ${eventDone(e, d) ? "checked" : ""}>${e.repeat ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">${icon("repeat")}</span>` : ""}`
                 }<span class="bc-t">${e.time ? `<b>${esc(e.time)}</b> ` : ""}${esc(e.title)}</span>
               </div>`,
               )
@@ -472,7 +478,7 @@ export default {
       });
     }
 
-    /** Details editor for one entry: time, link, time zone, reminder (+ lead minutes). */
+    /** Details editor for one entry: date, time, repeat, tags, link, time zone, reminder (+ lead minutes). */
     function closeDetails() {
       const ed = q(".cal-ed");
       ed.hidden = true;
@@ -482,10 +488,17 @@ export default {
       if (!ev) return;
       const ed = q(".cal-ed");
       const tz = ev.tz || defaultTz();
+      let tags = [...(ev.tags || [])];
+      const repeatOpts = ["", ...REPEATS]
+        .map((r) => `<option value="${r}">${esc(t(r ? "cal." + r : "cal.repeat_none"))}</option>`)
+        .join("");
       ed.innerHTML = `
         <div class="pop-head"><b>${esc(t("cal.details"))}</b>
           <button data-a="ed-close" title="${esc(t("theme.close"))}">${icon("x")}</button></div>
+        <label>${esc(t("cal.date"))}<input data-f="date" type="date" value="${esc(ev.date)}" required></label>
         <label>${esc(t("cal.time"))}<input data-f="time" type="time" value="${esc(ev.time || "")}"></label>
+        ${ev.dday ? "" : `<label>${esc(t("cal.repeat"))}<select data-f="repeat">${repeatOpts}</select></label>`}
+        <label>${esc(t("cal.tags"))}<span class="cal-ed-tags"><span class="chips"></span><input data-f="tag" placeholder="${esc(t("cal.tag_add"))}"></span></label>
         <label>${esc(t("cal.url"))}<input data-f="url" type="url" inputmode="url" value="${esc(ev.url || "")}" placeholder="https://"></label>
         <label>${esc(t("clock.zone"))}<select data-f="tz">${tzOptions(tz, { common: t("set.tz_common"), all: t("set.tz_all") })}</select></label>
         <label class="cal-ed-chk"><input data-f="notify" type="checkbox" ${ev.notify ? "checked" : ""}> ${esc(t("cal.notify"))}</label>
@@ -494,13 +507,43 @@ export default {
       ed.hidden = false;
       ed.querySelector("[data-f=tz]").value = tz;
       const f = (n) => ed.querySelector(`[data-f=${n}]`);
+      if (f("repeat")) f("repeat").value = REPEATS.includes(ev.repeat) ? ev.repeat : "";
+      const drawTags = () =>
+        (ed.querySelector(".chips").innerHTML = tags
+          .map((x, i) => `<span class="chip">#${esc(x)}<button data-a="tag-del" data-i="${i}" title="${esc(t("cal.tag_remove", { tag: x }))}">${icon("x")}</button></span>`)
+          .join(""));
+      drawTags();
+      const addTag = () => {
+        const x = f("tag").value.trim().replace(/^#/, "").replace(/\s+/g, "").slice(0, 40);
+        if (x && !tags.includes(x)) tags.push(x);
+        f("tag").value = "";
+        drawTags();
+      };
+      f("tag").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          addTag();
+        }
+      });
       ed.onclick = (e) => {
         const a = e.target.closest("[data-a]")?.dataset.a;
         if (a === "ed-close") return closeDetails();
+        if (a === "tag-del") {
+          tags.splice(+e.target.closest("[data-i]").dataset.i, 1);
+          return drawTags();
+        }
         if (a === "ed-save") {
           // the live copy: another widget may have re-synced `events` while the panel was open
           const cur = byId(ev.id);
           if (!cur) return (closeDetails(), render()); // deleted meanwhile
+          addTag(); // a tag typed but not yet entered still counts
+          if (/^\d{4}-\d{2}-\d{2}$/.test(f("date").value)) cur.date = f("date").value;
+          if (f("repeat")) {
+            const r = f("repeat").value || null;
+            if (r !== (cur.repeat ?? null)) delete cur.doneDates; // per-occurrence ticks belong to the old rule
+            cur.repeat = r;
+          }
+          cur.tags = tags;
           cur.time = f("time").value || null;
           cur.url = f("url").value.trim() || null;
           cur.tz = f("tz").value || defaultTz();
@@ -517,7 +560,7 @@ export default {
           closeDetails();
         }
       };
-      f("time").focus();
+      f("date").focus();
     }
 
     /** Open a day's list (from the mini grid, a "+N", or ‹ › inside the list). */
@@ -609,8 +652,9 @@ export default {
     box.addEventListener("change", (e) => {
       if (e.target.type !== "checkbox") return;
       const ev = byId(e.target.closest("[data-id]")?.dataset.id);
-      if (!ev) return;
-      ev.done = e.target.checked;
+      const d = e.target.closest("[data-d]")?.dataset.d ?? popDate;
+      if (!ev || !d) return;
+      setEventDone(ev, d, e.target.checked); // a repeating entry: this occurrence only
       persist();
       render();
     });
@@ -706,7 +750,7 @@ export default {
       summary: () => {
         const d = ymd();
         const label = (e) =>
-          (e.time ? e.time + " " : "") + e.title + (e.done ? " ✓" : "");
+          (e.time ? e.time + " " : "") + e.title + (eventDone(e, d) ? " ✓" : "");
         const today = events.filter((e) => occursOn(e, d));
         let next = null;
         for (let i = 1; i <= 366 && !next; i++) {

@@ -5,6 +5,7 @@ import {
   wheelScrollX,
   osZone,
   occursOn,
+  eventDone,
   zonedToInstant,
   ymd,
   addDays,
@@ -1516,7 +1517,7 @@ async function checkReminder() {
           : !i.repeat && !i.done && (i.date || today) <= today),
     ).length +
     (Array.isArray(events) ? events : []).filter(
-      (e) => e && !e.done && occursOn(e, today),
+      (e) => e && occursOn(e, today) && !eventDone(e, today),
     ).length;
   if (!left) return;
   const msg = t("remind.left", { n: left });
@@ -1581,9 +1582,9 @@ async function checkEventReminders() {
   const oldest = addDays(today, -2);
   const days = [oldest, addDays(today, -1), today, addDays(today, 1)];
   for (const e of events) {
-    if (!e || !e.notify || e.done) continue;
+    if (!e || !e.notify) continue;
     for (const d of days) {
-      if (!occursOn(e, d)) continue;
+      if (!occursOn(e, d) || eventDone(e, d)) continue; // done ahead of time: no reminder for that occurrence
       const tz = e.tz || currentTz();
       // ponytail: notify without a time fires at 09:00 of its own zone (an all-day nudge).
       const fireAt =

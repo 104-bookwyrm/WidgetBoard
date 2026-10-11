@@ -57,6 +57,13 @@ Placement           { id, type, display, x, y, w, h, name?, settings: {...} }
 - No release before the Library window (step 3) ships: between migration and step 3, closed content is safe in content.json but has no recovery UI.
 - The schema version lives in `layout.json` (2 to 3) and `content.json`. Migration runs in Rust at startup before any board loads. `content.json` joins the backup set.
 
+## Settings and calendar (step 5 QA answered 2026-10-11, see settings-calendar-qa.md)
+
+- Settings holds preferences only, in 6 pages: General, Appearance, Widgets, Accessibility, Backup & data, About. "Widgets" gathers per-type preferences (timer alarm and quick-start buttons, calendar holidays, week start, memo archive on/off).
+- The widget list leaves Settings (board menu and Library cover it). Layouts move into the Library window as an "Items | Layouts" tab; tray "Layouts…" opens it. A memo card in the Library gets "History" (its archived versions).
+- Calendar Details gets Date, Repeat (none, daily, weekly, monthly, yearly) and Tags. Monthly on the 29th-31st falls on a shorter month's last day. Typed shortcuts keep working; `@매일` `@매주` `@매월` `@매년` are added.
+- A repeating entry has a checkbox per occurrence (completed dates stored on the entry). Skip-one is deferred; change-one and "this and following" are out of scope.
+
 ## Persistence and recovery requirements
 
 - Revision comparison and the write occur under the same backend synchronization boundary.
@@ -86,11 +93,9 @@ Placement           { id, type, display, x, y, w, h, name?, settings: {...} }
 ## Open decisions to surface
 
 - Whether display options (frameless, fit, columns) belong to content or layout.
-
-1. Occurrence exceptions now: support changing/skipping/completing one occurrence, or defer while exposing existing recurrence controls? Editing this-and-future occurrences is a larger separate scope.
-2. Calendar-month backup cadence versus a fixed 30-day interval. Proposed interpretation: calendar month.
-3. Existing explicit backup opt-outs: preserve them on upgrade unless the user requests an override.
-4. Independent named checklist/calendar collections were not requested; preserve the present shared collections.
+- Calendar-month backup cadence versus a fixed 30-day interval. Proposed interpretation: calendar month.
+- Existing explicit backup opt-outs: preserve them on upgrade unless the user requests an override.
+- Independent named checklist/calendar collections were not requested; preserve the present shared collections.
 
 ## Implementation sequence
 
