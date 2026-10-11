@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, artifact } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -344,7 +344,7 @@ async function dragResize(p, sel, dw, dh) {
       h: 7,
       settings: { view: "board" },
     },
-  ]);
+  ], { "wb-config": { holidays: { country: "KR", add: { "2026-10-15": "회사 창립기념일" }, remove: [] } } });
   const board = W("calendar", 1).replace(/ >>$/, "");
   ok(
     (await p.$$(`${board} >> .bc`)).length >= 35,
@@ -470,7 +470,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.click(`${board} >> [data-a=view]`);
   await p.waitForTimeout(200);
   ok((await p.$(`${board} >> .cal-grid`)) !== null, "E: board -> mini toggle");
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/E.png" });
+  await p.screenshot({ path: artifact("E.png") });
   await p.close();
 }
 
@@ -547,7 +547,7 @@ async function dragResize(p, sel, dw, dh) {
     `F: today -> 2028-02-29 is D-${leap}`,
     lbl.join(","),
   );
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/F.png" });
+  await p.screenshot({ path: artifact("F.png") });
   await p.close();
 }
 
@@ -587,7 +587,7 @@ async function dragResize(p, sel, dw, dh) {
   });
   await p.waitForTimeout(1000);
   ok(
-    (await p.textContent("#toast")).includes("저장 실패"),
+    (await p.textContent("#toast")).includes("저장하지 못했습니다"),
     "G: failed save is reported",
     await p.textContent("#toast"),
   );
@@ -672,7 +672,7 @@ async function dragResize(p, sel, dw, dh) {
     "I: no sideways overflow at min sizes with 22px text",
     JSON.stringify(over),
   );
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/I.png" });
+  await p.screenshot({ path: artifact("I.png") });
   await p.close();
 }
 
@@ -684,7 +684,7 @@ async function dragResize(p, sel, dw, dh) {
   await dragHead(p, ".widget >> nth=0", 2, 0);
   await p.waitForTimeout(500);
   ok(
-    (await p.textContent("#toast")).includes("저장 실패"),
+    (await p.textContent("#toast")).includes("저장하지 못했습니다"),
     "K: layout save failure reported",
   );
   await p.close();
@@ -924,7 +924,7 @@ async function dragResize(p, sel, dw, dh) {
     "N: next day — finished one-off gone, daily reset, unfinished carried, tomorrow’s calendar entry",
     JSON.stringify(R),
   );
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/N.png" });
+  await p.screenshot({ path: artifact("N.png") });
   await p.close();
 }
 
@@ -1002,7 +1002,7 @@ async function dragResize(p, sel, dw, dh) {
     await p.$eval(".sw", (e) => e.classList.contains("running")),
     "O: resetting the total leaves the current run going",
   );
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/O.png" });
+  await p.screenshot({ path: artifact("O.png") });
   await p.close();
 }
 
@@ -1018,11 +1018,11 @@ async function dragResize(p, sel, dw, dh) {
   );
   await p.evaluate(() => __mock.emit("motion-changed", true));
   ok(
-    await p.$eval(
-      ".widget",
-      (e) => getComputedStyle(e).transitionDuration === "0s",
-    ),
-    "P: reduced motion removes transitions",
+    await p.$eval(".widget", (e) => {
+      const tp = getComputedStyle(e).transitionProperty;
+      return !/left|top|width|height|transform/.test(tp);
+    }),
+    "P: reduced motion removes movement (fades may stay)",
   );
   await p.close();
   const p2 = await b.newPage({ reducedMotion: "reduce" });
@@ -1125,7 +1125,7 @@ async function dragResize(p, sel, dw, dh) {
     'Q: weekStart "sun" moves the week to Sun 9/27',
     await p.textContent(".ck-date"),
   );
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/Q.png" });
+  await p.screenshot({ path: artifact("Q.png") });
   await p.close();
 }
 
@@ -1259,15 +1259,15 @@ async function dragResize(p, sel, dw, dh) {
   });
   const items = await p.evaluate(() => __mock.menus.at(-1).map((i) => i.text));
   ok(
-    items.some((t) => t.includes("간격")) &&
-      items.some((t) => t.includes("무작위")),
+    items.some((t) => t?.includes("전환 시간")) &&
+      items.some((t) => t?.includes("무작위")),
     "S: interval + shuffle in menu",
     JSON.stringify(items),
   );
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.text.includes("액자 제거"))
+      .find((i) => i.text?.includes("액자 없이"))
       .action(),
   );
   await p.waitForTimeout(100);
@@ -1303,7 +1303,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
-      .find((i) => i.text.includes("액자 제거"))
+      .find((i) => i.text?.includes("액자 없이"))
       .action(),
   );
   await p.evaluate(() => (document.body.style.background = "#ff00ff"));
@@ -1329,7 +1329,7 @@ async function dragResize(p, sel, dw, dh) {
       [...px.slice(0, 3)].join(","),
     );
   }
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/S.png" });
+  await p.screenshot({ path: artifact("S.png") });
   await p.close();
 }
 
@@ -1416,7 +1416,7 @@ async function dragResize(p, sel, dw, dh) {
     JSON.stringify(cmds),
   );
   ok(
-    (await p.textContent(".widget >> nth=0 >> [data-a=playpause]")) === "▶",
+    (await p.getAttribute(".widget >> nth=0 >> [data-a=playpause]", "title")) === "재생",
     "T: button flips immediately",
   );
   ok(
@@ -1449,7 +1449,7 @@ async function dragResize(p, sel, dw, dh) {
     "T: long title and controls stay inside the widget at 4x2, 3x1, 3x4",
     over.join(","),
   );
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/T.png" });
+  await p.screenshot({ path: artifact("T.png") });
   await p.evaluate(() => __mock.emit("media", { has: false }));
   ok(
     (await p.$$(".np-empty")).length === 3,
@@ -1475,13 +1475,18 @@ async function dragResize(p, sel, dw, dh) {
     ],
     { "wb-theme": ":root { --c1: #202225; --c2: #5865f2; --c3: #f2f3f5; }" },
   );
-  await p.evaluate(() => {
-    __mock.emit("edit-mode", true);
-    __mock.emit("open-theme-panel");
-  });
-  await p.click("#theme-ai-copy");
-  await p.waitForTimeout(300);
-  const clip = await p.evaluate(() => navigator.clipboard.readText());
+  // the theme editor lives in the settings window; the board picks the saved theme up on reload
+  const s = await ctx.newPage();
+  s.on("pageerror", (e) => errs.push(e.message));
+  await s.goto("http://localhost:8765/settings.html?page=appearance");
+  await s.waitForTimeout(400);
+  const boardReload = async () => {
+    await p.reload();
+    await p.waitForTimeout(600);
+  };
+  await s.click("#th-ai-copy");
+  await s.waitForTimeout(300);
+  const clip = await s.evaluate(() => navigator.clipboard.readText());
   ok(
     clip.startsWith("# WidgetBoard theme designer") &&
       !clip.includes("PROMPT START") &&
@@ -1492,18 +1497,23 @@ async function dragResize(p, sel, dw, dh) {
     clip.includes("--c1: #202225") && clip.trimEnd().endsWith("## What I want"),
     "U: current theme attached, ends ready for keywords",
   );
+  ok(
+    /TYPE is one of: [^.]*audioplayer, collection, clock\./.test(clip),
+    "U: widget types in the prompt come from the registry",
+  );
   // an AI-style answer: prose + fenced css + prose
   const answer =
     'Here is your theme!\n\n```css\n/* Sakura */\n:root {\n  --c1: #fff5f8;  --c2: #c2386a;  --c3: #3a2530;  --on-accent: #ffffff;\n  --hol: #c8324f; --sat: #3f6fd1; --danger: #c62f3b;\n  --line-width: 1px; --line-style: solid; --line-color: color-mix(in srgb, var(--c2) 35%, transparent);\n  --radius: 22px; --widget-opacity: 0.88; --shadow: 0 6px 18px rgb(194 56 106 / .18);\n  --font: "Segoe UI", "Malgun Gothic", sans-serif; --font-size: 14px;\n}\n[data-widget="diary"] { --c1: #fbf6ea; --c3: #3b3024; }\n```\n연분홍 바탕에 진한 벚꽃색 강조.';
-  await p.click("#theme-ai-paste");
-  await p.fill("#paste-text", answer);
-  await p.click("#paste-apply");
-  await p.waitForTimeout(200);
+  await s.click("#th-ai-paste");
+  await s.fill("#th-paste-text", answer);
+  await s.click("#th-paste-apply");
+  await s.waitForTimeout(200);
   ok(
-    (await p.textContent("#paste-result")) === "적용했습니다.",
+    (await s.textContent("#th-paste-result")) === "적용했습니다.",
     "U: well-formed AI answer applies with no warnings",
-    await p.textContent("#paste-result"),
+    await s.textContent("#th-paste-result"),
   );
+  await boardReload();
   ok(
     (await p.evaluate(() =>
       getComputedStyle(document.documentElement)
@@ -1526,12 +1536,13 @@ async function dragResize(p, sel, dw, dh) {
     "U: --on-accent used on selected tab",
   );
   // light accent + dark on-accent is honoured everywhere
-  await p.fill(
-    "#paste-text",
+  await s.fill(
+    "#th-paste-text",
     ":root { --c1: #fafafa; --c2: #ffd84d; --c3: #202020; --on-accent: #2a2100; }",
   );
-  await p.click("#paste-apply");
-  await p.waitForTimeout(150);
+  await s.click("#th-paste-apply");
+  await s.waitForTimeout(150);
+  await boardReload();
   ok(
     await p.$eval(
       ".ck-tabs button.on",
@@ -1544,10 +1555,10 @@ async function dragResize(p, sel, dw, dh) {
     "U: calendar still renders",
   );
   // undo
-  await p.click("#theme-undo");
-  await p.waitForTimeout(150);
+  await s.click("#th-undo");
+  await s.waitForTimeout(150);
   ok(
-    (await p.evaluate(() =>
+    (await s.evaluate(() =>
       getComputedStyle(document.documentElement)
         .getPropertyValue("--c2")
         .trim(),
@@ -1556,12 +1567,12 @@ async function dragResize(p, sel, dw, dh) {
   );
   // bad inputs
   const tryPaste = async (txt) => {
-    await p.fill("#paste-text", txt);
-    await p.click("#paste-apply");
-    await p.waitForTimeout(100);
+    await s.fill("#th-paste-text", txt);
+    await s.click("#th-paste-apply");
+    await s.waitForTimeout(100);
     return [
-      await p.getAttribute("#paste-result", "class"),
-      await p.textContent("#paste-result"),
+      await s.getAttribute("#th-paste-result", "class"),
+      await s.textContent("#th-paste-result"),
     ];
   };
   let r = await tryPaste("파란색 느낌으로 해주세요");
@@ -1581,7 +1592,7 @@ async function dragResize(p, sel, dw, dh) {
   );
   ok(
     r[0] === "warn" &&
-      r[1].includes("미설정 규칙") &&
+      r[1].includes("지원하지 않는 규칙") &&
       r[1].includes("칸 크기") &&
       r[1].includes("인터넷"),
     "U: out-of-contract rules, grid change, remote import all flagged",
@@ -1595,7 +1606,7 @@ async function dragResize(p, sel, dw, dh) {
     r = await tryPaste(css);
     ok(r[0] === "", "U: sample theme passes checks", r[1]);
   }
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/U.png" });
+  await p.screenshot({ path: artifact("U.png") });
   await ctx.close();
 }
 
@@ -1621,21 +1632,19 @@ async function dragResize(p, sel, dw, dh) {
     },
     { id: "img", type: "image", x: 8, y: 0, w: 2, h: 2 },
   ]);
+  // the settings window saves config.ui; the board reacts to config-changed
   const setUi = async (k, v) => {
-    await p.evaluate(() => {
-      __mock.emit("edit-mode", true);
-      __mock.emit("open-settings");
-    });
-    const sel = `#settings-panel [data-ui=${k}]`;
-    if (typeof v === "boolean") await p.setChecked(sel, v);
-    else await p.selectOption(sel, String(v));
+    await p.evaluate(
+      ({ k, v }) => {
+        const cfg = JSON.parse(localStorage.getItem("wb-config") || "{}");
+        cfg.ui = { ...(cfg.ui || {}), [k]: v };
+        localStorage.setItem("wb-config", JSON.stringify(cfg));
+        __mock.emit("config-changed", cfg);
+      },
+      { k, v },
+    );
     await p.clock.runFor(400);
-    await p.evaluate(() => __mock.emit("edit-mode", false));
   };
-  ok(
-    !(await p.isHidden("#settings-panel")) || true,
-    "V: settings panel exists",
-  );
   await setUi("header", "hidden");
   ok(
     await p.$eval(
@@ -1719,28 +1728,7 @@ async function dragResize(p, sel, dw, dh) {
     "V: locked layout ignores drags",
   );
   await setUi("lockLayout", false);
-  const cfg = await p.evaluate(
-    () => JSON.parse(localStorage.getItem("wb-config")).ui,
-  );
-  ok(
-    cfg.header === "always" &&
-      cfg.density === "roomy" &&
-      cfg.weekStart === "sun" &&
-      cfg.lockLayout === false,
-    "V: settings saved to config.json",
-    JSON.stringify(cfg),
-  );
-  await p.evaluate(() => {
-    __mock.emit("edit-mode", true);
-    __mock.emit("open-settings");
-  });
-  await p.check("#set-autostart");
-  await p.waitForTimeout(100);
-  ok(
-    await p.evaluate(() => localStorage.getItem("wb-autostart") === "1"),
-    "V: start with Windows toggles",
-  );
-  await p.evaluate(() => __mock.emit("edit-mode", false));
+  // (saving config and autostart are covered by the settings-window suite, v12)
   // accessibility modes
   await setUi("highContrast", true);
   ok(
@@ -1773,7 +1761,7 @@ async function dragResize(p, sel, dw, dh) {
     ),
     "V: wider letter spacing",
   );
-  await p.screenshot({ path: "/tmp/claude-0/pw/shots/V.png" });
+  await p.screenshot({ path: artifact("V.png") });
   await p.close();
 }
 
@@ -2024,6 +2012,329 @@ async function dragResize(p, sel, dw, dh) {
     ),
     "X: widgets keep a visible edge in Windows high-contrast mode",
   );
+  await p.close();
+}
+
+// ===== W. shared helpers: one date watcher (api.onDayChange), file drop overlay (dropZone) =====
+{
+  const p = await b.newPage({ viewport: { width: 1440, height: 810 } });
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.clock.install({ time: new Date("2026-10-10T23:59:30") });
+  await p.goto("http://localhost:8765/index.html");
+  await seed(p, [
+    { id: "ck", type: "checklist", x: 0, y: 0, w: 3, h: 4 },
+    { id: "co", type: "collection", x: 4, y: 0, w: 3, h: 3 },
+  ]);
+  const date = () => p.textContent(".widget[data-id=ck] .ck-date");
+  const before = await date();
+  await p.clock.runFor(61000);
+  const after = await date();
+  ok(before !== after && /11/.test(after), "W: checklist follows midnight", `${before} -> ${after}`);
+  const body = ".widget[data-id=co] .w-body";
+  const fire = (type, withFile = true) =>
+    p.$eval(
+      body,
+      (el, [type, withFile]) => {
+        const dt = new DataTransfer();
+        if (withFile) dt.items.add(new File(["x"], "a.png", { type: "image/png" }));
+        else dt.setData("text/plain", "x");
+        el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+      },
+      [type, withFile],
+    );
+  await fire("dragenter", false);
+  ok(await p.$eval(body, (e) => !e.classList.contains("w-dropping")), "W: a non-file drag shows no overlay");
+  await fire("dragenter");
+  ok(
+    await p.$eval(body, (e) => e.classList.contains("w-dropping") && e.dataset.dropLabel === "놓아서 추가"),
+    "W: drag shows the drop overlay with its label",
+  );
+  await fire("dragleave");
+  ok(await p.$eval(body, (e) => !e.classList.contains("w-dropping")), "W: leaving hides it");
+  await p.close();
+}
+
+// ===== X. first run, oshi preset, undo on delete =====
+{
+  const p = await page();
+  await seed(p, []);
+  ok(!(await p.isHidden("#welcome")), "X: empty board offers the welcome card");
+  await p.click("#welcome [data-preset=oshi]");
+  await p.waitForTimeout(1200);
+  const types = (await layout(p)).map((w) => w.type).sort().join(",");
+  ok(types === "audioplayer,collection,dday,image,showcase", "X: oshi preset widgets", types);
+  ok(await p.isHidden("#welcome"), "X: card gone once the board has widgets");
+  await seed(p, []);
+  await p.click("#wc-blank");
+  await p.reload();
+  await p.waitForTimeout(700);
+  ok(await p.isHidden("#welcome"), "X: empty board choice is remembered");
+  // undo after deleting a checklist item
+  await seed(p, [{ id: "ck", type: "checklist", x: 0, y: 0, w: 3, h: 4 }]);
+  await p.fill(".ck-add", "지울 일");
+  await p.press(".ck-add", "Enter");
+  await p.waitForTimeout(150);
+  await p.hover(".ck-row");
+  await p.click(".ck-row [data-a=del]");
+  ok((await p.$$(".ck-row")).length === 0, "X: item deleted");
+  await p.click("#toast button");
+  await p.waitForTimeout(150);
+  ok(/지울 일/.test(await p.textContent(".ck-list")), "X: undo brings it back");
+  await p.close();
+}
+
+// ===== Y. collection: drag / Alt+arrow reorder; a plain click still opens the full view =====
+{
+  const p = await page();
+  const items = ["a", "b", "c", "d"].map((x) => ({ img: x + ".png", label: x.toUpperCase() }));
+  await seed(p, [{ id: "co", type: "collection", x: 0, y: 0, w: 4, h: 4, settings: { items } }]);
+  const order = async () =>
+    (await layout(p)).find((w) => w.id === "co").settings.items.map((i) => i.label).join("");
+  const box = async (i) => (await p.$(`.coll-item[data-i="${i}"]`)).boundingBox();
+  const a = await box(0), c = await box(2);
+  await p.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(c.x + c.width * 0.8, c.y + c.height / 2, { steps: 8 });
+  ok((await p.$$(".coll-item.drop-after")).length === 1, "Y: drop spot is marked while dragging");
+  await p.mouse.up();
+  await p.waitForTimeout(450);
+  ok((await order()) === "BCAD", "Y: drag after the third item reorders", await order());
+  ok((await p.$$(".coll-lb")).length === 0, "Y: ending a drag does not open the full view");
+  await p.click('.coll-item[data-i="0"] img');
+  await p.waitForTimeout(300); // the full view waits out a possible double-click
+  ok((await p.$$(".coll-lb")).length === 1, "Y: a plain click still opens the full view");
+  await p.keyboard.press("Escape");
+  await p.focus('.coll-item[data-i="0"]');
+  await p.keyboard.press("Alt+ArrowRight");
+  await p.waitForTimeout(450);
+  ok((await order()) === "CBAD", "Y: Alt+Right moves the focused item", await order());
+  ok(
+    await p.evaluate(() => document.activeElement?.dataset.i === "1"),
+    "Y: focus follows the moved item",
+  );
+  await p.close();
+}
+
+// ===== Z. timezone defaults follow this computer, not a shipped zone =====
+{
+  const p = await b.newPage({ viewport: { width: 1440, height: 810 }, timezoneId: "America/New_York" });
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.goto("http://localhost:8765/index.html");
+  await seed(p, [{ id: "cl", type: "clock", x: 0, y: 0, w: 3, h: 2 }]);
+  await p.waitForTimeout(300);
+  const sub = await p.textContent(".clk-sub");
+  ok(/이 컴퓨터/.test(sub), "Z: a new clock starts on this computer's zone", sub);
+  await p.close();
+}
+
+// ===== RT. red-team regressions: settings close/move, layout undo, bin vs saved layout, drag release =====
+{
+  const p = await page();
+  const memo = (id) => p.evaluate((id) => JSON.parse(localStorage.getItem("wb-widgets")).find((w) => w.id === id), id);
+  // 1. closing another widget from settings keeps unsaved memo typing; moving flushes first
+  await seed(p, [
+    { id: "m1", type: "memo", x: 0, y: 0, w: 3, h: 3, settings: { text: "old" } },
+    { id: "c1", type: "clock", x: 4, y: 0, w: 3, h: 2 },
+  ]);
+  await p.fill(".memo textarea", "typed just now");
+  await p.evaluate(() => document.activeElement.blur());
+  await p.waitForTimeout(700);
+  await p.evaluate(() => __mock.emit("widget-close", "c1"));
+  await p.waitForTimeout(500);
+  ok(!(await memo("c1")) && (await memo("m1"))?.settings.text === "typed just now",
+    "RT1: closing a widget from settings keeps unsaved memo text", JSON.stringify(await memo("m1")));
+  ok(/c1/.test(await p.evaluate(() => localStorage.getItem("wb-bin") || "")), "RT1: the closed widget is in the bin");
+  await p.fill(".memo textarea", "typed before moving");
+  await p.evaluate(() => __mock.emit("widget-move", { id: "m1", display: "D2" }));
+  await p.waitForTimeout(300);
+  const moved = await memo("m1");
+  ok(moved?.display === "D2" && moved.settings.text === "typed before moving",
+    "RT1: moving from settings carries the latest text", JSON.stringify(moved));
+
+  // 2. undo layout puts positions back but keeps what was typed since
+  await seed(p, [{ id: "m2", type: "memo", x: 0, y: 0, w: 3, h: 3, settings: { text: "v1" } }]);
+  await p.evaluate(() => __mock.emit("apply-preset", "work"));
+  await p.waitForTimeout(1200);
+  await p.fill(".memo textarea", "v2 typed after the preset");
+  await p.evaluate(() => document.activeElement.blur());
+  await p.waitForTimeout(400);
+  await p.evaluate(() => __mock.emit("undo-layout"));
+  await p.waitForTimeout(1200);
+  const m2 = await memo("m2");
+  ok(m2?.x === 0 && m2.settings.text === "v2 typed after the preset",
+    "RT2: undo restores positions, keeps newer text", JSON.stringify(m2));
+
+  // 3. a saved layout takes the newer copy from the bin, and takes it out of the bin
+  await seed(p, [{ id: "x1", type: "clock", x: 6, y: 0, w: 3, h: 2 }], {
+    "wb-store-layouts": [{ name: "A", widgets: [{ id: "m3", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: { text: "old" } }] }],
+    "wb-bin": [{ at: Math.floor(Date.now() / 1000), w: { id: "m3", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: { text: "newest, then closed" } } }],
+  });
+  await p.evaluate(() => __mock.emit("apply-layout", "A"));
+  await p.waitForTimeout(1200);
+  ok((await memo("m3"))?.settings.text === "newest, then closed", "RT3: layout brings back the bin's newer text",
+    JSON.stringify(await memo("m3")));
+  ok(!/m3/.test(await p.evaluate(() => localStorage.getItem("wb-bin") || "")), "RT3: and it leaves the bin");
+
+  // 4. a re-render mid-drag must not strand drag mode (board would swallow every click)
+  const items = ["a", "b", "c"].map((x) => ({ img: x + ".png", label: x }));
+  await seed(p, [{ id: "co", type: "collection", x: 0, y: 0, w: 4, h: 4, settings: { items } }]);
+  const a = await (await p.$('.coll-item[data-i="0"]')).boundingBox();
+  await p.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(a.x + a.width / 2 + 30, a.y + a.height / 2, { steps: 4 });
+  await p.evaluate(() => document.querySelector(".coll-item.dragging").remove()); // as a re-render would
+  await p.mouse.up();
+  await p.waitForTimeout(200);
+  const st = await p.evaluate(() => ({
+    ghost: document.querySelectorAll(".coll-ghost").length,
+    last: (window.__calls || []).filter(([c]) => c === "set_interacting").at(-1)?.[1],
+  }));
+  ok(st.ghost === 0 && st.last?.on === false, "RT4: drag ends cleanly when the item is re-rendered away", JSON.stringify(st));
+  await p.close();
+}
+
+// ===== RT5. closing a memo right after typing: it stays closed, and the bin has the latest text =====
+{
+  const p = await page();
+  await seed(p, [{ id: "m5", type: "memo", x: 0, y: 0, w: 3, h: 3, settings: { text: "old" } }]);
+  await p.fill(".memo textarea", "last words");
+  await p.evaluate(() => __mock.emit("widget-close", "m5")); // within the memo's 500 ms save delay
+  await p.waitForTimeout(900);
+  const st = await p.evaluate(() => ({
+    onBoard: JSON.parse(localStorage.getItem("wb-widgets")).some((w) => w.id === "m5"),
+    bin: JSON.parse(localStorage.getItem("wb-bin") || "[]").find((e) => e.w.id === "m5")?.w.settings.text,
+  }));
+  ok(!st.onBoard && st.bin === "last words", "RT5: closed memo stays closed and keeps its last text", JSON.stringify(st));
+  await p.close();
+}
+
+// ===== RT6-9. second red-team pass: calendar details vs sync, reminder zones, birthday move, diary midnight =====
+{
+  // RT6: details panel saves even if another widget re-synced events while it was open
+  const p = await b.newPage({ viewport: { width: 1440, height: 810 } });
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.clock.setSystemTime(new Date("2026-10-10T09:00:00+09:00"));
+  await p.goto("http://localhost:8765/index.html?lang=ko");
+  await seed(p, [{ id: "ca", type: "calendar", x: 0, y: 0, w: 5, h: 5, settings: { view: "mini" } }], {
+    "wb-store-events": [
+      { id: "A", date: "2026-10-10", title: "alpha", done: false },
+      { id: "B", date: "2026-10-10", title: "beta", done: false },
+    ],
+  });
+  await p.click('.cal-grid [data-d="2026-10-10"]');
+  await p.waitForTimeout(150);
+  await p.click('[data-id="B"] .ev-cfg', { force: true });
+  await p.fill(".cal-ed [data-f=url]", "https://example.com");
+  await p.check(".cal-ed [data-f=notify]");
+  // another widget ticks A: the store changes and the calendar reloads fresh objects
+  await p.evaluate(() => {
+    const ev = JSON.parse(localStorage.getItem("wb-store-events"));
+    ev.find((e) => e.id === "A").done = true;
+    localStorage.setItem("wb-store-events", JSON.stringify(ev));
+    __mock.emit("store-changed", { key: "events", src: "other" });
+  });
+  await p.waitForTimeout(200);
+  await p.click(".cal-ed [data-a=ed-save]");
+  await p.waitForTimeout(200);
+  const B = await p.evaluate(() => JSON.parse(localStorage.getItem("wb-store-events")).find((e) => e.id === "B"));
+  const A = await p.evaluate(() => JSON.parse(localStorage.getItem("wb-store-events")).find((e) => e.id === "A"));
+  ok(B.url === "https://example.com" && B.notify === true && A.done === true,
+    "RT6: details save survives a sync from another widget", JSON.stringify({ A, B }));
+  await p.close();
+}
+{
+  // RT7: an event in a zone behind ours (LA, seen from Seoul) still fires on our next day
+  const p = await b.newPage({ viewport: { width: 1440, height: 810 }, timezoneId: "Asia/Seoul" });
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.clock.install({ time: new Date("2026-10-11T11:59:00+09:00") });
+  await p.goto("http://localhost:8765/index.html");
+  await seed(p, [{ id: "ck", type: "checklist", x: 0, y: 0, w: 3, h: 4 }], {
+    "wb-store-events": [
+      { id: "la", date: "2026-10-10", time: "20:00", tz: "America/Los_Angeles", notify: true, title: "LA stream", done: false },
+    ],
+  });
+  await p.clock.runFor(150000); // 20:00 PDT Oct 10 = 12:00 KST Oct 11
+  const fired = await p.evaluate(() => localStorage.getItem("wb-reminder-fired") || "");
+  ok(/la\|2026-10-10/.test(fired), "RT7: LA-time reminder fires from Seoul", fired);
+  await p.close();
+}
+{
+  // RT8: changing the oshi's birthday moves its calendar entry
+  const p = await page();
+  await seed(p, [{ id: "sc", type: "showcase", x: 0, y: 0, w: 4, h: 4,
+    settings: { name: "오시", birthday: "2000-03-15", calSync: true, _calId: "bd1" } }], {
+    "wb-store-events": [{ id: "bd1", date: "2026-03-14", title: "x", repeat: "yearly", done: false }],
+  });
+  await p.waitForTimeout(400);
+  const bd = await p.evaluate(() => JSON.parse(localStorage.getItem("wb-store-events")).find((e) => e.id === "bd1"));
+  ok(bd?.date.endsWith("-03-15"), "RT8: birthday change moves the calendar entry", JSON.stringify(bd));
+  await p.close();
+}
+{
+  // RT9: a diary left on today's page follows the date at midnight
+  const p = await b.newPage({ viewport: { width: 1440, height: 810 } });
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.clock.install({ time: new Date("2026-10-10T23:59:30") });
+  await p.goto("http://localhost:8765/index.html");
+  await seed(p, [{ id: "di", type: "diary", x: 0, y: 0, w: 4, h: 4 }]);
+  const head = () => p.textContent(".widget[data-id=di] .dy-head");
+  const before = await head();
+  await p.clock.runFor(61000);
+  await p.waitForTimeout(100);
+  const after = await head();
+  ok(/10/.test(before) && /11/.test(after) && !/10일/.test(after), "RT9: diary moves to the new day's page", `${before} -> ${after}`);
+  await p.close();
+}
+
+// ===== RT10-13. third red-team pass: audio delete, collection label, preset hidden, first-run card =====
+{
+  // RT10: deleting a track above the current one keeps "now playing" on the same track (and undo too)
+  const p = await page();
+  const tracks = ["A", "B", "C"].map((l) => ({ file: l + ".mp3", label: l }));
+  await seed(p, [{ id: "ap", type: "audioplayer", x: 0, y: 0, w: 4, h: 5, settings: { tracks, current: 1 } }]);
+  await p.click('.widget[data-id=ap] [data-del="0"]', { force: true });
+  await p.waitForTimeout(400);
+  const cur = () => p.evaluate(() => {
+    const s = JSON.parse(localStorage.getItem("wb-widgets")).find((w) => w.id === "ap").settings;
+    return s.tracks[s.current]?.label + "|" + document.querySelector(".widget[data-id=ap] .ap-track.playing .name")?.textContent;
+  });
+  const afterDel = await cur();
+  await p.click("#toast button");
+  await p.waitForTimeout(400);
+  const afterUndo = await cur();
+  ok(/^B\|B/.test(afterDel) && /^B\|B/.test(afterUndo), "RT10: current track survives delete above it and undo", `${afterDel} / ${afterUndo}`);
+  await p.close();
+}
+{
+  // RT11: double-clicking a collection item edits its label instead of flashing the lightbox
+  const p = await page();
+  await seed(p, [{ id: "co", type: "collection", x: 0, y: 0, w: 4, h: 4, settings: { items: [{ img: "x.png", label: "" }] } }]);
+  await p.dblclick('.widget[data-id=co] .coll-item[data-i="0"]');
+  await p.waitForTimeout(400);
+  const st = await p.evaluate(() => ({ edit: !!document.querySelector(".coll-edit"), lb: !!document.querySelector(".coll-lb") }));
+  await p.keyboard.press("Escape");
+  await p.click('.widget[data-id=co] .coll-item[data-i="0"]', { force: true });
+  await p.waitForTimeout(400);
+  const lb = await p.evaluate(() => !!document.querySelector(".coll-lb"));
+  ok(st.edit && !st.lb && lb, "RT11: dblclick edits the label, single click still opens", JSON.stringify({ ...st, lb }));
+  await p.close();
+}
+{
+  // RT12: a preset that reuses a hidden widget shows it
+  const p = await page();
+  await seed(p, [{ id: "mh", type: "memo", x: 0, y: 0, w: 3, h: 3, hidden: true, settings: { text: "keep" } }]);
+  await p.evaluate(() => __mock.emit("apply-preset", "work"));
+  await p.waitForTimeout(1200);
+  const m = (await layout(p)).find((w) => w.id === "mh");
+  ok(m && !m.hidden && m.settings.text === "keep", "RT12: preset unhides a reused widget", JSON.stringify(m));
+  await p.close();
+}
+{
+  // RT13: no first-run card on an empty primary when another display has widgets
+  const p = await page();
+  await seed(p, [{ id: "d2", type: "memo", display: "D2", x: 0, y: 0, w: 3, h: 3 }]);
+  const shown = await p.evaluate(() => !document.querySelector("#welcome").hidden);
+  ok(!shown, "RT13: welcome card stays away when display 2 has widgets", String(shown));
   await p.close();
 }
 

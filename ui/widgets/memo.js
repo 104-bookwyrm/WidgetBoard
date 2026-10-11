@@ -21,7 +21,7 @@ export default {
       color: inherit; line-height: 1.55; scrollbar-width: thin; overflow-wrap: anywhere; }
     .memo textarea:focus { border: 0; }
     .memo.paper textarea::placeholder { color: #2a2a2a; opacity: .45; }
-    .memo-colors { position: absolute; right: 8px; bottom: 6px; display: flex; gap: 4px; opacity: 0; transition: opacity .15s; }
+    .memo-colors { position: absolute; right: 8px; bottom: 6px; display: flex; gap: var(--space-2); opacity: 0; transition: opacity .15s; }
     .widget:hover .memo-colors { opacity: 1; }
     .memo-colors button { width: 14px; height: 14px; padding: 0; border-radius: 50%;
       border: 1px solid rgb(0 0 0 / .25); background: var(--dot); }
@@ -80,6 +80,7 @@ export default {
 
     paint();
     return {
+      flush,
       destroy: flush,
       summary: () => {
         const txt = ta.value.trim().replace(/\s+/g, " ");

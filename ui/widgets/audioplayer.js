@@ -1,7 +1,8 @@
 // Audio Player: local MP3/audio file player for voicelines, character songs, BGM.
 // Stores tracks in the shared assets folder. Supports drag-and-drop, playlist,
 // shuffle, loop, and frameless mode. Designed as a narrow companion strip.
-import { esc } from '../util.js';
+import { esc, dropZone } from '../util.js';
+import { icon } from '../icons.js';
 
 const AUDIO_EXT = new Set(['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus', 'webm']);
 const p2 = (n) => String(n).padStart(2, '0');
@@ -31,12 +32,13 @@ export default {
   css: `
     .ap { position: absolute; inset: 0; display: flex; flex-direction: column;
       box-sizing: border-box; padding: calc(var(--head-h) - 2px) var(--pad) var(--pad);
-      overflow: hidden; font-size: .88em; }
-    .ap-now { flex: none; display: flex; align-items: center; gap: 6px; min-height: 1.6em;
+      overflow: hidden; font-size: var(--fs-small); }
+    .ap-now { flex: none; display: flex; align-items: center; gap: var(--space-3); min-height: 1.6em;
       margin-bottom: 4px; }
     .ap-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
       text-overflow: ellipsis; font-weight: 600; line-height: 1.3; }
-    .ap-time { font-size: .78em; opacity: .7; font-variant-numeric: tabular-nums; }
+    .ap-time { font-size: var(--fs-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .ap-vol { flex: none; width: 4em; accent-color: var(--c2); }
 
     .ap-bar { flex: none; height: 4px; border-radius: 2px;
       background: color-mix(in srgb, var(--c3) 18%, transparent);
@@ -45,31 +47,26 @@ export default {
     .ap-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0;
       border-radius: 2px; background: var(--c2); transition: width .15s linear; }
 
-    .ap-ctrl { flex: none; display: flex; align-items: center; justify-content: center; gap: 4px; }
-    .ap-ctrl button { padding: 0 7px; line-height: 1.6; font-size: .85em; min-width: 0; }
+    .ap-ctrl { flex: none; display: flex; align-items: center; justify-content: center; gap: var(--space-2); }
+    .ap-ctrl button { padding: 0 7px; line-height: 1.6; font-size: var(--fs-small); min-width: 0; }
     .ap-ctrl [data-a=play] { background: var(--c2); border-color: var(--c2);
       color: var(--on-accent); padding: 0 10px; }
     .ap-ctrl .active { background: color-mix(in srgb, var(--c2) 25%, transparent); }
 
     .ap-list { flex: 1; overflow-y: auto; min-height: 0; margin-top: 4px; }
-    .ap-track { display: flex; align-items: center; gap: 4px; padding: 2px 4px;
-      border-radius: 4px; cursor: pointer; line-height: 1.4; }
+    .ap-track { display: flex; align-items: center; gap: var(--space-2); padding: 2px 4px;
+      border-radius: var(--r-inner); cursor: pointer; line-height: 1.4; }
     .ap-track:hover { background: color-mix(in srgb, var(--c3) 8%, transparent); }
     .ap-track.playing { color: var(--c2); font-weight: 600; }
-    .ap-track .idx { opacity: .4; font-size: .8em; min-width: 1.4em; text-align: right; }
+    .ap-track .idx { color: var(--text-faint); font-size: var(--fs-meta); min-width: 1.4em; text-align: right; }
     .ap-track .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
       text-overflow: ellipsis; }
-    .ap-track .del { opacity: 0; padding: 0 4px; font-size: .8em; }
+    .ap-track .del { opacity: 0; padding: 0 4px; font-size: var(--fs-meta); }
     .ap-track:hover .del { opacity: .5; }
     .ap-track .del:hover { opacity: 1; color: var(--danger, #c00); }
 
-    .ap-empty { flex: 1; display: grid; place-items: center; text-align: center;
-      opacity: .55; font-size: .85em; }
-    .ap-empty small { display: block; margin-top: 2px; opacity: .8; }
-
-    .ap-drop { position: absolute; inset: 0; background: color-mix(in srgb, var(--c2) 12%, var(--c1));
-      display: grid; place-items: center; font-size: .9em; font-weight: 600;
-      border: 2px dashed var(--c2); border-radius: var(--radius); z-index: 10; pointer-events: none; }
+    .ap-empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text-faint); font-size: var(--fs-small); }
+    .ap-empty small { display: block; margin-top: 2px; }
 
     /* compact: hide list */
     @container (max-height: 6em) {
@@ -87,7 +84,6 @@ export default {
     const audio = new Audio();
     audio.volume = s.volume;
     let tick = null;
-    let dragCount = 0;
 
     // -- own file picker (the global one is image-only) --
     const filePicker = document.createElement('input');
@@ -106,7 +102,7 @@ export default {
       if (!audios.length) return files.length && api.toast(t('ap.not_audio'));
       for (const f of audios) {
         try {
-          const name = await api.uploadImage(f); // save_asset works for any file
+          const name = await api.uploadImage(f, 'ap.too_big'); // save_asset works for any file
           const label = f.name.replace(/\.[^.]+$/, '');
           if (!s.tracks.some((tr) => tr.file === name))
             s.tracks.push({ file: name, label });
@@ -123,21 +119,7 @@ export default {
       filePicker.click();
     };
 
-    // -- drag & drop --
-    root.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-    root.addEventListener('dragenter', (e) => { e.preventDefault(); if (++dragCount === 1) showDrop(true); });
-    root.addEventListener('dragleave', () => { if (--dragCount <= 0) { dragCount = 0; showDrop(false); } });
-    root.addEventListener('drop', (e) => { e.preventDefault(); dragCount = 0; showDrop(false); addFiles(e.dataTransfer.files); });
-
-    function showDrop(on) {
-      let el = root.querySelector('.ap-drop');
-      if (on && !el) {
-        el = document.createElement('div');
-        el.className = 'ap-drop';
-        el.textContent = t('ap.drop');
-        root.appendChild(el);
-      } else if (!on && el) el.remove();
-    }
+    dropZone(root, t('w.drop'), addFiles);
 
     // -- playback --
     function play(idx) {
@@ -173,32 +155,34 @@ export default {
       const tr = s.tracks[s.current];
 
       if (!s.tracks.length) {
-        box.innerHTML = `<div class="ap-empty">🎵 ${t('ap.empty')}<small>${t('ap.hint')}</small></div>`;
+        box.innerHTML = `<div class="ap-empty"><div>${icon('music')} ${t('ap.empty')}<small>${t('ap.hint')}</small></div></div>`;
         box.querySelector('.ap-empty').addEventListener('click', chooser);
         return;
       }
 
-      const loopIcon = s.loop === 'one' ? '🔂' : s.loop === 'all' ? '🔁' : '➡';
+      const loopIcon = icon(s.loop === 'one' ? 'repeat-one' : s.loop === 'all' ? 'repeat' : 'repeat-off');
       box.innerHTML = `
         <div class="ap-now">
           <span class="ap-label">${esc(tr?.label || t('ap.untitled'))}</span>
           <span class="ap-time"></span>
+          <input type="range" class="ap-vol" min="0" max="1" step="0.05" value="${s.volume}"
+            title="${t('ap.volume')}" aria-label="${t('ap.volume')}">
         </div>
         <div class="ap-bar"><i></i></div>
         <div class="ap-ctrl">
-          <button data-a="shuf" class="${s.shuffle ? 'active' : ''}" title="${t('ap.shuffle')}">🔀</button>
-          <button data-a="prev" title="${t('ap.prev')}">⏮</button>
-          <button data-a="play" title="${t('ap.play')}">▶</button>
-          <button data-a="next" title="${t('ap.next')}">⏭</button>
+          <button data-a="shuf" class="${s.shuffle ? 'active' : ''}" title="${t('ap.shuffle')}">${icon('shuffle')}</button>
+          <button data-a="prev" title="${t('ap.prev')}">${icon('prev')}</button>
+          <button data-a="play" title="${t('ap.play')}">${icon('play')}</button>
+          <button data-a="next" title="${t('ap.next')}">${icon('next')}</button>
           <button data-a="loop" title="${t('ap.loop')}">${loopIcon}</button>
-          <button data-a="add" title="${t('ap.add')}">＋</button>
+          <button data-a="add" title="${t('ap.add')}">${icon('plus')}</button>
         </div>
         <div class="ap-list">
-          ${s.tracks.map((t, i) => `
+          ${s.tracks.map((tr, i) => `
             <div class="ap-track ${i === s.current ? 'playing' : ''}" data-i="${i}">
               <span class="idx">${i + 1}</span>
-              <span class="name">${esc(t.label || '?')}</span>
-              <button class="del" data-del="${i}" title="×">×</button>
+              <span class="name">${esc(tr.label || '?')}</span>
+              <button class="del" data-del="${i}" title="${esc(t('ap.delete', { name: tr.label || i + 1 }))}">${icon('x')}</button>
             </div>`).join('')}
         </div>`;
 
@@ -209,7 +193,9 @@ export default {
 
     function updatePlayBtn() {
       const btn = box.querySelector('[data-a=play]');
-      if (btn) btn.textContent = audio.paused ? '▶' : '❚❚';
+      if (!btn) return;
+      btn.innerHTML = icon(audio.paused ? 'play' : 'pause');
+      btn.title = t(audio.paused ? 'ap.play' : 'ap.pause');
     }
 
     function progress() {
@@ -226,6 +212,11 @@ export default {
     audio.addEventListener('play', () => { clearInterval(tick); tick = setInterval(progress, 250); updatePlayBtn(); });
     audio.addEventListener('pause', () => { clearInterval(tick); progress(); updatePlayBtn(); });
     audio.addEventListener('loadedmetadata', progress);
+
+    box.addEventListener('input', (e) => {
+      if (e.target.matches('.ap-vol')) audio.volume = s.volume = +e.target.value;
+    });
+    box.addEventListener('change', (e) => { if (e.target.matches('.ap-vol')) api.save(); });
 
     box.addEventListener('click', (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a;
@@ -247,11 +238,20 @@ export default {
       const del = e.target.closest('[data-del]');
       if (del) {
         const di = +del.dataset.del;
-        const wasPlaying = di === s.current && !audio.paused;
-        s.tracks.splice(di, 1);
-        if (s.current >= s.tracks.length) s.current = Math.max(0, s.tracks.length - 1);
-        if (di === s.current || wasPlaying) { audio.pause(); audio.src = ''; }
-        api.save(); build(); return;
+        const wasCurrent = di === s.current;
+        const cur = s.tracks[s.current];
+        const [gone] = s.tracks.splice(di, 1);
+        // keep "now playing" on the same track when one above it goes
+        s.current = wasCurrent ? Math.min(s.current, Math.max(0, s.tracks.length - 1)) : s.tracks.indexOf(cur);
+        if (wasCurrent) { audio.pause(); audio.src = ''; }
+        api.save(); build();
+        api.deleted(() => {
+          const now = s.tracks[s.current];
+          s.tracks.splice(Math.min(di, s.tracks.length), 0, gone);
+          s.current = Math.max(0, s.tracks.indexOf(now));
+          api.save(); build();
+        });
+        return;
       }
 
       // click track to play

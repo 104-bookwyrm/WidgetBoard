@@ -1,5 +1,5 @@
 // v0.11: update UI (the Rust updater itself is covered by tools/updater-test)
-import { chromium } from "playwright";
+import { chromium } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -30,105 +30,38 @@ async function page(lang = "ko") {
   await p.waitForTimeout(500);
   return p;
 }
-const openSettings = async (p) => {
-  await p.evaluate(() => window.__mock.emit("open-settings"));
-  await p.waitForTimeout(200);
-};
-
+// The update controls live in the settings window (tests/v12.mjs). The board only shows the
+// toasts Rust sends and flushes pending saves before a restart.
 {
   const p = await page();
-  await openSettings(p);
+  const toastText = () => p.$eval("#toast", (e) => e.textContent);
+  await p.evaluate(() => window.__mock.emit("update-failed", "not_configured"));
   ok(
-    (await p.$eval("#set-update", (s) => s.value)) === "weekly",
-    "weekly is the default schedule",
-  );
-  const st = await p.$eval("#update-status", (e) => e.textContent);
-  ok(
-    /v0\.11\.0/.test(st) && /주소가 설정되지 않았습니다/.test(st),
-    'status shows version and "not configured"',
-    st,
-  );
-  ok(
-    await p.$eval("#update-apply", (e) => e.hidden),
-    "no install button without a download",
-  );
-  await p.click("#update-now");
-  await p.waitForTimeout(150);
-  ok(
-    /주소가 설정되지 않았습니다/.test(
-      await p.$eval("#toast", (e) => e.textContent),
-    ),
+    /주소가 설정되지 않았습니다/.test(await toastText()),
     "manual check explains what is missing",
   );
-  await p.selectOption("#set-update", "daily");
-  await p.waitForTimeout(250);
-  ok(
-    (await p.evaluate(
-      () => JSON.parse(localStorage.getItem("wb-config")).update.check,
-    )) === "daily",
-    "schedule saved to config.update.check",
+  await p.evaluate(() => window.__mock.emit("toast", "upd.latest"));
+  ok(/최신 버전/.test(await toastText()), "up-to-date message");
+  await p.evaluate(() =>
+    window.__mock.emit("update-available", { version: "0.12.0" }),
   );
-  await p.selectOption("#set-update", "off");
-  await p.waitForTimeout(250);
-  ok(
-    (await p.evaluate(
-      () => JSON.parse(localStorage.getItem("wb-config")).update.check,
-    )) === "off",
-    "can be switched off",
-  );
-  // configured, up to date
-  await p.evaluate(() => (window.__mockUpdate = {}));
-  await p.click("#update-now");
-  await p.waitForTimeout(150);
-  ok(
-    /최신 버전/.test(await p.$eval("#toast", (e) => e.textContent)),
-    "up-to-date message",
-  );
-  // an update is found
-  await p.evaluate(
-    () => (window.__mockUpdate = { found: "0.12.0", notes: "버그 수정" }),
-  );
-  await p.click("#update-now");
-  await p.waitForTimeout(250);
-  const tt = await p.$eval("#toast", (e) => e.textContent);
+  const tt = await toastText();
   ok(
     /0\.12\.0/.test(tt) && /자세히/.test(tt),
     "found toast offers details",
     tt,
   );
-  const st2 = await p.$eval("#update-status", (e) => e.textContent);
+  await p.click("#toast button");
   ok(
-    /0\.12\.0/.test(st2) && /버그 수정/.test(st2),
-    "settings status shows the found version + notes",
-    st2,
+    (await p.evaluate(() => window.__native || [])).some(
+      ([c, a]) => c === "open_settings" && a?.page === "about",
+    ),
+    "details opens the settings window on the about page",
   );
-  ok(
-    !(await p.$eval("#update-apply", (e) => e.hidden)) &&
-      /0\.12\.0/.test(await p.$eval("#update-apply", (e) => e.textContent)),
-    "install button appears",
-  );
-  // unsaved widget change is flushed before restart
+  // flush-saves (sent by Rust before an update restart, and from the tray)
   await p.evaluate(() => window.__mock.emit("add-widget", "memo"));
   await p.waitForTimeout(300);
   await p.fill(".memo textarea", "저장돼야 함");
-  await p.evaluate(() => document.activeElement.blur());
-  await p.click("#update-apply");
-  await p.waitForTimeout(300);
-  const saved = await p.evaluate(
-    () =>
-      JSON.parse(localStorage.getItem("wb-widgets")).find(
-        (w) => w.type === "memo",
-      )?.settings.text,
-  );
-  ok(saved === "저장돼야 함", "pending saves flushed before restarting", saved);
-  ok(
-    (await p.evaluate(() => window.__native || [])).some(
-      ([c]) => c === "update_install",
-    ),
-    "install requested",
-  );
-  // flush-saves from the tray path
-  await p.fill(".memo textarea", "트레이에서도");
   await p.evaluate(() => {
     document.activeElement.blur();
     window.__mock.emit("flush-saves");
@@ -140,32 +73,11 @@ const openSettings = async (p) => {
         JSON.parse(localStorage.getItem("wb-widgets")).find(
           (w) => w.type === "memo",
         )?.settings.text,
-    )) === "트레이에서도",
+    )) === "저장돼야 함",
     "flush-saves event writes immediately",
   );
-  // failure message
   await p.evaluate(() => window.__mock.emit("update-failed", "HTTP 404"));
-  ok(
-    /HTTP 404/.test(await p.$eval("#toast", (e) => e.textContent)),
-    "failure shown with reason",
-  );
-  const raw = await p.$eval("#settings-panel", (e) =>
-    e.innerText.match(/\bupd\.[a-z_]+/g),
-  );
-  ok(!raw, "no raw keys (ko)", String(raw));
-  await p.close();
-}
-{
-  const p = await page("en");
-  await openSettings(p);
-  const t = await p.$eval("#settings-panel", (e) => e.innerText);
-  ok(
-    /Updates/.test(t) &&
-      /Weekly \(default\)/.test(t) &&
-      /No update address yet/.test(t) &&
-      !/\bupd\.[a-z_]+/.test(t),
-    "English update section",
-  );
+  ok(/HTTP 404/.test(await toastText()), "failure shown with reason");
   await p.close();
 }
 console.log(`\n${passes} passed, ${fails} failed`);

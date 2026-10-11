@@ -14,6 +14,8 @@ HANDOFF-*.md
 # local working notes
 memory.md
 plan.md
+bugs-fixed.md
+claude.md
 dist/
 tools/updater-test/target/
 
@@ -24,3 +26,5 @@ release.cmd
 .claude/
 .vscode/
 shots/
+# Browser screenshots, native test fixtures, and test logs
+/test-artifacts/

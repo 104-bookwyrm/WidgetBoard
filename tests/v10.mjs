@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, artifact } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -99,17 +99,20 @@ async function dragResize(p, sel, dw, dh) {
 }
 const cls = (p) => p.evaluate(() => [...document.body.classList]);
 const native = (p) => p.evaluate(() => window.__native || []);
-const openSettings = async (p) => {
-  await p.evaluate(() => window.__mock.emit("open-settings"));
-  await p.waitForTimeout(150);
-};
+// The settings window saves config.ui (numbers as numbers); the board reacts to config-changed.
 const setUi = async (p, key, value) => {
   await p.evaluate(
     ({ key, value }) => {
-      const i = document.querySelector(`#settings-panel [data-ui="${key}"]`);
-      if (i.type === "checkbox") i.checked = value;
-      else i.value = value;
-      i.dispatchEvent(new Event(i.type === "range" ? "input" : "change"));
+      const v =
+        typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value)
+          ? +value
+          : value;
+      const cfg =
+        JSON.parse(localStorage.getItem("wb-config") || "null") ||
+        structuredClone(window.__mockConfig || {});
+      cfg.ui = { ...(cfg.ui || {}), [key]: v };
+      localStorage.setItem("wb-config", JSON.stringify(cfg));
+      window.__mock.emit("config-changed", cfg);
     },
     { key, value },
   );
@@ -210,7 +213,6 @@ const BASE = [
       "#kbdbar",
       "#focusbar",
       "#overview-panel",
-      "#layouts-panel",
     ].map((s) => document.querySelector(s).hidden),
     caps: [...document.querySelectorAll(".t-cap")].every((x) => x.hidden),
     styleVars: [...document.querySelectorAll(".widget")].some((e) =>
@@ -232,10 +234,14 @@ const BASE = [
   );
   ok(st.caps, "1: timer caption hidden");
   ok(!st.styleVars, "1: no per-widget colour overrides by default");
-  await openSettings(p);
-  const vals = await p.evaluate(() =>
+  // the accessibility controls live in the settings window
+  const sp = await b.newPage({ viewport: { width: 900, height: 700 } });
+  sp.on("pageerror", (e) => errs.push(e.message));
+  await sp.goto("http://localhost:8765/settings.html?page=a11y&lang=ko");
+  await sp.waitForTimeout(400);
+  const vals = await sp.evaluate(() =>
     Object.fromEntries(
-      [...document.querySelectorAll("#settings-panel [data-ui]")].map((i) => [
+      [...document.querySelectorAll("[data-ui]")].map((i) => [
         i.dataset.ui,
         i.type === "checkbox" ? i.checked : i.value,
       ]),
@@ -270,22 +276,11 @@ const BASE = [
     "1: selects at off values",
     JSON.stringify(vals),
   );
-  const keysShown = await p.$eval("#settings-panel", (e) =>
+  const keysShown = await sp.$eval(".set-main [data-page=a11y]", (e) =>
     e.innerText.match(/\b(set|look|lay|ov|sum|hint)\.[a-z_.]+/g),
   );
   ok(!keysShown, "1: no raw i18n keys in settings (ko)", String(keysShown));
-  await p.screenshot({ path: "shots/v10-settings-ko.png" });
-  // tall panel scrolls instead of running off screen
-  const sp = await p.$eval("#settings-panel", (e) => ({
-    h: e.getBoundingClientRect().bottom,
-    sh: e.scrollHeight,
-    ch: e.clientHeight,
-  }));
-  ok(
-    sp.h <= 810 && sp.sh > sp.ch,
-    "1: settings panel scrolls within the screen",
-    JSON.stringify(sp),
-  );
+  await sp.close();
   await p.close();
 }
 
@@ -293,7 +288,6 @@ const BASE = [
 {
   const p = await page();
   await seed(p, BASE);
-  await openSettings(p);
   for (const [k, c] of [
     ["cvd", "cvd-safe"],
     ["showHints", "show-hints"],
@@ -456,10 +450,8 @@ const BASE = [
     })
     .catch(() => {});
   await p.keyboard.press("Escape");
-  await openSettings(p);
   for (const k of ["flashAlert", "notifyAlert", "soundCaptions"])
     await setUi(p, k, true);
-  await p.click("#settings-close");
   await p.evaluate(() => {
     const w = JSON.parse(localStorage.getItem("wb-widgets"));
     w[0].settings = { duration: 60000, remaining: 1200, endAt: null };
@@ -491,7 +483,7 @@ const BASE = [
     "3: Windows notification requested",
     JSON.stringify(st.n),
   );
-  await p.screenshot({ path: "shots/v10-flash.png" });
+  await p.screenshot({ path: artifact("v10-flash.png") });
   const hitsBefore = await p.evaluate(() => window.__hits.length);
   ok(
     await p.$eval(
@@ -597,9 +589,11 @@ const BASE = [
   ok(/시험 D-/.test(sums.dday), "4: dday summary", sums.dday);
   ok(/우유/.test(sums.memo), "4: memo summary has the text", sums.memo);
   ok(/5:00|05:00/.test(sums.timer), "4: timer summary", sums.timer);
-  // overview
-  await openSettings(p);
-  await p.click("#settings-overview");
+  // overview: keyboard mode, then L
+  await p.evaluate(() => window.__mock.emit("kbd-mode", true));
+  await p.waitForTimeout(150);
+  await p.keyboard.press("l");
+  await p.waitForTimeout(100);
   const ov = await p.$$eval("#overview-list li", (l) =>
     l.map((x) => x.textContent),
   );
@@ -623,7 +617,7 @@ const BASE = [
     ),
     "4: overview jumps to the widget",
   );
-  await p.keyboard.press("Escape"); // closes settings
+  await p.keyboard.press("Escape"); // leaves keyboard mode
   // focus mode
   const hits0 = await p.evaluate(() => window.__hits.length);
   ok(await menuAction(p, "me", "집중 모드"), "4: focus entry in menu");
@@ -864,7 +858,6 @@ const BASE = [
     "7: colours + frame survive restart",
   );
   // settings default frame applies to widgets without their own
-  await openSettings(p);
   await setUi(p, "frame", "corners");
   const kinds = await p.$$eval(".w-frame", (fs) =>
     Object.fromEntries(
@@ -876,7 +869,6 @@ const BASE = [
     "7: default frame for all, own frame wins",
     JSON.stringify(kinds),
   );
-  await p.click("#settings-close");
   // showcase every frame for a visual check
   const frames = [
     "corners",
@@ -914,7 +906,7 @@ const BASE = [
         },
       ]),
   );
-  await p.screenshot({ path: "shots/v10-frames.png" });
+  await p.screenshot({ path: artifact("v10-frames.png") });
   // frame pixels really drawn (corner of widget is frame-coloured, centre is not)
   const px = await p.evaluate(() => {
     const f = document.querySelector("[data-id=hx] .w-frame");
@@ -1048,21 +1040,27 @@ const BASE = [
       settings: { text: "other monitor" },
     },
   ]);
-  await p.evaluate(() => window.__mock.emit("open-layouts"));
-  await p.waitForTimeout(200);
-  ok(
-    !(await p.$eval("#layouts-panel", (e) => e.hidden)),
-    "8: layouts panel opens from tray",
-  );
-  ok(
-    /저장된 레이아웃이 없습니다/.test(
-      await p.$eval("#layout-list", (e) => e.textContent),
-    ),
-    "8: empty saved list says so",
-  );
-  await p.screenshot({ path: "shots/v10-layouts.png" });
-  await p.click("[data-preset=work]");
-  await p.waitForTimeout(1200);
+  // presets and saved layouts are driven from the settings window: it sends apply-preset /
+  // apply-layout to the primary board, and stores saved layouts itself
+  const preset = async (q, id) => {
+    await q.evaluate((id) => window.__mock.emit("apply-preset", id), id);
+    await q.waitForTimeout(1200);
+  };
+  const saveLayout = (name) =>
+    p.evaluate((name) => {
+      const all = JSON.parse(localStorage.getItem("wb-widgets") || "[]");
+      const prev =
+        JSON.parse(localStorage.getItem("wb-store-layouts") || "null") || [];
+      localStorage.setItem(
+        "wb-store-layouts",
+        JSON.stringify([
+          ...prev.filter((l) => l.name !== name),
+          { name, saved: new Date().toISOString(), widgets: all },
+        ]),
+      );
+    }, name);
+  await p.screenshot({ path: artifact("v10-layouts.png") });
+  await preset(p, "work");
   let L = await layout(p);
   const types = L.filter((w) => w.display === "D1")
     .map((w) => w.type)
@@ -1107,7 +1105,7 @@ const BASE = [
     "8: after reload: applied toast with undo",
     tt,
   );
-  await p.screenshot({ path: "shots/v10-work.png" });
+  await p.screenshot({ path: artifact("v10-work.png") });
   await p.click("#toast button");
   await p.waitForTimeout(1200);
   L = await layout(p);
@@ -1117,24 +1115,12 @@ const BASE = [
     L.map((w) => w.type).join(","),
   );
   // save → change → apply
-  await p.evaluate(() => window.__mock.emit("open-layouts"));
-  await p.waitForTimeout(200);
-  await p.fill("#layout-name", "내 책상");
-  await p.click("#layout-save");
-  await p.waitForTimeout(300);
-  ok(
-    /내 책상/.test(await p.$eval("#layout-list", (e) => e.textContent)),
-    "8: saved layout listed",
-  );
+  await saveLayout("내 책상");
   // write in the memo AFTER saving, then switch to study (memo put away) and back: the new text must survive
-  await p.keyboard.press("Escape");
   await p.fill(".memo textarea", "새로 쓴 내용");
   await p.evaluate(() => document.activeElement.blur());
   await p.waitForTimeout(500);
-  await p.evaluate(() => window.__mock.emit("open-layouts"));
-  await p.waitForTimeout(200);
-  await p.click("[data-preset=study]");
-  await p.waitForTimeout(1200);
+  await preset(p, "study");
   L = await layout(p);
   ok(
     L.filter((w) => w.display === "D1").length === 6 &&
@@ -1146,10 +1132,7 @@ const BASE = [
   await invariants(p, "8 study");
   const L0study = { timer: L.find((w) => w.type === "timer").id };
   // study → work: the shelved memo comes back instead of a blank one
-  await p.evaluate(() => window.__mock.emit("open-layouts"));
-  await p.waitForTimeout(200);
-  await p.click("[data-preset=work]");
-  await p.waitForTimeout(1200);
+  await preset(p, "work");
   L = await layout(p);
   ok(
     L.find((w) => w.type === "memo" && w.display === "D1")?.id === "me" &&
@@ -1163,9 +1146,7 @@ const BASE = [
     "8: …and the same timer from study",
     "",
   );
-  await p.evaluate(() => window.__mock.emit("open-layouts"));
-  await p.waitForTimeout(250);
-  await p.click('#layout-list [data-apply="0"]');
+  await p.evaluate(() => window.__mock.emit("apply-layout", "내 책상"));
   await p.waitForTimeout(1200);
   L = await layout(p);
   const me = L.find((w) => w.id === "me");
@@ -1183,37 +1164,11 @@ const BASE = [
     "8: …but keeps the memo text written since",
     me?.settings.text,
   );
-  // delete with undo
-  await p.evaluate(() => window.__mock.emit("open-layouts"));
-  await p.waitForTimeout(250);
-  await p.click('#layout-list [data-del="0"]');
-  await p.waitForTimeout(250);
-  ok(
-    /저장된 레이아웃이 없습니다/.test(
-      await p.$eval("#layout-list", (e) => e.textContent),
-    ),
-    "8: layout deleted",
-  );
-  await p.click("#toast button");
-  await p.waitForTimeout(300);
-  ok(
-    /내 책상/.test(await p.$eval("#layout-list", (e) => e.textContent)),
-    "8: delete undone",
-  );
-  ok(
-    !(await p.$eval("#layout-undo", (e) => e.hidden)),
-    "8: undo button available in the panel",
-  );
-  await p.keyboard.press("Escape");
-  ok(await p.$eval("#layouts-panel", (e) => e.hidden), "8: Esc closes layouts");
   await p.close();
   // tiny screen: preset drops what doesn't fit, still no overlaps
   const s = await page(800, 560);
   await seed(s, []);
-  await s.evaluate(() => window.__mock.emit("open-layouts"));
-  await s.waitForTimeout(200);
-  await s.click("[data-preset=study]");
-  await s.waitForTimeout(1200);
+  await preset(s, "study");
   await invariants(s, "8 small study");
   ok(
     (await layout(s)).length >= 2,
@@ -1227,13 +1182,10 @@ const BASE = [
 {
   const p = await page(1440, 900, "en");
   await seed(p, BASE, { "wb-config": { ui: { showHints: true } } });
-  await openSettings(p);
   const txt = await p.evaluate(
     () =>
       [
-        "#settings-panel",
         "#font-panel",
-        "#layouts-panel",
         "#overview-panel",
         "#kbdbar",
         "#focusbar",
@@ -1252,7 +1204,7 @@ const BASE = [
     /\b(set|look|lay|ov|sum|hint|focus|kbd|menu|a11y|timer)\.[a-z_.]+\b/g,
   );
   ok(!raw, "9: no raw keys in English UI", String(raw));
-  await p.screenshot({ path: "shots/v10-settings-en.png" });
+  await p.screenshot({ path: artifact("v10-settings-en.png") });
   await p.close();
 }
 
@@ -1430,7 +1382,7 @@ const BASE = [
     (e) => e.innerHTML,
   );
   ok(
-    /시험/.test(cell) && /📌/.test(cell),
+    /시험/.test(cell) && /class="ev-rep" title="D-day"/.test(cell),
     "11: d-day item shows in the calendar grid with a d-day marker",
     cell,
   );

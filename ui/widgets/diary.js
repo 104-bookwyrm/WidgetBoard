@@ -2,6 +2,7 @@
 // (› ends at today); click the date to jump anywhere. Arrow keys stay with the text cursor.
 // A horizontal touchpad swipe over the widget also flicks pages.
 import { ymd, parseYmd } from "../util.js";
+import { icon } from "../icons.js";
 
 export default {
   size: { w: 4, h: 4 },
@@ -9,9 +10,9 @@ export default {
   defaults: {},
   css: `
     .dy { position: absolute; inset: 0; padding: var(--head-h) calc(var(--pad) + 2px) calc(var(--pad) - 2px); box-sizing: border-box;
-      display: flex; flex-direction: column; gap: 6px; }
-    .dy-head { display: flex; gap: 4px; align-items: center; flex: none; position: relative; }
-    .dy-head button { padding: 0 8px; font-size: .85em; }
+      display: flex; flex-direction: column; gap: var(--space-3); }
+    .dy-head { display: flex; gap: var(--space-2); align-items: center; flex: none; position: relative; }
+    .dy-head button { padding: 0 8px; font-size: var(--fs-small); }
     .dy-head button:disabled { opacity: .3; cursor: default; }
     .dy-head .dy-date { flex: 1; background: none; border: 0; font-weight: 600; font-size: 1em;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -23,16 +24,16 @@ export default {
       background-image: repeating-linear-gradient(to bottom, transparent 0, transparent calc(1.7em - 1px),
         color-mix(in srgb, var(--c3) 13%, transparent) calc(1.7em - 1px), color-mix(in srgb, var(--c3) 13%, transparent) 1.7em);
       scrollbar-width: thin; }
-    .dy-foot { display: flex; justify-content: space-between; font-size: .72em; opacity: .55; flex: none; }
+    .dy-foot { display: flex; justify-content: space-between; font-size: var(--fs-meta); color: var(--text-faint); flex: none; }
   `,
   mount(root, s, api) {
     const { t, lang } = api;
     root.innerHTML = `
       <div class="dy">
         <div class="dy-head">
-          <button data-a="prev" title="${t("diary.prev")}">‹</button>
+          <button data-a="prev" title="${t("diary.prev")}">${icon("left")}</button>
           <button class="dy-date" data-a="pick" title="${t("diary.pick")}"></button>
-          <button data-a="next" title="${t("diary.next")}">›</button>
+          <button data-a="next" title="${t("diary.next")}">${icon("right")}</button>
           <button data-a="today">${t("diary.today")}</button>
           <input type="date" class="dy-picker" tabindex="-1" aria-hidden="true" aria-label="${t("diary.pick")}">
         </div>
@@ -68,29 +69,42 @@ export default {
     }
     const status = (k) => (q(".dy-status").textContent = k ? t(k) : "");
 
-    async function flush() {
-      if (!dirty) return;
+    let saving = null;
+    let openRequest = 0;
+    function flush() {
       clearTimeout(saveTimer);
-      dirty = false;
-      const text = ta.value;
-      try {
-        await api.diary.set(date, text);
-      } catch {
-        dirty = true; // keep the text; try again on the next edit / blur
-        status("diary.save_failed");
-        return;
-      }
-      const has = dates.includes(date);
-      if (text.trim() && !has) dates = [...dates, date].sort();
-      if (!text.trim() && has) dates = dates.filter((d) => d !== date);
-      status("diary.saved");
-      renderHead();
+      if (saving) return saving;
+      saving = (async () => {
+        while (dirty) {
+          const savedDate = date;
+          const text = ta.value;
+          dirty = false;
+          try {
+            await api.diary.set(savedDate, text);
+          } catch {
+            dirty = true;
+            status("diary.save_failed");
+            return false;
+          }
+          const has = dates.includes(savedDate);
+          if (text.trim() && !has) dates = [...dates, savedDate].sort();
+          if (!text.trim() && has) dates = dates.filter((d) => d !== savedDate);
+        }
+        status("diary.saved");
+        renderHead();
+        return true;
+      })().finally(() => { saving = null; });
+      return saving;
     }
     async function open(d, dir = 0) {
       if (!d) return;
-      await flush();
+      const request = ++openRequest;
+      if (!(await flush()) || request !== openRequest) return;
+      const text = await api.diary.get(d);
+      // Keep edits made during the read; a later navigation request owns its own result.
+      if (request !== openRequest || dirty) return;
       date = d;
-      ta.value = await api.diary.get(d);
+      ta.value = text;
       status("");
       renderHead();
       if (dir && !api.reduceMotion)
@@ -155,25 +169,29 @@ export default {
       renderHead();
     });
 
-    let day = ymd();
-    const tick = setInterval(() => {
-      if (ymd() !== day) ((day = ymd()), renderHead());
-    }, 60000);
+    // the app runs for days: a page left on "today" follows the date, unless it is being written in
+    let shownToday = ymd();
+    api.onDayChange((today) => {
+      const follow = date === shownToday && document.activeElement !== ta && !dirty;
+      shownToday = today;
+      if (follow) open(today);
+      else renderHead();
+    });
 
     (async () => {
       dates = await api.diary.dates();
       await open(date);
     })();
     return {
+      flush,
       destroy() {
-        clearInterval(tick);
         flush();
       },
       summary: () => {
         const txt = ta.value.trim().replace(/\s+/g, " ");
         return (
           t("sum.diary", { date, n: txt.length }) +
-          (txt ? " — " + txt.slice(0, 100) + (txt.length > 100 ? "…" : "") : "")
+          (txt ? " - " + txt.slice(0, 100) + (txt.length > 100 ? "…" : "") : "")
         );
       },
     };

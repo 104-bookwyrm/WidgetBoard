@@ -12,7 +12,9 @@ import {
   addDays,
   uid,
   deferWhileEditing,
+  editInlineText,
 } from "../util.js";
+import { icon } from "../icons.js";
 
 const TABS = ["today", "week", "month"];
 const REPEAT_OF_TAB = { week: "weekly", month: "monthly" };
@@ -37,34 +39,34 @@ export default {
   },
   css: `
     .ck { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
-      display: flex; flex-direction: column; gap: 6px; }
-    .ck-tabs { display: flex; gap: 3px; flex: none; }
-    .ck-tabs button { flex: 1; min-width: 0; padding: 1px 4px; font-size: .8em; white-space: nowrap; overflow: hidden;
-      text-overflow: ellipsis; opacity: .7; }
+      display: flex; flex-direction: column; gap: var(--space-3); }
+    .ck-tabs { display: flex; gap: var(--space-2); flex: none; }
+    .ck-tabs button { flex: 1; min-width: 0; padding: 1px 4px; font-size: var(--fs-meta); white-space: nowrap; overflow: hidden;
+      text-overflow: ellipsis; color: var(--text-muted); }
     .ck-tabs button.on { background: var(--c2); border-color: var(--c2); color: var(--on-accent); opacity: 1; }
-    .ck-tabs small { opacity: .8; font-variant-numeric: tabular-nums; }
-    .ck-head { display: flex; align-items: baseline; gap: 6px; flex: none; min-width: 0; }
+    .ck-tabs small { font-variant-numeric: tabular-nums; }
+    .ck-head { display: flex; align-items: baseline; gap: var(--space-3); flex: none; min-width: 0; }
     .ck-date { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .ck-count { font-size: .8em; opacity: .7; font-variant-numeric: tabular-nums; flex: none; }
-    .ck-sync { padding: 0 6px; font-size: .8em; flex: none; opacity: .45; }
-    .ck-sync.on { opacity: 1; }
+    .ck-count { font-size: var(--fs-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; }
+    .ck-sync { padding: 0 6px; font-size: var(--fs-meta); flex: none; color: var(--text-faint); }
+    .ck-sync.on { color: var(--c3); }
     .ck-bar { height: 4px; border-radius: 2px; flex: none; background: color-mix(in srgb, var(--c3) 12%, transparent); overflow: hidden; }
     .ck-bar i { display: block; height: 100%; width: 0; background: var(--c2); transition: width .3s; }
-    .ck-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; scrollbar-width: thin; }
-    .ck-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; min-width: 0; }
+    .ck-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1); scrollbar-width: thin; }
+    .ck-row { display: flex; align-items: center; gap: var(--space-3); padding: 3px 4px; border-radius: var(--r-inner); min-width: 0; }
     .ck-row:hover { background: color-mix(in srgb, var(--c3) 8%, transparent); }
     .ck-row input[type=checkbox] { accent-color: var(--c2); margin: 0; flex: none; width: 1.05em; height: 1.05em; }
     .ck-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .ck-title input { width: 100%; box-sizing: border-box; font-size: 1em; }
-    .ck-row.done .ck-title { text-decoration: line-through; opacity: .45; }
-    .ck-meta { font-size: .72em; opacity: .6; white-space: nowrap; flex: none; }
-    .ck-time { color: var(--c2); font-size: .85em; font-variant-numeric: tabular-nums; flex: none; }
-    .ck-row.ck-cal .ck-title::before { content: "📅 "; font-size: .8em; }
-    .ck-btn { padding: 0 5px; font-size: .72em; opacity: 0; flex: none; }
+    .ck-row.done .ck-title { text-decoration: line-through; color: var(--text-faint); }
+    .ck-meta { font-size: var(--fs-meta); color: var(--text-faint); white-space: nowrap; flex: none; }
+    .ck-time { color: var(--c2); font-size: var(--fs-small); font-variant-numeric: tabular-nums; flex: none; }
+    .ck-cal-ico { color: var(--text-muted); font-size: var(--fs-meta); }
+    .ck-btn { padding: 0 5px; font-size: var(--fs-meta); opacity: 0; flex: none; }
     .ck-row:hover .ck-btn { opacity: .75; }
-    .ck-btn.on { opacity: .9; color: var(--c2); }
-    .ck-empty { opacity: .5; font-size: .85em; padding: 6px 4px; }
-    .ck-alldone { color: var(--c2); font-size: .85em; padding: 4px; text-align: center; }
+    .ck-btn.on { color: color-mix(in srgb, var(--c2) 90%, var(--c1)); }
+    .ck-empty { color: var(--text-faint); font-size: var(--fs-small); padding: 6px 4px; }
+    .ck-alldone { color: var(--c2); font-size: var(--fs-small); padding: 4px; text-align: center; }
     .ck-add { flex: none; width: 100%; box-sizing: border-box; }
     .ck-stamp { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 4; }
     .ck-stamp .mark { transform: rotate(var(--rot, -8deg)); animation: ck-stamp-in .25s ease-out; }
@@ -90,7 +92,7 @@ export default {
         <div class="ck-tabs">${TABS.map((k) => `<button data-tab="${k}"></button>`).join("")}</div>
         <div class="ck-head">
           <span class="ck-date"></span><span class="ck-count"></span>
-          <button class="ck-sync" data-a="sync">📅</button>
+          <button class="ck-sync" data-a="sync">${icon("calendar")}</button>
         </div>
         <div class="ck-bar"><i></i></div>
         <div class="ck-list"></div>
@@ -208,18 +210,18 @@ export default {
               return `<div class="ck-row ck-cal ${done ? "done" : ""}" data-cal="${esc(item.id)}" title="${esc(t("ck.from_calendar"))}">
               <input type="checkbox" ${done ? "checked" : ""}>
               ${item.time ? `<span class="ck-time">${esc(item.time)}</span>` : ""}
-              <span class="ck-title">${esc(item.title)}</span></div>`;
+              <span class="ck-cal-ico">${icon("calendar")}</span><span class="ck-title">${esc(item.title)}</span></div>`;
             const carried = !item.repeat && item.date < d;
             const repeatBtn =
               s.tab === "today"
-                ? `<button class="ck-btn ${item.repeat ? "on" : ""}" data-a="repeat" title="${esc(t(item.repeat ? "ck.repeat_off" : "ck.repeat_on"))}">🔁</button>`
+                ? `<button class="ck-btn ${item.repeat ? "on" : ""}" data-a="repeat" title="${esc(t(item.repeat ? "ck.repeat_off" : "ck.repeat_on"))}">${icon("repeat")}</button>`
                 : "";
             return `<div class="ck-row ${done ? "done" : ""}" data-id="${esc(item.id)}">
               <input type="checkbox" ${done ? "checked" : ""}>
-              <span class="ck-title" title="${esc(item.title)} — ${esc(t("cal.edit_hint"))}">${esc(item.title)}</span>
-              ${carried ? `<span class="ck-meta" title="${esc(t("ck.carried"))}">↪ ${esc(fmt({ month: "numeric", day: "numeric" }, item.date))}</span>` : ""}
+              <span class="ck-title" title="${esc(item.title)} - ${esc(t("cal.edit_hint"))}">${esc(item.title)}</span>
+              ${carried ? `<span class="ck-meta" title="${esc(t("ck.carried"))}">${icon("carried")} ${esc(fmt({ month: "numeric", day: "numeric" }, item.date))}</span>` : ""}
               ${repeatBtn}
-              <button class="ck-btn" data-a="del" title="${esc(t("dday.delete"))}">✕</button></div>`;
+              <button class="ck-btn" data-a="del" title="${esc(t("dday.delete"))}">${icon("x")}</button></div>`;
           })
           .join("") +
         (!rows.length
@@ -295,9 +297,15 @@ export default {
       const it = own(e.target);
       if (!it) return;
       if (a === "del") {
+        const i = items.indexOf(it);
         items = items.filter((x) => x !== it);
         saveItems();
         render();
+        api.deleted(() => {
+          items.splice(Math.min(i, items.length), 0, it);
+          saveItems();
+          render();
+        });
       }
       if (a === "repeat") {
         // one-off <-> daily
@@ -329,29 +337,14 @@ export default {
       const span = e.target.closest(".ck-title");
       const it = span && own(span);
       if (!it || span.querySelector("input")) return;
-      span.innerHTML = `<input value="${esc(it.title)}">`;
-      const inp = span.firstChild;
-      inp.focus();
-      let finished = false;
-      const commit = (keep) => {
-        if (finished) return;
-        finished = true;
-        if (keep) {
-          const v = inp.value.trim().slice(0, 300);
-          if (v) it.title = v;
-          else items = items.filter((x) => x !== it);
-          saveItems();
-        }
-        render();
-      };
-      inp.onkeydown = (k) => {
-        if (k.key === "Enter") commit(true);
-        if (k.key === "Escape") {
-          k.stopPropagation();
-          commit(false);
-        }
-      };
-      inp.onblur = () => commit(true);
+      const id = it.id;
+      editInlineText(span, it.title, (title) => {
+        const current = items.find((item) => item.id === id);
+        if (!current) return; // deleted by another widget while editing
+        if (title) current.title = title.slice(0, 300);
+        else items = items.filter((item) => item.id !== id);
+        saveItems();
+      }, render);
     });
     q(".ck-add").addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
@@ -392,10 +385,7 @@ export default {
     api.onStore("events", loadEvents);
     api.onConfig(renderLater); // week start may change
 
-    let day = today();
-    const tick = setInterval(() => {
-      if (today() !== day) ((day = today()), renderLater()); // new day / week / month: recurring items untick
-    }, 60000);
+    api.onDayChange(renderLater); // new day / week / month: recurring items untick
     render();
     loadItems();
     loadEvents();
@@ -445,7 +435,7 @@ export default {
       ],
     });
     return {
-      destroy: () => clearInterval(tick),
+      destroy: () => {},
       summary: () => {
         const r = rowsFor("today");
         const left = r.filter((x) => !x.done);
@@ -453,7 +443,7 @@ export default {
         return (
           t("sum.ck", { done: r.length - left.length, n: r.length }) +
           (left.length
-            ? " — " +
+            ? " - " +
               left
                 .slice(0, 6)
                 .map((x) => x.item.title)

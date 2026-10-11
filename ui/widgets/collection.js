@@ -1,8 +1,9 @@
 // Collection: a thumbnail grid for displaying goods, figures, merchandise, cards.
 // Each item has an image and an optional label. Click to view full-size.
-// Drag-and-drop images or use the + button. Reorder by dragging within the grid.
+// Drag-and-drop images or use the + button. Drag a thumbnail (or Alt+arrows) to reorder.
 // Frameless mode for transparent desktop display.
-import { esc } from '../util.js';
+import { esc, dropZone } from '../util.js';
+import { icon } from '../icons.js';
 
 export default {
     size: { w: 2, h: 3 },
@@ -16,48 +17,51 @@ export default {
     .coll { position: absolute; inset: 0; display: flex; flex-direction: column;
       box-sizing: border-box; padding: calc(var(--head-h) - 2px) var(--pad) var(--pad);
       overflow: hidden; }
-    .coll-grid { flex: 1; display: grid; gap: 4px; overflow-y: auto; overflow-x: hidden;
+    .coll-grid { flex: 1; display: grid; gap: var(--space-2); overflow-y: auto; overflow-x: hidden;
       grid-template-columns: repeat(var(--cols, 3), 1fr);
       align-content: start; min-height: 0; }
-    .coll-item { position: relative; aspect-ratio: 1; border-radius: calc(var(--radius) * .4);
+    .coll-item { position: relative; aspect-ratio: 1; border-radius: var(--r-inner);
       overflow: hidden; cursor: pointer; background: color-mix(in srgb, var(--c3) 8%, transparent); }
     .coll-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .coll-item .coll-lbl { position: absolute; left: 0; right: 0; bottom: 0;
-      padding: 1px 4px; font-size: .68em; line-height: 1.3;
+      padding: 1px 4px; font-size: var(--fs-meta); line-height: 1.3;
       background: rgb(0 0 0 / .55); color: #fff; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; text-align: center; }
     .coll-item .coll-del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px;
-      border-radius: 50%; background: rgb(0 0 0 / .5); color: #fff; font-size: 11px;
-      display: none; place-items: center; cursor: pointer; line-height: 18px; text-align: center; }
-    .coll-item:hover .coll-del { display: grid; }
+      min-width: 0; padding: 0; border: none; border-radius: 50%;
+      background: rgb(0 0 0 / .5); color: #fff; font-size: 11px; line-height: 18px;
+      cursor: pointer; opacity: 0; }
+    .coll-item:hover .coll-del, .coll-item:focus-within .coll-del { opacity: 1; }
+    /* reorder: the dragged item fades, a ghost follows the pointer, an accent edge marks the drop spot */
+    .coll-item.dragging { opacity: .3; }
+    .coll-item.drop-before { box-shadow: inset 3px 0 0 var(--c2); }
+    .coll-item.drop-after { box-shadow: inset -3px 0 0 var(--c2); }
+    .coll-ghost { position: fixed; z-index: 1000; pointer-events: none; aspect-ratio: 1; overflow: hidden;
+      border-radius: var(--r-inner); box-shadow: 0 6px 22px rgb(0 0 0 / .45); opacity: .9; }
+    .coll-ghost img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .coll-ghost .coll-del { display: none; }
 
-    .coll-empty { flex: 1; display: grid; place-items: center; text-align: center;
-      opacity: .55; font-size: .85em; cursor: pointer; }
-    .coll-empty small { display: block; margin-top: 2px; opacity: .8; }
+    .coll-empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text-faint); font-size: var(--fs-small); cursor: pointer; }
+    .coll-empty small { display: block; margin-top: 2px; }
 
-    .coll-count { flex: none; text-align: center; font-size: .72em; opacity: .5;
+    .coll-count { flex: none; text-align: center; font-size: var(--fs-meta); color: var(--text-faint);
       padding-top: 3px; }
-
-    .coll-drop { position: absolute; inset: 0; background: color-mix(in srgb, var(--c2) 12%, var(--c1));
-      display: grid; place-items: center; font-size: .9em; font-weight: 600;
-      border: 2px dashed var(--c2); border-radius: var(--radius); z-index: 10; pointer-events: none; }
 
     /* lightbox overlay */
     .coll-lb { position: absolute; inset: 0; z-index: 20; background: rgb(0 0 0 / .82);
       display: grid; place-items: center; cursor: zoom-out; }
-    .coll-lb img { max-width: 95%; max-height: 92%; object-fit: contain; border-radius: 4px; }
+    .coll-lb img { max-width: 95%; max-height: 92%; object-fit: contain; border-radius: var(--r-inner); }
     .coll-lb .coll-lb-label { position: absolute; bottom: 8px; left: 0; right: 0;
-      text-align: center; color: #fff; font-size: .85em; opacity: .9; }
+      text-align: center; color: #fff; font-size: var(--fs-small); opacity: .9; }
 
     /* edit label input */
     .coll-edit { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
-      padding: 2px 4px; font-size: .72em; border: none; outline: 1px solid var(--c2);
+      padding: 2px 4px; font-size: var(--fs-meta); border: none; outline: 1px solid var(--c2);
       background: var(--c1); color: var(--c3); text-align: center; }
   `,
     mount(root, s, api) {
         const { t } = api;
         const bad = new Set();
-        let dragCount = 0;
 
         root.innerHTML = `<div class="coll"></div>`;
         const box = root.firstElementChild;
@@ -82,21 +86,7 @@ export default {
 
         const chooser = async () => addFiles(await api.pickImages());
 
-        // -- drag & drop from outside --
-        root.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-        root.addEventListener('dragenter', (e) => { e.preventDefault(); if (++dragCount === 1) showDrop(true); });
-        root.addEventListener('dragleave', () => { if (--dragCount <= 0) { dragCount = 0; showDrop(false); } });
-        root.addEventListener('drop', (e) => { e.preventDefault(); dragCount = 0; showDrop(false); addFiles(e.dataTransfer.files); });
-
-        function showDrop(on) {
-            let el = root.querySelector('.coll-drop');
-            if (on && !el) {
-                el = document.createElement('div');
-                el.className = 'coll-drop';
-                el.textContent = t('cl.drop');
-                root.appendChild(el);
-            } else if (!on && el) el.remove();
-        }
+        dropZone(root, t('w.drop'), addFiles);
 
         // -- compute columns --
         function autoCols() {
@@ -111,7 +101,7 @@ export default {
         // -- build --
         function build() {
             if (!s.items.length) {
-                box.innerHTML = `<div class="coll-empty">🖼 ${t('cl.empty')}<small>${t('cl.hint')}</small></div>`;
+                box.innerHTML = `<div class="coll-empty"><div>${icon('image')} ${t('cl.empty')}<small>${t('cl.hint')}</small></div></div>`;
                 box.querySelector('.coll-empty').addEventListener('click', chooser);
                 return;
             }
@@ -120,10 +110,10 @@ export default {
             box.innerHTML = `
         <div class="coll-grid" style="--cols:${cols}">
           ${s.items.map((it, i) => `
-            <div class="coll-item" data-i="${i}">
-              <img src="${esc(api.assetUrl(it.img))}" alt="${esc(it.label)}" loading="lazy">
+            <div class="coll-item" data-i="${i}" tabindex="0" aria-label="${esc(it.label || t('cl.item', { n: i + 1 }))}">
+              <img src="${esc(api.assetUrl(it.img))}" alt="${esc(it.label)}" loading="lazy" draggable="false">
               ${it.label ? `<span class="coll-lbl">${esc(it.label)}</span>` : ''}
-              <div class="coll-del" data-del="${i}">×</div>
+              <button class="coll-del" data-del="${i}" aria-label="${esc(t('cl.delete', { name: it.label || i + 1 }))}">${icon('x')}</button>
             </div>`).join('')}
         </div>
         <div class="coll-count">${s.items.length} ${t('cl.items')}</div>`;
@@ -139,32 +129,131 @@ export default {
             // delete
             const del = e.target.closest('[data-del]');
             if (del) {
-                s.items.splice(+del.dataset.del, 1);
-                api.save(); build(); return;
-            }
-
-            // close lightbox
-            if (e.target.closest('.coll-lb')) {
-                root.querySelector('.coll-lb')?.remove();
+                const i = +del.dataset.del;
+                const [gone] = s.items.splice(i, 1);
+                api.save(); build();
+                api.deleted(() => { s.items.splice(Math.min(i, s.items.length), 0, gone); api.save(); build(); });
                 return;
             }
 
-            // open lightbox
+            // open lightbox (a click that ends a drag doesn't count)
             const item = e.target.closest('.coll-item');
-            if (item) {
-                const it = s.items[+item.dataset.i];
-                if (!it) return;
-                const lb = document.createElement('div');
-                lb.className = 'coll-lb';
-                lb.innerHTML = `<img src="${esc(api.assetUrl(it.img))}" alt="">
-          ${it.label ? `<div class="coll-lb-label">${esc(it.label)}</div>` : ''}`;
-                root.appendChild(lb);
-                return;
+            // wait out a possible double-click (label edit) before opening
+            if (item && !justDragged && e.detail < 2) {
+                clearTimeout(lbTimer);
+                lbTimer = setTimeout(() => openLightbox(+item.dataset.i), 250);
             }
+        });
+
+        let lbTimer = 0;
+        function openLightbox(i) {
+            const it = s.items[i];
+            if (!it) return;
+            const lb = document.createElement('div');
+            lb.className = 'coll-lb';
+            lb.tabIndex = -1; // focusable so Esc reaches the keydown handler below
+            lb.innerHTML = `<img src="${esc(api.assetUrl(it.img))}" alt="">
+          ${it.label ? `<div class="coll-lb-label">${esc(it.label)}</div>` : ''}`;
+            root.appendChild(lb);
+            lb.focus();
+        }
+
+        function moveItem(from, to) {
+            const [it] = s.items.splice(from, 1);
+            s.items.splice(to, 0, it);
+            api.save();
+            build();
+        }
+
+        // -- reorder by dragging (pointer events, so it never meets the file-drop overlay) --
+        let justDragged = false;
+        let endDrag = null; // set while a drag runs; destroy() calls it
+        box.addEventListener('pointerdown', (e) => {
+            const cell = e.target.closest('.coll-item');
+            if (!cell || e.button !== 0 || e.target.closest('.coll-del, input')) return;
+            const from = +cell.dataset.i;
+            const sx = e.clientX, sy = e.clientY;
+            const grid = box.querySelector('.coll-grid');
+            let ghost = null, marked = null, to = null;
+            cell.setPointerCapture(e.pointerId);
+            const unmark = () => { marked?.classList.remove('drop-before', 'drop-after'); marked = null; };
+            const move = (ev) => {
+                if (!ghost) {
+                    if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+                    api.setInteracting(true);
+                    const r = cell.getBoundingClientRect();
+                    ghost = cell.cloneNode(true);
+                    ghost.classList.add('coll-ghost'); // keeps .coll-item styling (label strip)
+                    ghost.style.width = r.width + 'px';
+                    ghost._dx = sx - r.left;
+                    ghost._dy = sy - r.top;
+                    document.body.append(ghost);
+                    cell.classList.add('dragging');
+                }
+                ghost.style.left = ev.clientX - ghost._dx + 'px';
+                ghost.style.top = ev.clientY - ghost._dy + 'px';
+                const gr = grid.getBoundingClientRect();
+                if (ev.clientY < gr.top + 24) grid.scrollTop -= 10;
+                else if (ev.clientY > gr.bottom - 24) grid.scrollTop += 10;
+                unmark();
+                const over = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.coll-item');
+                to = null;
+                if (!over || !grid.contains(over) || over === cell) return;
+                const r = over.getBoundingClientRect();
+                const after = ev.clientX > r.left + r.width / 2;
+                const i = +over.dataset.i;
+                // index in the list once the dragged item is taken out
+                to = (after ? i + 1 : i) - (i > from || (after && i === from) ? 1 : 0);
+                over.classList.add(after ? 'drop-after' : 'drop-before');
+                marked = over;
+            };
+            // release is watched on the window: a re-render (upload done, resize) can replace `cell`
+            const up = () => {
+                endDrag = null;
+                cell.removeEventListener('pointermove', move);
+                cell.removeEventListener('lostpointercapture', up);
+                removeEventListener('pointerup', up);
+                removeEventListener('pointercancel', up);
+                unmark();
+                if (!ghost) return;
+                ghost.remove();
+                cell.classList.remove('dragging');
+                api.setInteracting(false);
+                justDragged = true;
+                setTimeout(() => (justDragged = false));
+                if (to !== null && to !== from && cell.isConnected) moveItem(from, to);
+            };
+            endDrag = up;
+            cell.addEventListener('pointermove', move);
+            cell.addEventListener('lostpointercapture', up);
+            addEventListener('pointerup', up);
+            addEventListener('pointercancel', up);
+        });
+
+        // keyboard: Enter opens, Alt+←/→ moves one place, Alt+↑/↓ one row
+        box.addEventListener('keydown', (e) => {
+            const cell = e.target.closest('.coll-item');
+            if (!cell || e.target !== cell) return;
+            const i = +cell.dataset.i;
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); return openLightbox(i); }
+            const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -autoCols(), ArrowDown: autoCols() }[e.key];
+            if (!e.altKey || !step) return;
+            e.preventDefault();
+            const j = Math.max(0, Math.min(s.items.length - 1, i + step));
+            if (j === i) return;
+            moveItem(i, j);
+            box.querySelector(`.coll-item[data-i="${j}"]`)?.focus();
+            api.announce?.(t('cl.moved', { n: j + 1, total: s.items.length }));
+        });
+
+        // close lightbox: it lives on root (outside box), so box's click handler never sees it
+        root.addEventListener('click', (e) => {
+            if (e.target.closest('.coll-lb')) root.querySelector('.coll-lb')?.remove();
         });
 
         // double-click to edit label
         box.addEventListener('dblclick', (e) => {
+            clearTimeout(lbTimer);
             const item = e.target.closest('.coll-item');
             if (!item || e.target.closest('.coll-del')) return;
             const idx = +item.dataset.i;
@@ -182,16 +271,19 @@ export default {
             input.focus();
             input.select();
 
-            const finish = () => {
-                it.label = input.value.trim();
-                api.save();
+            // once only: removing the input fires blur, which would run this again mid-removal
+            let done = false;
+            const finish = (keep) => {
+                if (done) return;
+                done = true;
+                if (keep) { it.label = input.value.trim(); api.save(); }
                 input.remove();
                 build();
             };
-            input.addEventListener('blur', finish);
+            input.addEventListener('blur', () => finish(true));
             input.addEventListener('keydown', (ev) => {
-                if (ev.key === 'Enter') finish();
-                if (ev.key === 'Escape') { input.remove(); build(); }
+                if (ev.key === 'Enter') finish(true);
+                if (ev.key === 'Escape') finish(false);
             });
         });
 
@@ -206,7 +298,7 @@ export default {
         build();
 
         return {
-            destroy: () => { },
+            destroy: () => { clearTimeout(lbTimer); endDrag?.(); },
             resized: () => build(),
             menu: () => [
                 { text: t('cl.add'), action: chooser },

@@ -2,6 +2,9 @@
 // Hover for controls: ‹ ❚❚ › · 3/12 · ＋ add · 🗑 remove this one · 맞춤/채우기.
 // "액자 없이" (frameless) hides the widget's background and outline, so a transparent PNG/WebP/GIF/SVG
 // sits directly on the desktop.
+import { icon } from "../icons.js";
+import { dropZone } from "../util.js";
+
 const INTERVALS = [5, 10, 30, 60, 300, 1800];
 
 export default {
@@ -20,15 +23,14 @@ export default {
     .imgw { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
     .imgw .slide { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .8s; }
     .imgw .slide.on { opacity: 1; }
-    .imgw .empty { font-size: .85em; opacity: .7; text-align: center; padding: 8px; cursor: pointer;
-      display: flex; flex-direction: column; align-items: center; gap: 4px; overflow: hidden; max-height: 100%; box-sizing: border-box; }
+    .imgw .empty { font-size: var(--fs-small); color: var(--text-muted); text-align: center; padding: 8px; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: var(--space-2); overflow: hidden; max-height: 100%; box-sizing: border-box; }
     .imgw .empty .ico { font-size: 1.8em; line-height: 1; }
     @container (max-width: 9em) { .imgw .empty .txt { display: none; } }
-    .imgw.drop { outline: 2px dashed var(--c2); outline-offset: -6px; }
-    .imgw .tools { position: absolute; left: 6px; right: 6px; bottom: 6px; display: flex; gap: 4px; justify-content: center;
+    .imgw .tools { position: absolute; left: 6px; right: 6px; bottom: 6px; display: flex; gap: var(--space-2); justify-content: center;
       flex-wrap: wrap; opacity: 0; transition: opacity .15s; z-index: 2; }
     .widget:hover .imgw .tools { opacity: 1; }
-    .imgw .tools button, .imgw .tools span { font-size: .8em; padding: 1px 7px; white-space: nowrap;
+    .imgw .tools button, .imgw .tools span { font-size: var(--fs-meta); padding: 1px 7px; white-space: nowrap;
       background: color-mix(in srgb, var(--c1) 75%, transparent); border-radius: 999px; }
     .imgw .tools span { border: var(--line-width) var(--line-style) var(--line-color); font-variant-numeric: tabular-nums; }
     @container (max-width: 13em) { .imgw .tools .opt { display: none; } }
@@ -74,7 +76,7 @@ export default {
       if (!usable.length) {
         const missing = s.imgs.length > 0;
         box.innerHTML = `<div class="empty" title="${t(missing ? "image.missing" : "image.empty")}">
-          <span class="ico">${missing ? "⚠" : "🖼"}</span><span class="txt">${t(missing ? "image.missing" : "image.empty")}</span></div>`;
+          <span class="ico">${icon(missing ? "alert" : "image")}</span><span class="txt">${t(missing ? "image.missing" : "image.empty")}</span></div>`;
         box.firstElementChild.onclick = choose;
         return;
       }
@@ -84,14 +86,14 @@ export default {
         <div class="tools">
           ${
             many
-              ? `<button data-a="prev" title="${t("image.prev")}">‹</button>
-          <button data-a="play" title="${t(s.playing ? "image.pause" : "image.play")}">${s.playing ? "❚❚" : "▶"}</button>
-          <button data-a="next" title="${t("image.next")}">›</button>
+              ? `<button data-a="prev" title="${t("image.prev")}">${icon("left")}</button>
+          <button data-a="play" title="${t(s.playing ? "image.pause" : "image.play")}">${icon(s.playing ? "pause" : "play")}</button>
+          <button data-a="next" title="${t("image.next")}">${icon("right")}</button>
           <span class="opt count"></span>`
               : ""
           }
-          <button data-a="add" title="${t("image.add")}">＋</button>
-          ${many ? `<button class="opt" data-a="del" title="${t("image.remove")}">🗑</button>` : ""}
+          <button data-a="add" title="${t("image.add")}">${icon("plus")}</button>
+          ${many ? `<button class="opt" data-a="del" title="${t("image.remove")}">${icon("trash")}</button>` : ""}
           <button class="opt" data-a="fit">${t(s.fit === "cover" ? "image.fit" : "image.fill")}</button>
         </div>`;
       for (const img of box.querySelectorAll(".slide")) {
@@ -165,10 +167,17 @@ export default {
       }
       if (a === "add") choose();
       if (a === "del") {
-        s.imgs.splice(s.index, 1);
-        s.index = Math.min(s.index, s.imgs.length - 1);
+        const i = s.index;
+        const [gone] = s.imgs.splice(i, 1);
+        s.index = Math.min(i, s.imgs.length - 1);
         api.save();
         build();
+        api.deleted(() => {
+          s.imgs.splice(Math.min(i, s.imgs.length), 0, gone);
+          s.index = i;
+          api.save();
+          build();
+        });
       }
       if (a === "fit") {
         s.fit = s.fit === "cover" ? "contain" : "cover";
@@ -176,16 +185,7 @@ export default {
         build();
       }
     });
-    box.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      box.classList.add("drop");
-    });
-    box.addEventListener("dragleave", () => box.classList.remove("drop"));
-    box.addEventListener("drop", (e) => {
-      e.preventDefault();
-      box.classList.remove("drop");
-      add(e.dataTransfer.files);
-    });
+    dropZone(box, t("w.drop"), add);
 
     const secs = (n) =>
       n < 60 ? t("image.sec", { n }) : t("image.min", { n: n / 60 });

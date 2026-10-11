@@ -43,8 +43,9 @@ select:focus {
 select option {
   background: var(--c1);
 }
-input[type="date"] {
-  color-scheme: dark;
+input[type="date"],
+input[type="time"] {
+  color-scheme: var(--scheme, dark); /* set from the theme surface by syncScheme() */
 }
 button {
   background: color-mix(in srgb, var(--c3) 10%, transparent);
@@ -152,7 +153,7 @@ body.edit #board {
   align-items: center;
   gap: 4px;
   padding: 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   cursor: grab;
   opacity: 0;
   transition: opacity 0.15s;
@@ -163,15 +164,15 @@ body.edit #board {
 }
 .w-head .grip {
   letter-spacing: -2px;
-  opacity: 0.7;
+  color: var(--text-muted);
 }
 .w-head .title {
   flex: 1;
-  opacity: 0.8;
+  color: var(--text-muted);
 }
 .w-head button {
   padding: 0 6px;
-  font-size: 11px;
+  font-size: var(--fs-meta);
   line-height: 16px;
   display: none;
 }
@@ -211,12 +212,12 @@ body.edit .w-resize {
   flex-direction: column;
   gap: 4px;
   font-size: 0.8em;
-  opacity: 0.8;
+  color: var(--text-muted);
   overflow: auto;
   overflow-wrap: anywhere;
 }
 .w-error small {
-  opacity: 0.6;
+  color: var(--text-faint);
 }
 
 /* frameless widgets (image "sticker" mode): the picture's own transparency shows the desktop */
@@ -234,18 +235,34 @@ body.edit .widget.frameless {
   outline-offset: -1px;
 }
 
-/* ---------- layout settings ---------- */
+/* ---------- layout settings + derived tokens ---------- */
+/* Derived from the theme inputs (--c1/--c3, --radius); set on .widget so per-widget and
+   [data-widget] colours resolve here (and on :root for panels and the settings window). */
+:root,
 .widget {
   --head-h: 24px;
   --pad: 8px;
+  --density: 1;
+  --text-muted: color-mix(in srgb, var(--c3) 72%, var(--c1));
+  --text-faint: color-mix(in srgb, var(--c3) 50%, var(--c1));
+  --space-1: calc(2px * var(--density));
+  --space-2: calc(4px * var(--density));
+  --space-3: calc(6px * var(--density));
+  --space-4: calc(8px * var(--density));
+  --r-inner: calc(var(--radius) * 0.4);
+  --fs-meta: 0.75em;
+  --fs-small: 0.875em;
+  --fs-title: 1.125em;
 }
 body.density-compact .widget {
   --pad: 4px;
   --head-h: 20px;
+  --density: 0.75;
 }
 body.density-roomy .widget {
   --pad: 13px;
   --head-h: 28px;
+  --density: 1.3;
 }
 body.header-always .w-head,
 body.header-always .w-resize {
@@ -269,9 +286,8 @@ body.lock-layout:not(.edit) .w-head {
   padding: 0 2px;
   margin: 0;
   cursor: inherit;
-  color: inherit;
   letter-spacing: -2px;
-  opacity: 0.7;
+  color: var(--text-muted);
   display: inline-block;
   font-size: inherit;
   line-height: inherit;
@@ -293,9 +309,32 @@ body.show-controls .ev-del,
 body.show-controls .memo-colors {
   opacity: 1 !important;
 }
+/* hover-only controls also appear for keyboard users */
+.ck-row:focus-within .ck-btn,
+.ev:focus-within :is(.ev-link, .ev-cfg, .ev-del),
+.ap-track:focus-within .del,
+.widget:focus-within :is(.memo-colors, .imgw .tools, .sc .nav) {
+  opacity: 1;
+}
+/* WCAG 2.2 target size: every widget button gets an invisible hit area of at least 24px; the look
+   stays compact. (.coll-del is already absolute; chips use ::before for the high-contrast tick.) */
+.widget button:not(.coll-del) {
+  position: relative;
+}
+.widget button:not(.chip)::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 24px);
+  height: max(100%, 24px);
+  transform: translate(-50%, -50%);
+}
 body.high-contrast .widget {
   background: var(--c1) !important;
   border: 2px solid var(--c3) !important;
+  --text-muted: var(--c3);
+  --text-faint: var(--c3);
 }
 body.high-contrast .widget > .w-bg {
   display: none;
@@ -366,16 +405,47 @@ body.wide-text .widget {
   }
 }
 
-/* reduced motion (tray setting, or Windows animation effects off): nothing slides, fades or blinks */
+/* reduced motion (settings, or Windows animation effects off): nothing slides, scales or blinks;
+   opacity and colour changes stay as short fades */
 body.reduce-motion *,
 body.reduce-motion *::before,
 body.reduce-motion *::after {
-  transition: none !important;
+  transition-property: opacity, color, background-color, border-color !important;
+  transition-duration: 0.15s !important;
   animation: none !important;
   scroll-behavior: auto !important;
 }
 body.reduce-motion .widget.moving {
   box-shadow: 0 0 0 2px var(--c2);
+}
+
+/* file drop target (util.js dropZone) */
+.w-dropping::after {
+  content: attr(data-drop-label);
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--c2) 12%, var(--c1));
+  border: 2px dashed var(--c2);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+
+/* control icons (ui/icons.js): follow the text colour; themes may set --icon-stroke */
+.icon {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--icon-stroke, 2);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -0.15em;
 }
 
 /* shared chip (filters) */
@@ -384,7 +454,7 @@ body.reduce-motion .widget.moving {
   padding: 1px 9px;
   border-radius: 999px;
   white-space: nowrap;
-  opacity: 0.8;
+  color: var(--text-muted);
 }
 .chip.on {
   background: var(--c2);
@@ -394,7 +464,7 @@ body.reduce-motion .widget.moving {
 }
 .chip.off {
   text-decoration: line-through;
-  opacity: 0.4;
+  color: var(--text-faint);
 }
 
 /* ---------- overlays ---------- */
@@ -413,7 +483,6 @@ body.reduce-motion .widget.moving {
   border-radius: 999px;
   font-size: 13px;
 }
-#theme-panel,
 #font-panel {
   position: fixed;
   top: 24px;
@@ -432,67 +501,6 @@ body.reduce-motion .widget.moving {
   right: auto;
   width: 300px;
 }
-#settings-panel {
-  position: fixed;
-  top: 24px;
-  right: 24px;
-  z-index: 50;
-  width: 330px;
-  max-height: calc(100vh - 110px);
-  overflow-y: auto;
-  padding: 14px 16px;
-  display: grid;
-  gap: 8px;
-  font-size: 13px;
-  scrollbar-width: thin;
-  background: var(--c1);
-  border: var(--line-width) var(--line-style) var(--line-color);
-  border-radius: var(--radius);
-}
-#settings-panel h3 {
-  margin: 0;
-  font-size: 14px;
-}
-#settings-panel fieldset {
-  border: 1px solid color-mix(in srgb, var(--c3) 18%, transparent);
-  border-radius: 8px;
-  padding: 6px 10px 10px;
-  margin: 0;
-  display: grid;
-  gap: 7px;
-}
-#settings-panel legend {
-  padding: 0 4px;
-  font-weight: 600;
-  opacity: 0.85;
-}
-#settings-panel label {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-}
-#settings-panel label.chk {
-  justify-content: flex-start;
-}
-#settings-panel select {
-  max-width: 60%;
-}
-#settings-panel input[type="range"] {
-  width: 130px;
-  accent-color: var(--c2);
-}
-#settings-panel .hint {
-  margin: 2px 0 0;
-  font-size: 12px;
-  opacity: 0.7;
-  line-height: 1.5;
-}
-#settings-panel .row {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
 #toast button {
   margin-left: 8px;
   padding: 1px 10px;
@@ -505,78 +513,21 @@ body.reduce-motion .widget.moving {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-#paste-panel {
-  position: fixed;
-  top: 24px;
-  right: 320px;
-  z-index: 51;
-  width: 380px;
-  padding: 14px 16px;
-  display: grid;
-  gap: 8px;
-  font-size: 13px;
-  background: var(--c1);
-  border: var(--line-width) var(--line-style) var(--line-color);
-  border-radius: var(--radius);
-}
-#paste-panel h3 {
-  margin: 0;
-  font-size: 14px;
-}
-#paste-panel p {
-  margin: 0;
-  opacity: 0.75;
-  line-height: 1.45;
-}
-#paste-panel textarea {
-  height: 220px;
-  resize: vertical;
-  font-family: Consolas, "Cascadia Mono", monospace;
-  font-size: 12px;
-}
-#paste-panel .row,
-#theme-panel .ai {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-#theme-panel .ai {
-  justify-content: stretch;
-  border-top: 1px solid color-mix(in srgb, var(--c3) 15%, transparent);
-  padding-top: 8px;
-}
-#theme-panel .ai button {
-  flex: 1;
-}
-#paste-result {
-  min-height: 1.2em;
-}
-#paste-result.bad {
-  color: var(--danger);
-}
-#paste-result.warn {
-  color: color-mix(in srgb, #ffb020 85%, var(--c3));
-}
-#theme-panel h3,
 #font-panel h3 {
   margin: 0 0 4px;
   font-size: 14px;
 }
-#theme-panel label,
 #font-panel label {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
 }
-#theme-panel input[type="range"],
 #font-panel input[type="range"] {
   width: 120px;
   accent-color: var(--c2);
   vertical-align: middle;
 }
-#theme-font,
 #fp-family {
   width: 140px;
 }
@@ -586,14 +537,6 @@ body.reduce-motion .widget.moving {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-#theme-panel input[type="color"] {
-  width: 44px;
-  height: 24px;
-  border: 0;
-  padding: 0;
-  background: none;
-}
-#theme-panel .row,
 #font-panel .row {
   display: flex;
   gap: 8px;
@@ -678,7 +621,7 @@ body.show-hints .w-hint {
   display: block;
   flex: 1;
   min-width: 0;
-  opacity: 0.7;
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -782,8 +725,7 @@ body.cvd-safe .widget.invalid {
 }
 
 /* panels added in v0.10 */
-#overview-panel,
-#layouts-panel {
+#overview-panel {
   position: fixed;
   top: 24px;
   right: 24px;
@@ -800,13 +742,54 @@ body.cvd-safe .widget.invalid {
   border: var(--line-width) var(--line-style) var(--line-color);
   border-radius: var(--radius);
 }
-#overview-panel h3,
-#layouts-panel h3 {
+#welcome {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 55;
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px 20px;
+  display: grid;
+  gap: 12px;
+  font-size: 13px;
+  background: var(--c1);
+  border: var(--line-width) var(--line-style) var(--line-color);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+}
+#welcome h3,
+#welcome p {
+  margin: 0;
+}
+#welcome h3 {
+  font-size: 16px;
+}
+#welcome p {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.wc-presets {
+  display: grid;
+  gap: 8px;
+}
+.wc-presets button {
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  text-align: left;
+}
+.wc-presets small {
+  color: var(--text-muted);
+}
+#wc-blank {
+  justify-self: end;
+}
+#overview-panel h3 {
   margin: 0;
   font-size: 14px;
 }
-#overview-list,
-#layout-list {
+#overview-list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -822,49 +805,11 @@ body.cvd-safe .widget.invalid {
   margin-right: 4px;
   font-weight: 600;
 }
-#overview-panel .row,
-#layouts-panel .row {
+#overview-panel .row {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
 }
-#layouts-panel .row input {
-  flex: 1;
-}
-#layouts-panel .presets {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-#layouts-panel .presets button {
-  display: grid;
-  gap: 2px;
-  text-align: left;
-  padding: 8px 10px;
-}
-#layouts-panel .presets small {
-  opacity: 0.7;
-  line-height: 1.35;
-}
-#layout-list li {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-#layout-list li span {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-#layout-list li small {
-  opacity: 0.6;
-}
-#layout-list .empty {
-  opacity: 0.6;
-}
-#layouts-panel .hint,
-#layouts-panel .sub,
 #font-panel .sub {
   margin: 0;
   font-size: 12px;
@@ -875,19 +820,6 @@ body.cvd-safe .widget.invalid {
   margin-top: 4px;
   font-weight: 600;
   opacity: 0.8;
-}
-#settings-panel h4 {
-  margin: 6px 0 0;
-  font-size: 12px;
-  opacity: 0.75;
-  font-weight: 600;
-}
-#settings-panel input[type="time"] {
-  background: color-mix(in srgb, var(--c3) 8%, transparent);
-  color-scheme: dark;
-  border: 1px solid color-mix(in srgb, var(--c3) 20%, transparent);
-  border-radius: 6px;
-  padding: 2px 6px;
 }
 #font-panel {
   max-height: calc(100vh - 48px);

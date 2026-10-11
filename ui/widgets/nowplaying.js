@@ -1,6 +1,8 @@
 // Now Playing: whatever Windows' media controls report — YouTube in Chrome/Edge/Whale/Firefox, Spotify,
 // the Media Player app… Title, channel/artist, artwork, progress, and ⏮ ⏯ ⏭. Click the bar to jump.
 // ⇄ switches between sources when several are open (e.g. a YouTube tab and Spotify).
+import { icon } from "../icons.js";
+
 const p2 = (n) => String(n).padStart(2, "0");
 const clock = (sec) => {
   sec = Math.max(0, Math.floor(sec));
@@ -41,7 +43,7 @@ export default {
   min: { w: 3, h: 1 },
   defaults: {},
   css: `
-    .np { position: absolute; inset: 0; display: flex; gap: 10px; align-items: center; box-sizing: border-box;
+    .np { position: absolute; inset: 0; display: flex; gap: var(--space-4); align-items: center; box-sizing: border-box;
       padding: calc(var(--head-h) - 2px) calc(var(--pad) + 2px) var(--pad); overflow: hidden; }
     .np-bg { position: absolute; inset: -20px; background-size: cover; background-position: center;
       filter: blur(18px) saturate(1.3); opacity: .35; pointer-events: none; }
@@ -49,29 +51,29 @@ export default {
       border-radius: calc(var(--radius) * .5); overflow: hidden; background: color-mix(in srgb, var(--c3) 10%, transparent);
       display: grid; place-items: center; font-size: 1.6em; }
     .np-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .np-info { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; justify-content: center; }
+    .np-info { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); justify-content: center; }
     .np-title { font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2;
       -webkit-box-orient: vertical; overflow-wrap: anywhere; }
-    .np-sub { font-size: .8em; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .np-prog { display: flex; align-items: center; gap: 6px; font-size: .72em; opacity: .85; font-variant-numeric: tabular-nums; }
+    .np-sub { font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .np-prog { display: flex; align-items: center; gap: var(--space-3); font-size: var(--fs-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; }
     .np-bar { flex: 1; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--c3) 18%, transparent);
       position: relative; cursor: pointer; }
     .np-bar::before { content: ""; position: absolute; inset: -6px 0; } /* bigger click target */
     .np-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; background: var(--c2); }
     .np-bar.noseek { cursor: default; }
-    .np-ctrl { display: flex; gap: 4px; align-items: center; }
+    .np-ctrl { display: flex; gap: var(--space-2); align-items: center; }
     .np-ctrl button { padding: 0 9px; line-height: 1.6; }
     .np-ctrl button:disabled { opacity: .3; cursor: default; }
     .np-ctrl [data-a=playpause] { background: var(--c2); border-color: var(--c2); color: var(--on-accent); }
-    .np-ctrl [data-a=cycle] { margin-left: auto; font-size: .8em; opacity: .7; }
-    .np-empty { position: relative; flex: 1; text-align: center; opacity: .6; font-size: .85em; }
-    .np-empty small { display: block; opacity: .8; margin-top: 2px; }
+    .np-ctrl [data-a=cycle] { margin-left: auto; font-size: var(--fs-meta); color: var(--text-muted); }
+    .np-empty { position: relative; flex: 1; text-align: center; color: var(--text-faint); font-size: var(--fs-small); }
+    .np-empty small { display: block; margin-top: 2px; }
     /* short widget: one line */
     @container (max-height: 7.5em) {
-      .np { padding-top: 8px; gap: 8px; }
+      .np { padding-top: 8px; gap: var(--space-4); }
       .np-prog, .np-sub, .np-ctrl [data-a=cycle] { display: none; }
-      .np-info { flex-direction: row; align-items: center; gap: 6px; }
-      .np-title { flex: 1; min-width: 4em; -webkit-line-clamp: 2; font-size: .9em; }
+      .np-info { flex-direction: row; align-items: center; gap: var(--space-3); }
+      .np-title { flex: 1; min-width: 4em; -webkit-line-clamp: 2; font-size: var(--fs-small); }
       .np-ctrl button { padding: 0 6px; }
     }
     @container (max-height: 7.5em) and (max-width: 20em) { .np-ctrl [data-a=prev] { display: none; } }
@@ -107,23 +109,23 @@ export default {
     function build() {
       clearInterval(tick);
       if (!m.has) {
-        box.innerHTML = `<div class="np-empty">🎵 ${t("np.none")}<small>${t(m.unsupported ? "np.unsupported" : "np.hint")}</small></div>`;
+        box.innerHTML = `<div class="np-empty">${icon("music")} ${t("np.none")}<small>${t(m.unsupported ? "np.unsupported" : "np.hint")}</small></div>`;
         return;
       }
       const src = sourceName(m.source);
       const sub = [m.artist, src].filter(Boolean).join(" · ");
       box.innerHTML = `
         ${m.thumb ? `<div class="np-bg"></div>` : ""}
-        <div class="np-art">${m.thumb ? `<img alt="">` : "🎵"}</div>
+        <div class="np-art">${m.thumb ? `<img alt="">` : icon("music")}</div>
         <div class="np-info">
           <div class="np-title"></div>
           <div class="np-sub"></div>
           ${m.duration ? `<div class="np-prog"><span class="np-cur"></span><div class="np-bar ${m.canSeek ? "" : "noseek"}"><i></i></div><span>${clock(m.duration)}</span></div>` : ""}
           <div class="np-ctrl">
-            <button data-a="prev" title="${t("np.prev")}" ${m.canPrev ? "" : "disabled"}>⏮</button>
-            <button data-a="playpause" title="${t(m.status === "playing" ? "np.pause" : "np.play")}" ${m.canPlayPause ? "" : "disabled"}>${m.status === "playing" ? "❚❚" : "▶"}</button>
-            <button data-a="next" title="${t("np.next")}" ${m.canNext ? "" : "disabled"}>⏭</button>
-            ${m.sessions > 1 ? `<button data-a="cycle" title="${t("np.cycle", { n: m.sessions })}">⇄ ${m.sessions}</button>` : ""}
+            <button data-a="prev" title="${t("np.prev")}" ${m.canPrev ? "" : "disabled"}>${icon("prev")}</button>
+            <button data-a="playpause" title="${t(m.status === "playing" ? "np.pause" : "np.play")}" ${m.canPlayPause ? "" : "disabled"}>${icon(m.status === "playing" ? "pause" : "play")}</button>
+            <button data-a="next" title="${t("np.next")}" ${m.canNext ? "" : "disabled"}>${icon("next")}</button>
+            ${m.sessions > 1 ? `<button data-a="cycle" title="${t("np.cycle", { n: m.sessions })}">${icon("cycle")} ${m.sessions}</button>` : ""}
           </div>
         </div>`;
       const title = box.querySelector(".np-title");
@@ -199,7 +201,7 @@ export default {
       destroy: () => clearInterval(tick),
       summary: () =>
         m.has
-          ? [m.title, m.artist].filter(Boolean).join(" — ") +
+          ? [m.title, m.artist].filter(Boolean).join(" - ") +
             (m.status === "paused" ? ` (${t("sum.paused")})` : "")
           : t("sum.np_none"),
     };

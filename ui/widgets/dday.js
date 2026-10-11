@@ -12,6 +12,7 @@ import {
   wheelScrollX,
   occursOn,
 } from "../util.js";
+import { icon } from "../icons.js";
 
 const STATUSES = ["all", "upcoming", "past"];
 
@@ -22,62 +23,62 @@ export default {
   defaults: { items: [], filter: { status: "all", tags: [] }, view: "list" },
   css: `
     .dd { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
-      display: flex; flex-direction: column; gap: 6px; }
-    .dd-top { display: flex; gap: 4px; align-items: center; flex: none; min-width: 0; }
-    .dd-view { flex: none; padding: 0 7px; font-size: .85em; }
+      display: flex; flex-direction: column; gap: var(--space-3); }
+    .dd-top { display: flex; gap: var(--space-2); align-items: center; flex: none; min-width: 0; }
+    .dd-view { flex: none; padding: 0 7px; font-size: var(--fs-small); }
     .dd-top .dd-filter { flex: 1; min-width: 0; }
-    .dd-filter { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; flex: none;
+    .dd-filter { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; flex: none;
       mask-image: linear-gradient(to right, #000 88%, transparent); }
-    .dd-badge { font-size: .7em; color: var(--c2); border: 1px solid var(--c2); border-radius: 4px;
-      padding: 0 3px; margin-left: 4px; opacity: .8; vertical-align: middle; }
+    .dd-badge { font-size: var(--fs-meta); color: color-mix(in srgb, var(--c2) 80%, var(--c1)); border: 1px solid var(--c2); border-radius: var(--r-inner);
+      padding: 0 3px; margin-left: 4px; vertical-align: middle; }
     .dd-row.dd-sched { cursor: default; touch-action: auto; }
     .dd-filter .chip { max-width: 9em; overflow: hidden; text-overflow: ellipsis; flex: none; }
-    .dd-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px;
+    .dd-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1);
       scrollbar-width: thin; }
-    .dd-row { display: flex; align-items: center; gap: .7em; padding: .35em .45em; border-radius: 6px;
+    .dd-row { display: flex; align-items: center; gap: .7em; padding: .35em .45em; border-radius: var(--r-inner);
       cursor: pointer; touch-action: none; }
     .dd-row:hover { background: color-mix(in srgb, var(--c3) 8%, transparent); }
     .dd-row.dragging { opacity: .25; }
     .dd-row.drop-before { box-shadow: 0 -2px 0 var(--c2); }
     .dd-row.drop-after { box-shadow: 0 2px 0 var(--c2); }
-    .dd-list.drop-empty { outline: 2px dashed var(--c2); outline-offset: -2px; border-radius: 6px; }
+    .dd-list.drop-empty { outline: 2px dashed var(--c2); outline-offset: -2px; border-radius: var(--r-inner); }
     .dd-av { width: 2.4em; height: 2.4em; border-radius: 50%; flex: none; overflow: hidden;
       background: var(--c2); display: grid; place-items: center; font-weight: 700; color: var(--on-accent); }
     .dd-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .dd-text { flex: 1; min-width: 0; }
     .dd-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .dd-sub { font-size: .75em; opacity: .6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .dd-d { font-weight: 700; color: var(--c2); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
+    .dd-sub { font-size: var(--fs-meta); color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dd-d { font-weight: 700; font-family: var(--font-num, var(--font)); color: var(--c2); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
     .dd-d.today { background: var(--c2); color: var(--on-accent); padding: 0 .5em; border-radius: 999px; }
-    .dd-d.past { color: var(--c3); opacity: .5; }
-    .dd-empty { opacity: .5; font-size: .85em; padding: 8px 4px; }
-    .dd-add { flex: none; font-size: .85em; }
+    .dd-d.past { color: var(--text-faint); }
+    .dd-empty { color: var(--text-faint); font-size: var(--fs-small); padding: 8px 4px; }
+    .dd-add { flex: none; font-size: var(--fs-small); }
     .dd-ghost { position: fixed; z-index: 100; pointer-events: none; background: var(--c1);
-      border-radius: 6px; box-shadow: 0 6px 22px rgb(0 0 0 / .45); opacity: .95; font-family: var(--font); }
+      border-radius: var(--r-inner); box-shadow: 0 6px 22px rgb(0 0 0 / .45); opacity: .95; font-family: var(--font); }
     .dd-editor { position: absolute; inset: 0; z-index: 6; padding: calc(var(--head-h) + 4px) calc(var(--pad) + 2px) calc(var(--pad) + 2px); box-sizing: border-box;
       background: color-mix(in srgb, var(--c1) 96%, transparent); overflow-y: auto;
-      display: flex; flex-direction: column; gap: 6px; font-size: .9em; }
-    .dd-ed-top { display: flex; gap: 8px; align-items: center; }
+      display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--fs-small); }
+    .dd-ed-top { display: flex; gap: var(--space-4); align-items: center; }
     .dd-ed-top .dd-av { width: 3.4em; height: 3.4em; cursor: pointer; border: 0; padding: 0; font-size: 1em; }
-    .dd-ed-fields { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .dd-ed-fields { flex: 1; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
     .dd-editor input, .dd-editor select { width: 100%; box-sizing: border-box; }
-    .dd-ms { display: flex; flex-direction: column; gap: 5px; }
-    .dd-ms-row { display: flex; gap: 6px; align-items: center; }
-    .dd-ms-row > span { flex: none; opacity: .7; }
+    .dd-ms { display: flex; flex-direction: column; gap: var(--space-3); }
+    .dd-ms-row { display: flex; gap: var(--space-3); align-items: center; }
+    .dd-ms-row > span { flex: none; color: var(--text-muted); }
     .dd-ms-row input[data-f=mstep] { width: 4em; flex: none; }
     .dd-ms-row select { flex: 1; }
-    .dd-ms-cf { display: flex; gap: 6px; align-items: center; font-size: .82em; opacity: .65; }
+    .dd-ms-cf { display: flex; gap: var(--space-3); align-items: center; font-size: var(--fs-small); color: var(--text-faint); }
     .dd-ms-cf input { width: auto; flex: none; }
-    .dd-icons { display: flex; flex-wrap: wrap; gap: 6px; max-height: 8.5em; overflow-y: auto; }
-    .dd-icons .dd-av { width: 2.2em; height: 2.2em; cursor: pointer; font-size: .8em; border: 0; padding: 0; }
+    .dd-icons { display: flex; flex-wrap: wrap; gap: var(--space-3); max-height: 8.5em; overflow-y: auto; }
+    .dd-icons .dd-av { width: 2.2em; height: 2.2em; cursor: pointer; font-size: var(--fs-meta); border: 0; padding: 0; }
     .dd-icons .dd-av.sel { outline: 2px solid var(--c2); outline-offset: 1px; }
-    .dd-ed-btns { display: flex; gap: 6px; margin-top: auto; }
+    .dd-ed-btns { display: flex; gap: var(--space-3); margin-top: auto; }
     .dd-ed-btns .sp { flex: 1; }
     .dd-text { min-width: 1.2em; }
     @container (max-width: 13em) {
       .dd-sub { display: none; }
-      .dd-av { width: 1.7em; height: 1.7em; font-size: .9em; }
-      .dd-d { font-size: .85em; }
+      .dd-av { width: 1.7em; height: 1.7em; font-size: var(--fs-small); }
+      .dd-d { font-size: var(--fs-small); }
       .dd-row { gap: .45em; }
     }
   `,
@@ -255,7 +256,7 @@ export default {
       `<div class="dd-av ${cls}">${it.icon ? `<img src="${esc(api.assetUrl(it.icon))}" alt="">` : esc((it.name || "?").trim().charAt(0))}</div>`;
 
     function render() {
-      viewBtn.textContent = s.view === "list" ? "🗓" : "≡";
+      viewBtn.innerHTML = icon(s.view === "list" ? "calendar" : "list");
       viewBtn.title = t(s.view === "list" ? "dday.view_schedule" : "dday.view_list");
       if (s.view === "schedule") {
         bar.hidden = true;
@@ -372,6 +373,7 @@ export default {
       items.splice(idx, 0, item);
     }
 
+    let endDrag = null; // set while a reorder drag runs; destroy() calls it
     list.addEventListener("pointerdown", (e) => {
       const row = e.target.closest(".dd-row");
       if (!row || e.button !== 0 || s.view !== "list") return;
@@ -429,12 +431,15 @@ export default {
         mark[0].classList.add(mark[1]);
         marked.push(mark[0]);
       };
-      const up = () => {
+      // release is watched on the window: a store sync or day change can re-render `row` away
+      const up = (ev) => {
+        endDrag = null;
         row.removeEventListener("pointermove", move);
-        row.removeEventListener("pointerup", up);
-        row.removeEventListener("pointercancel", up);
+        row.removeEventListener("lostpointercapture", up);
+        removeEventListener("pointerup", up);
+        removeEventListener("pointercancel", up);
         clearMarks();
-        if (!ghost) return openEditor(item); // plain click = edit
+        if (!ghost) return ev?.type === "pointerup" && openEditor(item); // plain click = edit
         ghost.remove();
         row.classList.remove("dragging");
         api.setInteracting(false);
@@ -444,9 +449,11 @@ export default {
         persist();
         render();
       };
+      endDrag = up;
       row.addEventListener("pointermove", move);
-      row.addEventListener("pointerup", up);
-      row.addEventListener("pointercancel", up);
+      row.addEventListener("lostpointercapture", up);
+      addEventListener("pointerup", up);
+      addEventListener("pointercancel", up);
     });
 
     // keyboard: Enter opens the editor, Alt+↑/↓ moves the D-day up/down (same as dragging)
@@ -549,7 +556,7 @@ export default {
       const paintIcon = () =>
         (iconBtn.innerHTML = it.icon
           ? `<img src="${esc(api.assetUrl(it.icon))}" alt="">`
-          : "＋");
+          : icon("plus"));
       paintIcon();
       f("name").focus();
 
@@ -560,8 +567,8 @@ export default {
           ...new Set([...used, ...(await api.listAssets().catch(() => []))]),
         ].slice(0, 60);
         icons.innerHTML =
-          `<button class="dd-av" data-up title="${t("dday.icon_upload")}">⬆</button>` +
-          `<button class="dd-av" data-none title="${t("dday.icon_none")}">∅</button>` +
+          `<button class="dd-av" data-up title="${t("dday.icon_upload")}">${icon("upload")}</button>` +
+          `<button class="dd-av" data-none title="${t("dday.icon_none")}">${icon("none")}</button>` +
           all
             .map(
               (a) =>
@@ -626,11 +633,7 @@ export default {
       };
     }
 
-    // re-render when the date rolls over
-    let day = today();
-    const tick = setInterval(() => {
-      if (today() !== day) ((day = today()), render());
-    }, 60000);
+    api.onDayChange(() => render()); // re-render when the date rolls over
 
     // load the shared store (migrating any legacy items once) and stay in sync with the calendar
     const load = async () => {
@@ -645,7 +648,7 @@ export default {
     render();
     load();
     return {
-      destroy: () => clearInterval(tick),
+      destroy: () => endDrag?.(),
       summary: () => {
         const list = visible();
         if (!list.length) return t("sum.dday_empty");

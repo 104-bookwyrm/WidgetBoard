@@ -8,7 +8,10 @@
     "test:stress": "node tests/stress.mjs",
     "test:v10": "node tests/v10.mjs",
     "test:v11": "node tests/v11.mjs",
-    "test:v12": "node tests/v12.mjs"
+    "test:v12": "node tests/v12.mjs",
+    "test:persistence": "node tests/persistence.mjs",
+    "test": "npm run test:persistence && npm run test:mock && npm run test:v10 && npm run test:v11 && npm run test:v12 && npm run test:stress",
+    "test:mock": "node tests/mock.mjs"
   },
   "devDependencies": {
     "pngjs": "^7.0.0",

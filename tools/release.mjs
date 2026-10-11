@@ -36,7 +36,7 @@ const die = (m) => (console.error("error: " + m), process.exit(1));
 if (cmd === "keygen") {
   const file = keyFile();
   if (fs.existsSync(file))
-    die(`${file} already exists — refusing to overwrite a release key`);
+    die(`${file} already exists - refusing to overwrite a release key`);
   const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, privateKey.export({ type: "pkcs8", format: "pem" }), {

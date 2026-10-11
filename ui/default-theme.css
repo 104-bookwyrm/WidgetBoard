@@ -1,6 +1,7 @@
-/* WidgetBoard theme — edit freely, paste one from an AI, or share it. Saved changes apply instantly.
+/* WidgetBoard theme - edit freely, paste one from an AI, or share it. Saved changes apply instantly.
    Contract (v1): only CSS custom properties, in :root { } and optional [data-widget="type"] { } blocks.
-   Widget types: checklist calendar dday diary memo nowplaying timer stopwatch image */
+   Widget types: checklist calendar dday diary memo nowplaying timer stopwatch clock image
+   showcase collection audioplayer */
 :root {
   /* the three main colours */
   --c1: #1e1f22; /* surface (widget background) */
@@ -29,6 +30,7 @@
   --font:
     "Segoe UI Variable", "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
   --font-size: 14px; /* base text size; widget text scales from it */
+  /* --font-num: "Bahnschrift", "Malgun Gothic", sans-serif;   optional: font for big numbers (timer, clock, D-day) */
 
   /* grid (changing these moves widgets) */
   --cell: 80px;

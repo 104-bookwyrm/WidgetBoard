@@ -15,6 +15,8 @@ use std::{
     time::{Duration, Instant, SystemTime},
 };
 
+mod backup_policy;
+mod flush;
 mod media;
 mod updater;
 
@@ -118,6 +120,9 @@ impl AppState {
     }
     fn persist_settings(&self) {
         // app settings now live under config.json "app" (merged from the old settings.json in v0.12).
+        if config_broken(&self.dir) {
+            return; // applies for this session; the unreadable file is left for the user to fix
+        }
         let s = self.settings.lock().unwrap().clone();
         let mut cfg = read_config(&self.dir);
         if !cfg.is_object() {
@@ -191,6 +196,13 @@ fn valid_date(d: &str) -> bool {
         && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
 }
 
+/// config.json exists but isn't valid JSON (a hand-edit typo). It must never be overwritten then:
+/// the user's settings are still in it. The app runs on defaults until the file is fixed.
+fn config_broken(dir: &Path) -> bool {
+    fs::read_to_string(dir.join("config.json"))
+        .map_or(false, |s| serde_json::from_str::<Value>(&s).is_err())
+}
+
 fn read_config(dir: &Path) -> Value {
     read_json(&dir.join("config.json"))
         .or_else(|| serde_json::from_str(DEFAULT_CONFIG).ok())
@@ -213,6 +225,9 @@ fn load_settings(dir: &Path) -> Settings {
 /// One-time v0.12 migration: fold settings.json into config.json "app", and the legacy
 /// checklist.weekStart into ui.weekStart. Idempotent; leaves settings.json in place for rollback.
 fn migrate_config(dir: &Path) {
+    if config_broken(dir) {
+        return; // never replace a file we can't read
+    }
     let mut cfg = read_config(dir);
     if !cfg.is_object() {
         cfg = json!({});
@@ -280,6 +295,7 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
         "edit": state.edit.load(Ordering::Relaxed),
         "config": read_config(&state.dir),
         "autostart": autostart_get(),
+        "configBroken": i_am_primary && config_broken(&state.dir),
         "assetsDir": state.dir.join("assets"),
         "version": updater::CURRENT,
         "justUpdated": if i_am_primary { state.just_updated.lock().unwrap().take() } else { None },
@@ -509,6 +525,9 @@ fn save_config(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(
             (b, p) => *b = p,
         }
     }
+    if config_broken(&state.dir) {
+        return Err("config_broken".into()); // the UI tells the user; their file stays untouched
+    }
     let mut cfg = read_config(&state.dir);
     if !cfg.is_object() {
         cfg = json!({});
@@ -708,6 +727,7 @@ fn get_settings(state: State<AppState>) -> Value {
         "version": updater::CURRENT,
         "displays": state.boards.lock().unwrap().clone(),
         "widgets": widgets,
+        "widgetTypes": WIDGETS,
         "dataDir": state.dir.to_string_lossy(),
     })
 }
@@ -766,8 +786,9 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
     Ok(())
 }
 
+/// async: building a window inside a sync command deadlocks the IPC on Windows (tauri docs).
 #[tauri::command]
-fn open_settings(app: AppHandle, page: Option<String>) -> Result<(), String> {
+async fn open_settings(app: AppHandle, page: Option<String>) -> Result<(), String> {
     open_settings_window(&app, page.as_deref().unwrap_or("general")).map_err(|e| e.to_string())
 }
 
@@ -1230,9 +1251,28 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<(), String> {
         if p.is_dir() {
             copy_dir(&p, &dst.join(entry.file_name()))?;
         } else if p.extension().map_or(true, |e| e != "tmp") {
-            fs::copy(&p, dst.join(entry.file_name())).map_err(|e| e.to_string())?;
+            copy_verified(&p, &dst.join(entry.file_name()))?;
         }
     }
+    Ok(())
+}
+
+fn copy_verified(src: &Path, dst: &Path) -> Result<(), String> {
+    use std::io::Read;
+    use sha2::{Digest, Sha256};
+    fn hash(path: &Path) -> Result<Vec<u8>, String> {
+        let mut file = fs::File::open(path).map_err(|e| e.to_string())?;
+        let mut digest = Sha256::new();
+        let mut buf = [0u8; 65536];
+        loop {
+            let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+            if n == 0 { break; }
+            digest.update(&buf[..n]);
+        }
+        Ok(digest.finalize().to_vec())
+    }
+    fs::copy(src, dst).map_err(|e| e.to_string())?;
+    if hash(src)? != hash(dst)? { return Err(format!("backup verification failed: {}", src.display())); }
     Ok(())
 }
 
@@ -1252,19 +1292,37 @@ fn backups_root(app: &AppHandle, dir: &Path) -> PathBuf {
 /// Copy the live data into a new timestamped folder under `root`. `tag` ("", "auto", "pre-restore")
 /// is appended to the folder name. Returns the folder path.
 fn backup_to(src_dir: &Path, root: &Path, tag: &str) -> Result<PathBuf, String> {
+    // Serialize writers so names and staging folders cannot collide.
+    static BACKUP_LOCK: Mutex<()> = Mutex::new(());
+    let _guard = BACKUP_LOCK.lock().map_err(|e| e.to_string())?;
+    fs::create_dir_all(root).map_err(|e| e.to_string())?;
+    let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
+    for name in BACKUP_DIRS.into_iter().chain(["archive"]) {
+        if let Ok(source) = src_dir.join(name).canonicalize() {
+            if canonical_root.starts_with(source) { return Err("backup folder is inside content being backed up".into()); }
+        }
+    }
     let stamp = local_stamp();
     let name = if tag.is_empty() {
         format!("WidgetBoard-backup-{stamp}")
     } else {
         format!("WidgetBoard-backup-{stamp}-{tag}")
     };
-    let dest = root.join(&name);
+    // same-minute backups (e.g. undoing a restore at once) get a suffix instead of overwriting the source
+    let mut dest = root.join(&name);
+    let mut n = 2;
+    while dest.exists() || dest.with_extension("partial").exists() {
+        dest = root.join(format!("{name}-{n}"));
+        n += 1;
+    }
+    let completed = dest;
+    let dest = completed.with_extension("partial");
     fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
     let mut files = vec![];
     for f in BACKUP_FILES {
         let p = src_dir.join(f);
         if p.exists() {
-            fs::copy(&p, dest.join(f)).map_err(|e| e.to_string())?;
+            copy_verified(&p, &dest.join(f))?;
             files.push(f.to_string());
         }
     }
@@ -1280,9 +1338,11 @@ fn backup_to(src_dir: &Path, root: &Path, tag: &str) -> Result<PathBuf, String> 
         copy_dir(&src_dir.join("archive"), &dest.join("archive"))?;
         files.push("archive/".to_string());
     }
-    let manifest = json!({ "app": env!("CARGO_PKG_VERSION"), "created": stamp, "files": files });
+    let tier = match tag { "auto" => "daily", "auto-fortnight" => "fortnight", "auto-monthly" => "monthly", _ => "" };
+    let manifest = json!({ "app": env!("CARGO_PKG_VERSION"), "created": stamp, "createdUnix": now_secs(), "tier": tier, "files": files });
     write_atomic(&dest.join("manifest.json"), serde_json::to_string_pretty(&manifest).unwrap().as_bytes())?;
-    Ok(dest)
+    fs::rename(&dest, &completed).map_err(|e| e.to_string())?;
+    Ok(completed)
 }
 
 /// Overwrite the live data from a backup folder (an exact snapshot: content dirs are replaced wholesale).
@@ -1304,53 +1364,27 @@ fn restore_from(src: &Path, dir: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Keep the newest `keep` auto backups; delete older ones. Only touches "-auto" folders.
-fn prune_auto(root: &Path, keep: usize) {
-    let mut autos: Vec<PathBuf> = fs::read_dir(root)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.is_dir() && p.file_name().and_then(|n| n.to_str()).map_or(false, |n| n.ends_with("-auto"))
-        })
-        .collect();
-    autos.sort(); // timestamped names sort chronologically
-    if autos.len() > keep {
-        for p in &autos[..autos.len() - keep] {
-            let _ = fs::remove_dir_all(p);
-        }
-    }
-}
-
-/// True if there is no "-auto" backup newer than `interval` seconds.
-fn auto_due(root: &Path, interval: u64) -> bool {
-    let newest = fs::read_dir(root)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| {
-            p.is_dir() && p.file_name().and_then(|n| n.to_str()).map_or(false, |n| n.ends_with("-auto"))
-        })
-        .filter_map(|p| fs::metadata(&p).and_then(|m| m.modified()).ok())
-        .max();
-    match newest {
-        Some(t) => SystemTime::now().duration_since(t).map(|d| d.as_secs() >= interval).unwrap_or(true),
-        None => true,
-    }
-}
-
+/// Flush editor buffers on every monitor before layouts read the current contents.
 #[tauri::command]
-fn backup_now(app: AppHandle, state: State<AppState>, dir: Option<String>) -> Result<String, String> {
+async fn flush_boards(app: AppHandle) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || flush::boards(&app)).await.map_err(|e| e.to_string())?
+}
+
+/// async + blocking thread: a sync command runs on the main thread, which would freeze every window during the
+/// copy and hold back the boards' flush-saves writes until after it.
+#[tauri::command]
+async fn backup_now(app: AppHandle, state: State<'_, AppState>, dir: Option<String>) -> Result<String, String> {
     let root = dir
         .filter(|d| !d.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| backups_root(&app, &state.dir));
-    let _ = app.emit("flush-saves", ()); // capture pending widget saves
-    std::thread::sleep(Duration::from_millis(300));
-    let dest = backup_to(&state.dir, &root, "")?;
-    Ok(dest.to_string_lossy().into_owned())
+    let src = state.dir.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        flush::boards(&app)?;
+        backup_to(&src, &root, "").map(|d| d.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -1361,7 +1395,7 @@ fn list_backups(app: AppHandle, state: State<AppState>) -> Value {
         .flatten()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.join("manifest.json").exists())
+        .filter(|p| !p.extension().is_some_and(|e| e == "partial") && p.join("manifest.json").exists())
         .map(|p| {
             let m: Value = read_json(&p.join("manifest.json")).unwrap_or(json!({}));
             json!({
@@ -1374,7 +1408,8 @@ fn list_backups(app: AppHandle, state: State<AppState>) -> Value {
         .collect();
     items.sort_by(|a, b| b["name"].as_str().cmp(&a["name"].as_str())); // newest first
     let backup = read_config(&state.dir).get("backup").cloned().unwrap_or(json!({}));
-    json!({ "root": root.to_string_lossy(), "items": items, "backup": backup })
+    json!({ "root": root.to_string_lossy(), "items": items, "backup": backup,
+        "status": read_json::<Value>(&state.dir.join("backup-status.json")).unwrap_or(Value::Null) })
 }
 
 #[tauri::command]
@@ -1391,14 +1426,14 @@ fn restore_backup(app: AppHandle, state: State<AppState>, path: String) -> Resul
         return Err("not a backup folder".into());
     }
     // Flush, snapshot, copy, relaunch — off-thread so the flush lands before the snapshot.
-    let _ = app.emit("flush-saves", ());
     let dir = state.dir.clone();
     let root = backups_root(&app, &state.dir);
     let app2 = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(700));
         // Safety net: no snapshot of the current state, no overwrite.
-        let res = backup_to(&dir, &root, "pre-restore").and_then(|_| restore_from(&src, &dir));
+        let res = flush::boards(&app2)
+            .and_then(|_| backup_to(&dir, &root, "pre-restore"))
+            .and_then(|_| restore_from(&src, &dir));
         match res {
             Ok(()) => relaunch(&app2),
             Err(e) => {
@@ -1409,30 +1444,35 @@ fn restore_backup(app: AppHandle, state: State<AppState>, path: String) -> Resul
     Ok(())
 }
 
-/// Hourly: if auto backup is on and one is due, make one and prune to `keep`.
+/// Check after startup and every minute. Each tier advances only after a verified snapshot.
 fn spawn_auto_backup(app: AppHandle) {
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(300));
+        std::thread::sleep(Duration::from_secs(10));
         loop {
-            {
-                let st = app.state::<AppState>();
-                let cfg = read_config(&st.dir);
-                let b = cfg.get("backup");
-                let auto = b.and_then(|b| b.get("auto")).and_then(|v| v.as_str()).unwrap_or("off");
-                let keep = b.and_then(|b| b.get("keep")).and_then(|v| v.as_u64()).unwrap_or(7).max(1) as usize;
-                let interval = match auto {
-                    "daily" => Some(86_400u64),
-                    "weekly" => Some(604_800),
-                    _ => None,
-                };
-                if let Some(iv) = interval {
-                    let root = backups_root(&app, &st.dir);
-                    if auto_due(&root, iv) && backup_to(&st.dir, &root, "auto").is_ok() {
-                        prune_auto(&root, keep);
+            let st = app.state::<AppState>();
+            let cfg = read_config(&st.dir);
+            let b = cfg.get("backup");
+            let mode = b.and_then(|b| b.get("auto")).and_then(Value::as_str).unwrap_or("daily");
+            let keep = b.and_then(|b| b.get("keep")).and_then(Value::as_u64).unwrap_or(7).clamp(1, 99) as usize;
+            let root = backups_root(&app, &st.dir);
+            let due = backup_policy::due(&root, mode, now_secs(), &local_stamp());
+            if !due.is_empty() && !config_broken(&st.dir) {
+                let result = flush::boards(&app).and_then(|_| {
+                    for tier in due {
+                        backup_to(&st.dir, &root, tier.tag())?;
+                        backup_policy::prune(&root, tier, keep)?;
                     }
-                }
+                    Ok(())
+                });
+                let status = match result {
+                    Ok(()) => json!({ "checked": local_stamp(), "error": null }),
+                    Err(error) => json!({ "checked": local_stamp(), "error": error }),
+                };
+                let _ = write_atomic(&st.dir.join("backup-status.json"), status.to_string().as_bytes());
+                let _ = app.emit("backup-status", status);
             }
-            std::thread::sleep(Duration::from_secs(3600));
+            drop(st);
+            std::thread::sleep(Duration::from_secs(60));
         }
     });
 }
@@ -1463,11 +1503,12 @@ fn relaunch(app: &AppHandle) {
 }
 /// Relaunch this exe after we exit; the new process waits for us (single-instance) and installs the update.
 fn restart_for_update(app: &AppHandle) {
-    let _ = app.emit("flush-saves", ());
     let h = app.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(700)); // let pending widget saves land
-        relaunch(&h);
+        match flush::boards(&h) {
+            Ok(()) => relaunch(&h),
+            Err(e) => { let _ = h.emit("update-failed", e); }
+        }
     });
 }
 /// `--wait-pid N`: we were started by an app that is about to quit — wait for it (max 15 s).
@@ -1529,12 +1570,19 @@ fn update_install(app: AppHandle) {
         if st.update_busy.swap(true, Ordering::SeqCst) {
             return;
         }
-        let _ = app.emit("update-status", update_info(&st));
         let dir = st.dir.join("updates");
+        // no backup, download or restart when the exe can't be replaced
+        if !std::env::current_exe().map(|e| updater::can_replace(&e)).unwrap_or(false) {
+            st.update_busy.store(false, Ordering::SeqCst);
+            updater::record(&dir, now_secs(), &Err("not_writable".into()));
+            let _ = app.emit("update-failed", "not_writable");
+            let _ = app.emit("update-status", update_info(&st));
+            return;
+        }
+        let _ = app.emit("update-status", update_info(&st));
         let (_, url) = update_config(&st.dir);
-        let _ = app.emit("flush-saves", ());
-        std::thread::sleep(Duration::from_millis(300));
-        let res = backup_to(&st.dir, &backups_root(&app, &st.dir), "pre-update")
+        let res = flush::boards(&app)
+            .and_then(|_| backup_to(&st.dir, &backups_root(&app, &st.dir), "pre-update"))
             .and_then(|_| updater::check_and_download(&dir, &url, updater::PUBLIC_KEY));
         st.update_busy.store(false, Ordering::SeqCst);
         match res {
@@ -1769,6 +1817,7 @@ fn main() {
             get_settings,
             set_app,
             open_settings,
+            flush_boards,
             backup_now,
             restore_backup,
             list_backups,
@@ -1785,7 +1834,7 @@ mod tests {
 
     #[test]
     fn purge_assets_keeps_shared_images() {
-        let dir = std::env::temp_dir().join(format!("wb-purge-{}", std::process::id()));
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-artifacts/native").join(format!("wb-purge-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("assets")).unwrap();
         fs::create_dir_all(dir.join("data")).unwrap();
@@ -1806,7 +1855,7 @@ mod tests {
 
     #[test]
     fn backup_restore_roundtrip() {
-        let base = std::env::temp_dir().join(format!("wb-test-{}", std::process::id()));
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-artifacts/native").join(format!("wb-test-{}", std::process::id()));
         let live = base.join("live");
         let backups = base.join("backups");
         let _ = fs::remove_dir_all(&base);
@@ -1837,7 +1886,7 @@ mod tests {
 
     #[test]
     fn migrate_folds_settings_and_weekstart() {
-        let base = std::env::temp_dir().join(format!("wb-mig-{}", std::process::id()));
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-artifacts/native").join(format!("wb-mig-{}", std::process::id()));
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&base).unwrap();
         fs::write(
@@ -1859,6 +1908,19 @@ mod tests {
         migrate_config(&base);
         assert_eq!(load_settings(&base).lang, "en");
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn broken_config_is_never_overwritten() {
+        let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-artifacts/native").join(format!("wb-bad-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let typo = r#"{"ui":{"weekStart":"sun",},"timer":{"presets":[]}}"#; // trailing comma
+        fs::write(base.join("config.json"), typo).unwrap();
+        assert!(config_broken(&base));
+        migrate_config(&base);
+        assert_eq!(fs::read_to_string(base.join("config.json")).unwrap(), typo, "file kept as is");
         let _ = fs::remove_dir_all(&base);
     }
 }

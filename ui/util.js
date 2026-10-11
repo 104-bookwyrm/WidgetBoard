@@ -95,8 +95,7 @@ export function occursOn(e, d) {
   return false;
 }
 
-// The shipped default for new reminders, and the short list shown on top of every zone picker.
-export const TZ_BASELINE = "Asia/Seoul";
+// The short list shown on top of every zone picker.
 export const TZ_COMMON = [
   "Asia/Seoul",
   "Asia/Tokyo",
@@ -190,6 +189,92 @@ export function deferWhileEditing(box, fn) {
     }
     fn();
   };
+}
+
+/** Inline editor shared by calendar and checklist. Resolve live data inside onCommit. */
+export function editInlineText(span, value, onCommit, render) {
+  const input = document.createElement("input");
+  input.value = value;
+  span.replaceChildren(input);
+  input.focus();
+  let finished = false;
+  const finish = (keep) => {
+    if (finished) return;
+    finished = true;
+    if (keep) onCommit(input.value.trim());
+    render();
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") finish(true);
+    if (e.key === "Escape") {
+      e.stopPropagation();
+      finish(false);
+    }
+  });
+  input.addEventListener("blur", () => finish(true));
+}
+
+/** WCAG relative luminance (0-1) of any CSS colour, var() included, as the browser resolves it. */
+export function luminance(color) {
+  const p = document.createElement("i");
+  p.style.color = color;
+  document.body.append(p);
+  const v = getComputedStyle(p).color;
+  p.remove();
+  const n = v.match(/[\d.]+/g)?.map(Number) || [0, 0, 0];
+  const rgb = v.startsWith("color(") ? n.slice(0, 3).map((x) => x * 255) : n.slice(0, 3);
+  const ch = rgb.map((x) =>
+    (x /= 255) <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+/** WCAG contrast ratio between two CSS colours. */
+export function contrast(a, b) {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+  return (x + 0.05) / (y + 0.05);
+}
+/** True when dark text contrasts better than white on `color`. */
+export function isLight(color) {
+  const L = luminance(color);
+  return (L + 0.05) / 0.05 > 1.05 / (L + 0.05);
+}
+/**
+ * Set --scheme to 'light' or 'dark' from the theme surface (--c1), so native pickers
+ * (date/time inputs) match a light theme instead of always drawing dark.
+ */
+export function syncScheme() {
+  document.documentElement.style.setProperty("--scheme", isLight("var(--c1)") ? "light" : "dark");
+}
+
+/**
+ * Accept files dragged onto `el`: while dragging it shows `label` over it (CSS .w-dropping),
+ * then calls onFiles(FileList). The counter stops the overlay flickering over child elements.
+ */
+export function dropZone(el, label, onFiles) {
+  let n = 0;
+  const files = (e) => e.dataTransfer?.types.includes("Files"); // ignore text/image drags from the page
+  const show = (on) => {
+    el.classList.toggle("w-dropping", on);
+    if (on) el.dataset.dropLabel = label;
+  };
+  el.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  });
+  el.addEventListener("dragenter", (e) => {
+    if (!files(e)) return;
+    e.preventDefault();
+    if (++n === 1) show(true);
+  });
+  el.addEventListener("dragleave", (e) => {
+    if (files(e) && --n <= 0) ((n = 0), show(false));
+  });
+  el.addEventListener("drop", (e) => {
+    e.preventDefault();
+    n = 0;
+    show(false);
+    onFiles(e.dataTransfer.files);
+  });
 }
 
 /** Throttle: run at most once per `ms`. */

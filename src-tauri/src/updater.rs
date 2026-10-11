@@ -287,7 +287,10 @@ pub fn apply_pending_as(dir: &Path, exe: &Path, public_key: &str, current: &str)
     };
     let new = sibling(exe, "new");
     let old = sibling(exe, "old");
-    fs::write(&new, &bytes).map_err(|e| format!("cannot write next to WidgetBoard.exe: {e}"))?;
+    if let Err(e) = fs::write(&new, &bytes) {
+        discard_pending(dir); // the folder won't take it: don't retry at every start
+        return Err(format!("cannot write next to WidgetBoard.exe: {e}"));
+    }
     let _ = fs::remove_file(&old);
     if let Err(e) = fs::rename(exe, &old) {
         let _ = fs::remove_file(&new);
@@ -299,6 +302,13 @@ pub fn apply_pending_as(dir: &Path, exe: &Path, public_key: &str, current: &str)
     }
     discard_pending(dir);
     Ok(Some(version))
+}
+/// A protected install folder (e.g. Program Files without admin) can't take an update: check before downloading.
+pub fn can_replace(exe: &Path) -> bool {
+    let probe = sibling(exe, "probe");
+    let ok = fs::write(&probe, b"").is_ok();
+    let _ = fs::remove_file(&probe);
+    ok
 }
 /// After an update: remove WidgetBoard.exe.old (best effort — it may still be in use for a moment).
 pub fn cleanup_old(exe: &Path) {

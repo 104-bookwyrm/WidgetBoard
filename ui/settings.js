@@ -1,10 +1,30 @@
+import { createMockTauri } from "./mock-tauri.js";
 // Standalone settings window. Plain module, no build step (like the rest of ui/).
 // Reads everything once via get_settings, applies changes instantly, mirrors the app's a11y settings.
 import { loadLang, t, applyStatic } from "./i18n.js";
-import { tzOptions, osZone } from "./util.js";
+import { tzOptions, osZone, syncScheme } from "./util.js";
+import {
+  sanitize,
+  setVar,
+  toHex,
+  firstFamily,
+  cleanFont,
+  checkTheme,
+  contrastWarnings,
+  copyText,
+} from "./theme.js";
 
-const T = window.__TAURI__ ?? settingsMock();
-const invoke = (cmd, args) => T.core.invoke(cmd, args);
+const T = window.__TAURI__ ?? createMockTauri();
+const invoke = (cmd, args) =>
+  T.core.invoke(cmd, args).catch((e) => {
+    // a hand-edit typo in config.json: Rust refuses to overwrite it, so say why nothing saved
+    if (e === "config_broken") flash(t("toast.config_bad"));
+    throw e;
+  });
+// ...and that refusal is already explained, so callers without a .catch need not report it again
+addEventListener("unhandledrejection", (e) => {
+  if (e.reason === "config_broken") e.preventDefault();
+});
 const win = T.webviewWindow.getCurrentWebviewWindow();
 const listen = (ev, h) => win.listen(ev, (e) => h(e.payload));
 
@@ -48,7 +68,8 @@ function applyTheme(css) {
     s.id = "theme-css";
     document.head.appendChild(s);
   }
-  s.textContent = themeCss;
+  s.textContent = sanitize(themeCss);
+  syncScheme();
 }
 function applyA11y() {
   const u = cfgUi();
@@ -156,7 +177,7 @@ function fillGeneral() {
 }
 
 // ---- shared [data-ui] controls → config.ui.* ----
-// Same keys as the in-board #settings-panel. Only save_config is needed: boards re-apply
+// Keys are config.ui (the board reads them in applyUi). Only save_config is needed: boards re-apply
 // native effects (zoom/dwell/hotkey) themselves on config-changed.
 function bindUiControls(sel) {
   for (const i of document.querySelectorAll(sel)) {
@@ -219,8 +240,8 @@ function showUpdate(info) {
     lines.push(
       t("upd.failed", {
         e:
-          info.lastError === "not_configured"
-            ? t("upd.not_configured")
+          info.lastError === "not_configured" || info.lastError === "not_writable"
+            ? t("upd." + info.lastError)
             : String(info.lastError || ""),
       }),
     );
@@ -346,7 +367,7 @@ function renderHolidayAdds() {
     row.className = "set-list-row";
     const txt = document.createElement("span");
     txt.className = "grow";
-    txt.textContent = `${date} — ${name}`;
+    txt.textContent = `${date} - ${name}`;
     row.append(
       txt,
       btn("✕", () => {
@@ -525,36 +546,8 @@ async function fillBackup() {
   renderBackupList(info.items || []);
 }
 
-// ---- Appearance page (theme editor) — ported from the in-board #theme-panel ----
+// ---- Appearance page (theme editor; helpers in theme.js) ----
 // theme.css is the source of truth; save_theme persists and emits theme-changed for instant board preview.
-const sanitize = (css) =>
-  css
-    .replace(/@import[^;]*;?/gi, "")
-    .replace(/url\(\s*['"]?\s*(https?:|\/\/)[^)]*\)/gi, "none");
-function setVar(css, name, value) {
-  const esc = name.replace(/[-]/g, "\\-");
-  const re = new RegExp(`(^|[\\s;{])(${esc}\\s*:\\s*)([^;]*)(;)`, "m");
-  if (re.test(css)) return css.replace(re, `$1$2${value}$4`);
-  if (/:root\s*\{/.test(css))
-    return css.replace(/:root\s*\{/, (m) => `${m}\n  ${name}: ${value};`);
-  return `${css}\n:root { ${name}: ${value}; }\n`;
-}
-const _cvs = document.createElement("canvas").getContext("2d");
-function toHex(color) {
-  _cvs.fillStyle = "#000";
-  _cvs.fillStyle = color.trim();
-  return _cvs.fillStyle.startsWith("#") ? _cvs.fillStyle : "#000000";
-}
-const firstFamily = (v) =>
-  (v || "")
-    .split(",")[0]
-    .trim()
-    .replace(/^["']|["']$/g, "");
-const cleanFont = (f) =>
-  String(f || "")
-    .replace(/["';{}\\<>]/g, "")
-    .trim()
-    .slice(0, 80);
 const themeVars = () => [
   ...document.querySelectorAll('[data-page="appearance"] [data-var]'),
 ];
@@ -578,94 +571,22 @@ function fillTheme() {
   fillUiControls('[data-page="appearance"] [data-ui]');
 }
 
-// --- AI theme validation (ported) ---
-function extractCss(text) {
-  const m = String(text).match(/```(?:css)?\s*\n([\s\S]*?)```/i);
-  return (m ? m[1] : String(text)).trim();
-}
-function checkTheme(text) {
-  const css = extractCss(text);
-  if (!css) return { ok: false, error: t("ai.err_empty") };
-  let sheet;
-  try {
-    sheet = new CSSStyleSheet();
-    sheet.replaceSync(sanitize(css));
-  } catch {
-    return { ok: false, error: t("ai.err_syntax") };
-  }
-  const style = [...sheet.cssRules].filter((r) => r.style);
-  if (!style.some((r) => [...r.style].some((p) => p.startsWith("--"))))
-    return { ok: false, error: t("ai.err_no_vars") };
-  const warnings = [];
-  const outside = style.filter(
-    (r) =>
-      !/^(:root|\[data-widget=("|')?[a-z]+("|')?\])(\s*,\s*(:root|\[data-widget=("|')?[a-z]+("|')?\]))*$/.test(
-        r.selectorText,
-      ),
-  );
-  if (outside.length || [...sheet.cssRules].length !== style.length)
-    warnings.push(
-      t("ai.warn_outside", {
-        n: outside.length + [...sheet.cssRules].length - style.length,
-      }),
-    );
-  if (/@import|url\(\s*['"]?\s*(https?:|\/\/)/i.test(css))
-    warnings.push(t("ai.warn_remote"));
-  if (/--(cell|gap)\s*:/.test(css)) warnings.push(t("ai.warn_grid"));
-  return { ok: true, css, warnings };
-}
-function contrast(a, b) {
-  const lum = (c) => {
-    const p = document.createElement("i");
-    p.style.color = c;
-    document.body.append(p);
-    const v = getComputedStyle(p).color;
-    p.remove();
-    const n = v.match(/[\d.]+/g)?.map(Number) || [0, 0, 0];
-    const rgb = v.startsWith("color(")
-      ? n.slice(0, 3).map((x) => x * 255)
-      : n.slice(0, 3);
-    const ch = rgb.map((x) =>
-      (x /= 255) <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4,
-    );
-    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-  };
-  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
-}
-function contrastWarnings() {
-  const w = [];
-  const text = contrast("var(--c3)", "var(--c1)");
-  const acc = contrast("var(--on-accent)", "var(--c2)");
-  if (text < 4.5) w.push(t("ai.warn_contrast_text", { r: text.toFixed(1) }));
-  if (acc < 3) w.push(t("ai.warn_contrast_accent", { r: acc.toFixed(1) }));
-  return w;
-}
+// --- AI theme copy/paste (validation lives in theme.js) ---
 let themeBackup = null;
-async function copyText(txt) {
-  try {
-    await navigator.clipboard.writeText(txt);
-    return true;
-  } catch {
-    const ta = Object.assign(document.createElement("textarea"), {
-      value: txt,
-    });
-    document.body.append(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    ta.remove();
-    return ok;
-  }
-}
 async function aiCopy() {
   const prompt = await fetch("ai-theme-prompt.md")
     .then((r) => r.text())
     .catch(() => "");
-  const body =
+  const body = (
     prompt
       .split("<!-- PROMPT START -->")[1]
       ?.split("<!-- PROMPT END -->")[0]
-      ?.trim() || prompt;
+      ?.trim() || prompt
+  ).replace(
+    // the shipped widget list, so a new widget is themeable without editing the prompt
+    /TYPE is one of: [^.]*\./,
+    `TYPE is one of: ${(data.widgetTypes || []).join(", ")}.`,
+  );
   const full = `${body}\n\n## My current theme (start from this if I ask to change it)\n\`\`\`css\n${themeCss.trim()}\n\`\`\`\n\n## What I want\n`;
   flash(t((await copyText(full)) ? "ai.copied" : "ai.copy_failed"));
 }
@@ -747,28 +668,8 @@ async function fillFontList() {
 }
 
 // ---- Widgets & layout page ----
-// Board-geometry actions (add, presets) go to the primary board via emit_primary; everything
-// else (close, move, save/apply/undo layouts, lock) is plain commands.
-const WIDGET_TYPES = [
-  "checklist",
-  "calendar",
-  "dday",
-  "diary",
-  "memo",
-  "nowplaying",
-  "timer",
-  "stopwatch",
-  "image",
-];
-async function winReplace(next) {
-  const before = await invoke("get_all_widgets").catch(() => []);
-  await invoke("store_set", {
-    key: "layouts_undo",
-    value: before,
-    src: "settings",
-  }).catch(() => {});
-  await invoke("replace_widgets", { widgets: next }).catch(() => {});
-}
+// Board-geometry actions (add, presets, applying a saved layout) go to the primary board via
+// emit_primary; everything else (close, move, save/undo layouts, lock) is plain commands.
 const afterBoardChange = () => {
   saved();
   setTimeout(fillWidgets, 400); // board-side ops land asynchronously
@@ -839,17 +740,14 @@ function renderWidgetList(all) {
           () => {
             const i = displays.indexOf(w.display);
             const to = displays[(i + 1) % displays.length];
-            winReplace(
-              all.map((x) => (x.id === w.id ? { ...x, display: to } : x)),
-            ).then(afterBoardChange);
+            // the board moves its live copy; this list can be minutes old
+            emit("widget-move", { id: w.id, display: to }).then(afterBoardChange);
           },
           "",
         ),
       );
-    const close = btn("✕", async () => {
-      await invoke("bin_put", { widget: w }).catch(() => {});
-      winReplace(all.filter((x) => x.id !== w.id)).then(afterBoardChange);
-    });
+    // the board closes its live copy (bin + undo toast), so nothing else on screen rolls back
+    const close = btn("✕", () => emit("widget-close", w.id).then(afterBoardChange));
     close.title = close.ariaLabel = t("set.bin.close", { name: wName(w) });
     row.append(close);
     host.append(row);
@@ -857,14 +755,14 @@ function renderWidgetList(all) {
 }
 
 // -- closed-widgets bin --
-function confirmInline(row, msgKey, onYes, back) {
+function confirmInline(row, msgKey, onYes, back, { vars, yes = "set.bin.erase_yes" } = {}) {
   row.innerHTML = "";
   const msg = document.createElement("span");
   msg.className = "grow";
-  msg.textContent = t(msgKey);
+  msg.textContent = t(msgKey, vars);
   row.append(
     msg,
-    btn(t("set.bin.erase_yes"), onYes, "primary"),
+    btn(t(yes), onYes, "primary"),
     btn(t("set.close"), back, ""),
   );
 }
@@ -917,8 +815,8 @@ async function renderArchive() {
   const on = !!data.config?.archive?.memos;
   $("#wg-archive").checked = on;
   const host = $("#wg-archive-list");
-  host.innerHTML = "";
   const lines = await invoke("memo_archive_list").catch(() => []);
+  host.innerHTML = ""; // after the await: overlapping renders would both append
   if (!lines.length) return on ? hintRow(host, "set.archive.none") : undefined;
   const byId = new Map();
   for (const v of lines)
@@ -983,19 +881,30 @@ async function renderWgLayouts() {
         txt,
         btn(
           t("lay.apply"),
-          () => winReplace(l.widgets).then(afterBoardChange),
+          // the board merges current contents (memo text...) into the saved positions
+          () =>
+            invoke("emit_primary", { event: "apply-layout", payload: l.name })
+              .then(afterBoardChange)
+              .catch(() => {}),
           "",
         ),
-        btn("✕", () => {
-          invoke("store_set", {
-            key: "layouts",
-            value: layouts.filter((x) => x !== l),
-            src: "settings",
-          }).then(() => {
-            saved();
-            renderWgLayouts();
-          });
-        }),
+        btn("✕", () =>
+          confirmInline(
+            row,
+            "lay.delete_confirm",
+            () =>
+              invoke("store_set", {
+                key: "layouts",
+                value: layouts.filter((x) => x !== l),
+                src: "settings",
+              }).then(() => {
+                saved();
+                renderWgLayouts();
+              }),
+            renderWgLayouts,
+            { vars: { name: l.name }, yes: "dday.delete" },
+          ),
+        ),
       );
       host.append(row);
     }
@@ -1035,7 +944,7 @@ function bindWidgets() {
       .catch(() => {});
   $("#wg-edit").onclick = () =>
     invoke("set_edit_mode", { on: true }).catch(() => {});
-  for (const id of ["work", "study"])
+  for (const id of ["work", "study", "oshi"])
     $("#wg-preset-" + id).onclick = () =>
       invoke("emit_primary", { event: "apply-preset", payload: id })
         .then(afterBoardChange)
@@ -1065,24 +974,16 @@ function bindWidgets() {
     saved();
     renderWgLayouts();
   };
-  $("#wg-layout-undo").onclick = async () => {
-    const prev = await invoke("store_get", { key: "layouts_undo" }).catch(
-      () => null,
-    );
-    if (!Array.isArray(prev)) return;
-    await invoke("replace_widgets", { widgets: prev }).catch(() => {});
-    await invoke("store_set", {
-      key: "layouts_undo",
-      value: null,
-      src: "settings",
-    }).catch(() => {});
-    afterBoardChange();
-  };
+  // the board undoes it: positions go back, contents typed since stay
+  $("#wg-layout-undo").onclick = () =>
+    invoke("emit_primary", { event: "undo-layout", payload: null })
+      .then(afterBoardChange)
+      .catch(() => {});
 }
 async function fillWidgets() {
   const sel = $("#wg-add-type");
   sel.innerHTML = "";
-  for (const type of WIDGET_TYPES) {
+  for (const type of data.widgetTypes || []) {
     const o = document.createElement("option");
     o.value = type;
     o.textContent = t("widget." + type);
@@ -1166,218 +1067,3 @@ async function init() {
   });
 }
 init();
-
-// ---- browser mock (mirrors the app's mock contract; used when window.__TAURI__ is absent) ----
-function settingsMock() {
-  const upd = () => {
-    const f = window.__updFound;
-    return {
-      configured: true,
-      current: "0.12.0",
-      check: (cfg().update && cfg().update.check) || "weekly",
-      lastCheck: 0,
-      available: f && f.version !== window.__updSkipped ? f : null,
-    };
-  };
-  const handlers = {};
-  const ls = {
-    get: (k) => {
-      try {
-        return localStorage.getItem(k);
-      } catch {
-        return null;
-      }
-    },
-    set: (k, v) => {
-      try {
-        localStorage.setItem(k, v);
-      } catch {}
-    },
-  };
-  const emit = (ev, p) =>
-    (handlers[ev] || []).forEach((h) => h({ payload: p }));
-  window.__mock = { emit };
-  const cfg = () => JSON.parse(ls.get("wb-config") || "null") || { ui: {} };
-  return {
-    core: {
-      async invoke(cmd, args) {
-        if (window.__mockFail?.has(cmd))
-          throw new Error("mock failure: " + cmd);
-        switch (cmd) {
-          case "get_settings":
-            return {
-              app: {
-                lang: new URLSearchParams(location.search).get("lang") || "ko",
-                reduceMotion: false,
-              },
-              theme: ls.get("wb-theme") || "",
-              config: cfg(),
-              autostart: {
-                on: !!ls.get("wb-autostart"),
-                disabledByWindows: !!window.__mockAutostartDisabled,
-              },
-              version: "0.12.0",
-              displays: [
-                { label: "board-0", display: "D1", index: 1, primary: true },
-                { label: "board-1", display: "D2", index: 2, primary: false },
-              ],
-              widgets: JSON.parse(ls.get("wb-widgets") || "[]"),
-              dataDir: "C:/mock/appdata",
-            };
-          case "set_app": {
-            const p = args.patch || {};
-            (window.__native ||= []).push(["set_app", p]);
-            if ("lang" in p) emit("lang-changed", p.lang);
-            if ("reduceMotion" in p) emit("motion-changed", p.reduceMotion);
-            return;
-          }
-          case "set_autostart":
-            ls.set("wb-autostart", args.on ? "1" : "");
-            return !!args.on;
-          case "save_config": {
-            const merge = (b, p) => {
-              for (const [k, v] of Object.entries(p)) {
-                if (v === null) {
-                  delete b[k];
-                  continue;
-                }
-                b[k] =
-                  v && typeof v === "object" && !Array.isArray(v)
-                    ? merge(b[k] && typeof b[k] === "object" ? b[k] : {}, v)
-                    : v;
-              }
-              return b;
-            };
-            const c = merge(cfg(), args.patch);
-            ls.set("wb-config", JSON.stringify(c));
-            return emit("config-changed", c);
-          }
-          case "update_status":
-            return upd();
-          case "update_check":
-            window.__updSkipped = null;
-            window.__updFound = {
-              version: "0.12.1",
-              notes: "New: x\nFixed: y",
-            };
-            emit("update-status", upd());
-            return;
-          case "update_install":
-            window.__installed = true;
-            return;
-          case "update_skip":
-            window.__updSkipped = args.version;
-            return upd();
-          case "save_theme":
-            ls.set("wb-theme", args.css);
-            (window.__native ||= []).push(["save_theme", args.css]);
-            return emit("theme-changed", args.css);
-          case "open_theme_file":
-            (window.__native ||= []).push(["open_theme_file"]);
-            return;
-          case "list_fonts":
-            return ["Lexend", "Arial", "Georgia"];
-          case "store_set":
-            ls.set("wb-store-" + args.key, JSON.stringify(args.value));
-            return;
-          case "store_get": {
-            const v = ls.get("wb-store-" + args.key);
-            return v ? JSON.parse(v) : null;
-          }
-          case "get_all_widgets":
-            return JSON.parse(ls.get("wb-widgets") || "[]");
-          case "replace_widgets":
-            ls.set("wb-widgets", JSON.stringify(args.widgets || []));
-            (window.__native ||= []).push(["replace_widgets", args.widgets]);
-            return emit("layout-replaced");
-          case "set_edit_mode":
-            (window.__native ||= []).push(["set_edit_mode", args.on]);
-            return;
-          case "emit_primary":
-            (window.__native ||= []).push([
-              "emit_primary",
-              args.event,
-              args.payload,
-            ]);
-            if (args.event === "add-widget") {
-              const ws = JSON.parse(ls.get("wb-widgets") || "[]");
-              ws.push({
-                id: "w" + ws.length,
-                type: args.payload,
-                display: "D1",
-              });
-              ls.set("wb-widgets", JSON.stringify(ws));
-            }
-            return;
-          case "list_backups":
-            return {
-              root: "C:/mock/Backups",
-              items: JSON.parse(ls.get("wb-backups") || "[]"),
-              backup: cfg().backup || { auto: "off", keep: 7, dir: "" },
-            };
-          case "backup_now": {
-            const items = JSON.parse(ls.get("wb-backups") || "[]");
-            const stamp = "20261001-1530";
-            const path = "C:/mock/Backups/WidgetBoard-backup-" + stamp;
-            if (!items.some((x) => x.path === path))
-              items.unshift({
-                name: "WidgetBoard-backup-" + stamp,
-                path,
-                created: stamp,
-                app: "0.12.0",
-              });
-            ls.set("wb-backups", JSON.stringify(items));
-            return path;
-          }
-          case "restore_backup":
-            window.__restored = args.path;
-            return;
-          case "open_backups_folder":
-            (window.__native ||= []).push(["open_backups_folder"]);
-            return;
-          case "open_config_file":
-            (window.__native ||= []).push(["open_config_file"]);
-            return;
-          case "bin_list":
-            return JSON.parse(ls.get("wb-bin") || "[]");
-          case "bin_put": {
-            const bin = JSON.parse(ls.get("wb-bin") || "[]").filter(
-              (e) => e.w.id !== args.widget.id,
-            );
-            bin.unshift({ at: 1790000000, w: args.widget });
-            ls.set("wb-bin", JSON.stringify(bin));
-            return;
-          }
-          case "bin_take": {
-            const bin = JSON.parse(ls.get("wb-bin") || "[]");
-            const e = bin.find((x) => x.w.id === args.id);
-            ls.set("wb-bin", JSON.stringify(bin.filter((x) => x !== e)));
-            return e ? e.w : null;
-          }
-          case "bin_erase": {
-            const bin = JSON.parse(ls.get("wb-bin") || "[]");
-            const keep = args.id ? bin.filter((x) => x.w.id !== args.id) : [];
-            ls.set("wb-bin", JSON.stringify(keep));
-            return;
-          }
-          case "memo_archive_list":
-            return JSON.parse(ls.get("wb-archive") || "[]");
-          default:
-            return null;
-        }
-      },
-    },
-    event: {
-      emit: async (ev, p) => (window.__native ||= []).push(["emit", ev, p]),
-    },
-    webviewWindow: {
-      getCurrentWebviewWindow: () => ({
-        listen: async (ev, h) => {
-          (handlers[ev] ||= []).push(h);
-          return () => (handlers[ev] = handlers[ev].filter((x) => x !== h));
-        },
-        close: async () => (window.__mock.closed = true),
-      }),
-    },
-  };
-}

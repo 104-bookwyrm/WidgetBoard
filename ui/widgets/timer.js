@@ -1,4 +1,6 @@
 // Timer widget. Stores the end timestamp (not ticks), so it stays correct across sleep/restart.
+import { icon } from "../icons.js";
+
 const fmt = (ms) => {
   const t = Math.ceil(ms / 1000);
   const h = Math.floor(t / 3600),
@@ -47,13 +49,13 @@ export default {
   css: `
     .timer { height: 100%; box-sizing: border-box; padding: calc(var(--head-h) - 6px) var(--pad) var(--pad);
       display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 7cqh; }
-    .t-display { font-size: min(calc(108cqw / var(--len, 5)), 34cqh); white-space: nowrap; font-weight: 600; line-height: 1;
+    .t-display { font-size: min(calc(108cqw / var(--len, 5)), 34cqh); white-space: nowrap; font-weight: 600; line-height: 1; font-family: var(--font-num, var(--font));
       font-variant-numeric: tabular-nums; cursor: text; }
     .t-display input { width: 5.5ch; font: inherit; text-align: center; background: none;
       border: 0; border-bottom: 2px solid var(--c2); outline: none; }
-    .t-presets, .t-ctrl { display: flex; gap: 6px; max-width: 100%; flex: none; }
+    .t-presets, .t-ctrl { display: flex; gap: var(--space-3); max-width: 100%; flex: none; }
     .t-presets { overflow-x: auto; scrollbar-width: none; justify-content: safe center; }
-    .t-presets button { font-size: .85em; padding: 1px 8px; white-space: nowrap; flex: none; }
+    .t-presets button { font-size: var(--fs-small); padding: 1px 8px; white-space: nowrap; flex: none; }
     .t-ctrl button { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .t-ctrl .ico { display: none; }
     @container (max-width: 12em) { .t-ctrl .ico { display: inline; } .t-ctrl .lbl { display: none; } }
@@ -61,7 +63,7 @@ export default {
     .timer.ringing .t-display { color: var(--c2); animation: t-blink .7s steps(2) infinite; }
     body.reduce-motion .timer.ringing .t-display { text-decoration: underline; text-decoration-thickness: 3px; }
     @keyframes t-blink { 50% { opacity: .3; } }
-    .t-cap { font-size: .85em; font-weight: 600; padding: 2px 10px; border-radius: 999px; flex: none; max-width: 100%;
+    .t-cap { font-size: var(--fs-small); font-weight: 600; padding: 2px 10px; border-radius: 999px; flex: none; max-width: 100%;
       background: var(--c2); color: var(--on-accent, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     /* em-based, so larger text hides extras sooner instead of overflowing */
     @container (max-height: 10.5em) { .t-presets { display: none; } }
@@ -74,7 +76,7 @@ export default {
         <div class="t-display" title="${t("timer.hint")}"></div>
         <div class="t-presets"></div>
         <div class="t-cap" role="status" hidden></div>
-        <div class="t-ctrl"><button class="primary" data-a="go"></button><button data-a="reset" title="${t("timer.reset")}"><span class="ico">↺</span><span class="lbl">${t("timer.reset")}</span></button></div>
+        <div class="t-ctrl"><button class="primary" data-a="go"></button><button data-a="reset" title="${t("timer.reset")}"><span class="ico">${icon("reset")}</span><span class="lbl">${t("timer.reset")}</span></button></div>
       </div>`;
     const box = root.firstElementChild;
     const disp = box.querySelector(".t-display");
@@ -106,7 +108,7 @@ export default {
         : s.remaining > 0 && s.remaining < s.duration
           ? "timer.resume"
           : "timer.start";
-      go.innerHTML = `<span class="ico">${s.endAt ? "❚❚" : "▶"}</span><span class="lbl">${t(k)}</span>`;
+      go.innerHTML = `<span class="ico">${icon(s.endAt ? "pause" : "play")}</span><span class="lbl">${t(k)}</span>`;
       go.title = t(k);
       box.classList.toggle("running", !!s.endAt);
     }

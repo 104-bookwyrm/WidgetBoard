@@ -2,6 +2,8 @@
 // Stores start timestamps (not ticks): it stays exact through sleep, and keeps running while the app is closed.
 //   session — this run (reset with ↺ when stopped); laps belong to the session
 //   total   — every second ever counted; only "reset total" (click twice) clears it
+import { icon } from "../icons.js";
+
 const p2 = (n) => String(n).padStart(2, "0");
 function fmtSession(ms) {
   const t = Math.floor(ms / 100); // tenths
@@ -26,21 +28,21 @@ export default {
   css: `
     .sw { height: 100%; box-sizing: border-box; padding: calc(var(--head-h) - 4px) var(--pad) var(--pad);
       display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 5cqh; }
-    .sw-main { font-size: min(calc(108cqw / var(--len, 7)), 30cqh); font-weight: 600; line-height: 1;
+    .sw-main { font-size: min(calc(108cqw / var(--len, 7)), 30cqh); font-weight: 600; line-height: 1; font-family: var(--font-num, var(--font));
       font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
     .sw.running .sw-main { color: var(--c2); }
-    .sw-total { font-size: .85em; opacity: .75; white-space: nowrap; display: flex; gap: 6px; align-items: center; flex: none;
+    .sw-total { font-size: var(--fs-small); color: var(--text-muted); white-space: nowrap; display: flex; gap: var(--space-3); align-items: center; flex: none;
       font-variant-numeric: tabular-nums; }
-    .sw-total b { font-weight: 600; opacity: 1; }
-    .sw-total button { padding: 0 6px; font-size: .85em; }
+    .sw-total b { font-weight: 600; color: var(--c3); }
+    .sw-total button { padding: 0 6px; font-size: var(--fs-small); }
     .sw-total button.confirm { background: var(--danger); border-color: var(--danger); color: #fff; }
-    .sw-ctrl { display: flex; gap: 6px; flex: none; max-width: 100%; }
+    .sw-ctrl { display: flex; gap: var(--space-3); flex: none; max-width: 100%; }
     .sw-ctrl button { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .sw-ctrl .ico { display: none; }
-    .sw-laps { align-self: stretch; flex: 1 1 0; min-height: 0; overflow-y: auto; font-size: .8em; scrollbar-width: thin;
+    .sw-laps { align-self: stretch; flex: 1 1 0; min-height: 0; overflow-y: auto; font-size: var(--fs-meta); scrollbar-width: thin;
       font-variant-numeric: tabular-nums; }
-    .sw-laps div { display: flex; justify-content: space-between; gap: 8px; padding: 1px 4px; opacity: .8; }
-    .sw-laps div span:first-child { opacity: .6; }
+    .sw-laps div { display: flex; justify-content: space-between; gap: var(--space-4); padding: 1px 4px; color: var(--text-muted); }
+    .sw-laps div span:first-child { color: var(--text-faint); }
     @container (max-width: 12em) { .sw-ctrl .ico { display: inline; } .sw-ctrl .lbl { display: none; } }
     @container (max-height: 14em) { .sw-laps { display: none; } }
     @container (max-height: 6.5em) { .sw-total { display: none; } }
@@ -60,7 +62,7 @@ export default {
       <div class="sw">
         <div class="sw-main"></div>
         <div class="sw-total" title="${t("sw.total_hint")}">${t("sw.total")} <b></b>
-          <button data-a="reset-total" title="${t("sw.reset_total")}">↺</button></div>
+          <button data-a="reset-total" title="${t("sw.reset_total")}">${icon("reset")}</button></div>
         <div class="sw-ctrl">
           <button class="primary" data-a="go"></button>
           <button data-a="lap"></button>
@@ -82,11 +84,11 @@ export default {
       box.classList.toggle("running", !!s.startedAt);
       const go = q("[data-a=go]");
       const k = s.startedAt ? "sw.stop" : session() ? "sw.resume" : "sw.start";
-      go.innerHTML = `<span class="ico">${s.startedAt ? "❚❚" : "▶"}</span><span class="lbl">${t(k)}</span>`;
+      go.innerHTML = `<span class="ico">${icon(s.startedAt ? "pause" : "play")}</span><span class="lbl">${t(k)}</span>`;
       go.title = t(k);
       const lap = q("[data-a=lap]");
       const lk = s.startedAt ? "sw.lap" : "sw.reset";
-      lap.innerHTML = `<span class="ico">${s.startedAt ? "⚑" : "↺"}</span><span class="lbl">${t(lk)}</span>`;
+      lap.innerHTML = `<span class="ico">${icon(s.startedAt ? "flag" : "reset")}</span><span class="lbl">${t(lk)}</span>`;
       lap.title = t(lk);
       lap.disabled = !s.startedAt && !session();
     }
@@ -150,14 +152,14 @@ export default {
           confirmTimer = setTimeout(() => {
             confirmTimer = null;
             btn.classList.remove("confirm");
-            btn.textContent = "↺";
+            btn.innerHTML = icon("reset");
           }, 3000);
           return;
         }
         clearTimeout(confirmTimer);
         confirmTimer = null;
         btn.classList.remove("confirm");
-        btn.textContent = "↺";
+        btn.innerHTML = icon("reset");
         s.total = 0;
         if (s.startedAt) {
           // keep the current run going, but count the total from now

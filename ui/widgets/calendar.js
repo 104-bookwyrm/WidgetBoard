@@ -13,12 +13,14 @@ import {
   uid,
   wheelScrollX,
   deferWhileEditing,
+  editInlineText,
   throttle,
   occursOn,
   tzOptions,
-  TZ_BASELINE,
+  osZone,
 } from "../util.js";
 import { loadHolidays, holidayName } from "../holidays.js";
+import { icon } from "../icons.js";
 
 /** "14:00 회의 #work" -> { title: '회의', time: '14:00', tags: ['work'] } */
 export function parseEntry(text) {
@@ -73,22 +75,22 @@ export default {
   defaults: { filter: {}, view: "mini" },
   css: `
     .cal { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
-      display: flex; flex-direction: column; gap: 5px; }
-    .cal-head { display: flex; align-items: center; gap: 4px; flex: none; min-width: 0; }
-    .cal-head button { padding: 0 7px; font-size: .85em; flex: none; }
+      display: flex; flex-direction: column; gap: var(--space-3); }
+    .cal-head { display: flex; align-items: center; gap: var(--space-2); flex: none; min-width: 0; }
+    .cal-head button { padding: 0 7px; font-size: var(--fs-small); flex: none; }
     .cal-title { flex: 1; min-width: 0; text-align: center; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .cal-filter { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; flex: none;
+    .cal-filter { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; flex: none;
       mask-image: linear-gradient(to right, #000 88%, transparent); }
     .cal-filter .chip { max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
-    .cal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 5px; }
+    .cal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 
     /* mini view */
-    .cal-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px;
-      font-size: .85em; text-align: center; }
-    .cal-grid .wd { opacity: .5; font-size: .9em; align-self: end; padding-bottom: 2px; }
-    .cal-grid .wd.sun { color: var(--hol); opacity: .8; }
-    .cal-grid .wd.sat { color: var(--sat); opacity: .8; }
-    .cal-grid .d { position: relative; border-radius: 6px; cursor: pointer; font-variant-numeric: tabular-nums;
+    .cal-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1);
+      font-size: var(--fs-small); text-align: center; }
+    .cal-grid .wd { color: var(--text-faint); font-size: var(--fs-small); align-self: end; padding-bottom: 2px; }
+    .cal-grid .wd.sun { color: color-mix(in srgb, var(--hol) 80%, var(--c1)); }
+    .cal-grid .wd.sat { color: color-mix(in srgb, var(--sat) 80%, var(--c1)); }
+    .cal-grid .d { position: relative; border-radius: var(--r-inner); cursor: pointer; font-variant-numeric: tabular-nums;
       display: flex; align-items: center; justify-content: center; min-height: 0; }
     .cal-grid .d:hover { background: color-mix(in srgb, var(--c3) 10%, transparent); }
     .cal-grid .d.sun, .cal-grid .d.hol { color: var(--hol); }
@@ -100,71 +102,71 @@ export default {
       margin-left: -2.5px; border-radius: 50%; background: var(--c2); }
     .cal-grid .d.sel.has::after { background: var(--on-accent); }
     .cal-grid .d.alldone::after { background: transparent; box-shadow: inset 0 0 0 1.2px currentColor; opacity: .7; }
-    .cal-dayhead { font-size: .8em; opacity: .75; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cal-dayhead { font-size: var(--fs-meta); color: var(--text-muted); flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hol-name { color: var(--hol); margin-left: 6px; }
-    .cal-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; scrollbar-width: thin; }
-    .ev { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; min-width: 0; }
+    .cal-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1); scrollbar-width: thin; }
+    .ev { display: flex; align-items: center; gap: var(--space-3); padding: 3px 4px; border-radius: var(--r-inner); min-width: 0; }
     .ev:hover { background: color-mix(in srgb, var(--c3) 8%, transparent); }
     .ev input[type=checkbox] { accent-color: var(--c2); margin: 0; flex: none; }
-    .ev-rep { flex: none; opacity: .55; color: var(--c2); width: 1.1em; text-align: center; }
+    .ev-rep { flex: none; color: color-mix(in srgb, var(--c2) 55%, var(--c1)); width: 1.1em; text-align: center; }
     .bc-ev .ev-rep { font-size: .95em; width: .95em; }
-    .ev-time { color: var(--c2); font-size: .85em; font-variant-numeric: tabular-nums; flex: none; }
+    .ev-time { color: var(--c2); font-size: var(--fs-small); font-variant-numeric: tabular-nums; flex: none; }
     .ev-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
     .ev-title input, .bc-t input { width: 100%; box-sizing: border-box; font-size: 1em; }
-    .ev-tags { font-size: .75em; opacity: .6; white-space: nowrap; max-width: 35%; overflow: hidden; text-overflow: ellipsis; }
-    .ev.done .ev-title, .ev.done .ev-time { text-decoration: line-through; opacity: .45; }
-    .ev-bell { flex: none; font-size: .8em; opacity: .8; }
-    .ev-link, .ev-cfg, .ev-del { padding: 0 5px; font-size: .75em; opacity: 0; flex: none; background: none; border: 0; cursor: pointer; }
+    .ev-tags { font-size: var(--fs-meta); color: var(--text-faint); white-space: nowrap; max-width: 35%; overflow: hidden; text-overflow: ellipsis; }
+    .ev.done .ev-title, .ev.done .ev-time { text-decoration: line-through; color: var(--text-faint); }
+    .ev-bell { flex: none; font-size: var(--fs-meta); color: var(--text-muted); }
+    .ev-link, .ev-cfg, .ev-del { padding: 0 5px; font-size: var(--fs-meta); opacity: 0; flex: none; background: none; border: 0; cursor: pointer; }
     .ev:hover .ev-link, .ev:hover .ev-cfg, .ev:hover .ev-del { opacity: .8; }
-    .ev-link { opacity: .55; }
+    .ev-link { color: var(--text-faint); }
     .ev:hover .ev-link { opacity: 1; }
 
     /* event details editor (url / time / zone / reminder) */
     .cal-ed { position: absolute; inset: calc(var(--head-h) + 2px) 6px 6px; z-index: 7; padding: 10px; overflow-y: auto;
-      display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin;
+      display: flex; flex-direction: column; gap: var(--space-4); scrollbar-width: thin;
       background: color-mix(in srgb, var(--c1) 97%, transparent); border: var(--line-width) var(--line-style) var(--line-color);
       border-radius: calc(var(--radius) * .6); box-shadow: 0 8px 24px rgb(0 0 0 / .45); }
-    .cal-ed label { display: flex; flex-direction: column; gap: 3px; font-size: .85em; opacity: .85; }
-    .cal-ed label.cal-ed-chk { flex-direction: row; align-items: center; gap: 6px; opacity: 1; }
+    .cal-ed label { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--fs-small); color: var(--text-muted); }
+    .cal-ed label.cal-ed-chk { flex-direction: row; align-items: center; gap: var(--space-3); color: var(--c3); }
     .cal-ed label.cal-ed-chk input { width: auto; flex: none; }
     .cal-ed input, .cal-ed select { width: 100%; box-sizing: border-box; font-size: 1em; }
     .cal-ed-lead input { width: 5em; }
-    .cal-ed-btns { display: flex; gap: 6px; margin-top: auto; }
+    .cal-ed-btns { display: flex; gap: var(--space-3); margin-top: auto; }
     .cal-ed-btns .sp { flex: 1; }
-    .cal-empty { opacity: .5; font-size: .85em; padding: 6px 4px; }
+    .cal-empty { color: var(--text-faint); font-size: var(--fs-small); padding: 6px 4px; }
     .cal-add { flex: none; width: 100%; box-sizing: border-box; }
 
     /* board view: big writable squares */
-    .cal-board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
-    .cal-board .wd { font-size: .72em; opacity: .55; text-align: center; }
-    .cal-board .wd.sun { color: var(--hol); opacity: .8; }
-    .cal-board .wd.sat { color: var(--sat); opacity: .8; }
-    .bc { position: relative; min-height: 0; min-width: 0; overflow: hidden; border-radius: 5px; padding: 2px 3px;
-      display: flex; flex-direction: column; cursor: text; font-size: .74em;
+    .cal-board { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1); }
+    .cal-board .wd { font-size: var(--fs-meta); color: var(--text-faint); text-align: center; }
+    .cal-board .wd.sun { color: color-mix(in srgb, var(--hol) 80%, var(--c1)); }
+    .cal-board .wd.sat { color: color-mix(in srgb, var(--sat) 80%, var(--c1)); }
+    .bc { position: relative; min-height: 0; min-width: 0; overflow: hidden; border-radius: var(--r-inner); padding: 2px 3px;
+      display: flex; flex-direction: column; cursor: text; font-size: var(--fs-meta);
       background: color-mix(in srgb, var(--c3) 5%, transparent); }
     .bc:hover { background: color-mix(in srgb, var(--c3) 11%, transparent); }
     .bc.other { opacity: .4; }
     .bc.today { box-shadow: inset 0 0 0 1.5px var(--c2); }
-    .bc-top { display: flex; gap: 4px; align-items: baseline; flex: none; white-space: nowrap; overflow: hidden; }
+    .bc-top { display: flex; gap: var(--space-2); align-items: baseline; flex: none; white-space: nowrap; overflow: hidden; }
     .bc-num { font-weight: 600; font-variant-numeric: tabular-nums; }
     .bc.sun .bc-num, .bc.hol .bc-num { color: var(--hol); }
     .bc.sat .bc-num { color: var(--sat); }
-    .bc-hol { font-size: .85em; color: var(--hol); overflow: hidden; text-overflow: ellipsis; }
-    .bc-evs { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 1px; }
-    .bc-ev { display: flex; align-items: center; gap: 3px; white-space: nowrap; min-width: 0; flex: none; }
+    .bc-hol { font-size: var(--fs-small); color: var(--hol); overflow: hidden; text-overflow: ellipsis; }
+    .bc-evs { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: var(--space-1); }
+    .bc-ev { display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; min-width: 0; flex: none; }
     .bc-ev input[type=checkbox] { margin: 0; width: .95em; height: .95em; flex: none; accent-color: var(--c2); }
     .bc-t { flex: 1; overflow: hidden; text-overflow: ellipsis; min-width: 0; cursor: pointer; }
     .bc-t b { color: var(--c2); font-weight: 600; }
-    .bc-ev.done .bc-t { text-decoration: line-through; opacity: .45; }
-    .bc-more { font-size: .92em; opacity: .7; cursor: pointer; flex: none; }
+    .bc-ev.done .bc-t { text-decoration: line-through; color: var(--text-faint); }
+    .bc-more { font-size: var(--fs-small); color: var(--text-muted); cursor: pointer; flex: none; }
     .bc-more:hover { color: var(--c2); opacity: 1; }
     input.bc-add { position: absolute; left: 2px; right: 2px; bottom: 2px; z-index: 2; font-size: 1em; padding: 1px 4px; }
 
     /* day popover (board "+N") */
-    .cal-pop { position: absolute; inset: calc(var(--head-h) + 2px) 6px 6px; z-index: 6; padding: 8px; display: flex; flex-direction: column; gap: 6px;
+    .cal-pop { position: absolute; inset: calc(var(--head-h) + 2px) 6px 6px; z-index: 6; padding: 8px; display: flex; flex-direction: column; gap: var(--space-3);
       background: color-mix(in srgb, var(--c1) 97%, transparent); border: var(--line-width) var(--line-style) var(--line-color);
       border-radius: calc(var(--radius) * .6); box-shadow: 0 8px 24px rgb(0 0 0 / .45); }
-    .pop-head { display: flex; gap: 6px; align-items: center; min-width: 0; }
+    .pop-head { display: flex; gap: var(--space-3); align-items: center; min-width: 0; }
     .pop-head b { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pop-head button { padding: 0 7px; }
   `,
@@ -177,12 +179,12 @@ export default {
     let hol = {};
     let month = ymd().slice(0, 7) + "-01";
     let popDate = null;
-    const defaultTz = () => api.config?.ui?.currentTz || TZ_BASELINE;
+    const defaultTz = () => api.config?.ui?.currentTz || osZone(); // the viewer's zone, as app.js currentTz()
 
     root.innerHTML = `
       <div class="cal">
         <div class="cal-head">
-          <button data-a="prev" title="${esc(t("cal.prev_month"))}">‹</button><span class="cal-title" aria-live="polite"></span><button data-a="next" title="${esc(t("cal.next_month"))}">›</button>
+          <button data-a="prev" title="${esc(t("cal.prev_month"))}">${icon("left")}</button><span class="cal-title" aria-live="polite"></span><button data-a="next" title="${esc(t("cal.next_month"))}">${icon("right")}</button>
           <button data-a="today">${esc(t("cal.today"))}</button>
           <button data-a="view"></button>
         </div>
@@ -224,7 +226,7 @@ export default {
     // ---------------- rendering ----------------
     function render() {
       const v = q("[data-a=view]");
-      v.textContent = s.view === "mini" ? "▦" : "☰";
+      v.innerHTML = icon(s.view === "mini" ? "grid" : "list");
       v.title = t(s.view === "mini" ? "cal.view_board" : "cal.view_mini");
       q(".cal-title").textContent = fmt(
         { year: "numeric", month: "long" },
@@ -287,18 +289,18 @@ export default {
             <div class="ev ${e.done ? "done" : ""}" data-id="${esc(e.id)}">
               ${
                 e.dday
-                  ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">📌</span>`
+                  ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
                   : e.repeat
-                    ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">↻</span>`
+                    ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">${icon("repeat")}</span>`
                     : `<input type="checkbox" ${e.done ? "checked" : ""}>`
               }
               ${e.time ? `<span class="ev-time">${esc(e.time)}</span>` : ""}
-              ${e.notify ? `<span class="ev-bell" title="${esc(t("cal.notify"))}">🔔</span>` : ""}
-              <span class="ev-title" title="${esc(e.title)} — ${esc(t("cal.edit_hint"))}">${esc(e.title)}</span>
+              ${e.notify ? `<span class="ev-bell" title="${esc(t("cal.notify"))}">${icon("bell")}</span>` : ""}
+              <span class="ev-title" title="${esc(e.title)} - ${esc(t("cal.edit_hint"))}">${esc(e.title)}</span>
               <span class="ev-tags" title="${esc((e.tags || []).map((x) => "#" + x).join(" "))}">${esc((e.tags || []).map((x) => "#" + x).join(" "))}</span>
-              ${e.url ? `<button class="ev-link" title="${esc(e.url)}">🔗</button>` : ""}
-              <button class="ev-cfg" title="${esc(t("cal.details"))}">⚙</button>
-              <button class="ev-del" title="${esc(t("dday.delete"))}">✕</button>
+              ${e.url ? `<button class="ev-link" title="${esc(e.url)}">${icon("link")}</button>` : ""}
+              <button class="ev-cfg" title="${esc(t("cal.details"))}">${icon("settings")}</button>
+              <button class="ev-del" title="${esc(t("dday.delete"))}">${icon("x")}</button>
             </div>`,
             )
             .join("")
@@ -352,9 +354,9 @@ export default {
               <div class="bc-ev ${e.done ? "done" : ""}" data-id="${esc(e.id)}" title="${esc(unparse(e))}">
                 ${
                   e.dday
-                    ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">📌</span>`
+                    ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
                     : e.repeat
-                      ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">↻</span>`
+                      ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">${icon("repeat")}</span>`
                       : `<input type="checkbox" ${e.done ? "checked" : ""}>`
                 }<span class="bc-t">${e.time ? `<b>${esc(e.time)}</b> ` : ""}${esc(e.title)}</span>
               </div>`,
@@ -400,10 +402,10 @@ export default {
       }
       const hn = holName(popDate);
       pop.innerHTML = `
-        <div class="pop-head"><button data-a="pop-prev" title="${esc(t("cal.prev_day"))}">‹</button>
+        <div class="pop-head"><button data-a="pop-prev" title="${esc(t("cal.prev_day"))}">${icon("left")}</button>
           <b>${esc(dayLabel(popDate))}${hn ? `<span class="hol-name">${esc(hn)}</span>` : ""}</b>
-          <button data-a="pop-next" title="${esc(t("cal.next_day"))}">›</button>
-          <button data-a="pop-close" title="${esc(t("theme.close"))}">✕</button></div>
+          <button data-a="pop-next" title="${esc(t("cal.next_day"))}">${icon("right")}</button>
+          <button data-a="pop-close" title="${esc(t("theme.close"))}">${icon("x")}</button></div>
         <div class="cal-list">${agendaHtml(popDate)}</div>
         <input class="cal-add" data-date="${popDate}" placeholder="${esc(t("cal.add_placeholder"))}">`;
       pop.hidden = false;
@@ -423,32 +425,16 @@ export default {
 
     /** Replace `span` with an input for `ev`; Enter saves, Esc cancels, empty text deletes. */
     function editInline(span, ev) {
-      span.innerHTML = `<input value="${esc(unparse(ev))}">`;
-      const inp = span.querySelector("input");
-      inp.focus();
-      let done = false;
-      const commit = (keep) => {
-        if (done) return;
-        done = true;
-        if (keep) {
-          const txt = inp.value.trim();
-          if (!txt) events = events.filter((x) => x !== ev);
-          else {
-            const p = parseEntry(txt);
-            if (p.title) Object.assign(ev, p);
-          }
-          persist();
+      editInlineText(span, unparse(ev), (text) => {
+        const current = byId(ev.id);
+        if (!current) return;
+        if (!text) events = events.filter((item) => item.id !== ev.id);
+        else {
+          const parsed = parseEntry(text);
+          if (parsed.title) Object.assign(current, parsed);
         }
-        render();
-      };
-      inp.addEventListener("keydown", (k) => {
-        if (k.key === "Enter") commit(true);
-        if (k.key === "Escape") {
-          k.stopPropagation();
-          commit(false);
-        }
-      });
-      inp.addEventListener("blur", () => commit(true));
+        persist();
+      }, render);
     }
 
     /** Write directly into a board square. Enter adds and keeps the box open for the next line. */
@@ -498,7 +484,7 @@ export default {
       const tz = ev.tz || defaultTz();
       ed.innerHTML = `
         <div class="pop-head"><b>${esc(t("cal.details"))}</b>
-          <button data-a="ed-close" title="${esc(t("theme.close"))}">✕</button></div>
+          <button data-a="ed-close" title="${esc(t("theme.close"))}">${icon("x")}</button></div>
         <label>${esc(t("cal.time"))}<input data-f="time" type="time" value="${esc(ev.time || "")}"></label>
         <label>${esc(t("cal.url"))}<input data-f="url" type="url" inputmode="url" value="${esc(ev.url || "")}" placeholder="https://"></label>
         <label>${esc(t("clock.zone"))}<select data-f="tz">${tzOptions(tz, { common: t("set.tz_common"), all: t("set.tz_all") })}</select></label>
@@ -512,11 +498,14 @@ export default {
         const a = e.target.closest("[data-a]")?.dataset.a;
         if (a === "ed-close") return closeDetails();
         if (a === "ed-save") {
-          ev.time = f("time").value || null;
-          ev.url = f("url").value.trim() || null;
-          ev.tz = f("tz").value || defaultTz();
-          ev.notify = f("notify").checked;
-          ev.lead = Math.max(0, Math.floor(+f("lead").value || 0)) || null;
+          // the live copy: another widget may have re-synced `events` while the panel was open
+          const cur = byId(ev.id);
+          if (!cur) return (closeDetails(), render()); // deleted meanwhile
+          cur.time = f("time").value || null;
+          cur.url = f("url").value.trim() || null;
+          cur.tz = f("tz").value || defaultTz();
+          cur.notify = f("notify").checked;
+          cur.lead = Math.max(0, Math.floor(+f("lead").value || 0)) || null;
           persist();
           closeDetails();
           render();
@@ -595,9 +584,15 @@ export default {
         return openDetails(byId(e.target.closest("[data-id]").dataset.id));
       if (e.target.closest(".ev-del")) {
         const ev = byId(e.target.closest("[data-id]").dataset.id);
+        const i = events.indexOf(ev);
         events = events.filter((x) => x !== ev);
         persist();
-        return render();
+        render();
+        return api.deleted(() => {
+          events.splice(Math.min(i, events.length), 0, ev);
+          persist();
+          render();
+        });
       }
       const more = e.target.closest(".bc-more");
       if (more) return openDay(more.closest(".bc").dataset.d);
@@ -698,16 +693,12 @@ export default {
       hol = h;
       renderLater();
     });
-    let day = ymd();
-    const tick = setInterval(() => {
-      if (ymd() !== day) ((day = ymd()), renderLater());
-    }, 60000);
+    api.onDayChange(renderLater);
     render();
     load();
     return {
       destroy() {
         ro.disconnect();
-        clearInterval(tick);
       },
       resized: () => (s.view === "board" ? fitCells() : null),
       summary: () => {
@@ -726,7 +717,7 @@ export default {
           h ? t("sum.cal_hol", { name: h }) : "",
           today.length
             ? t("sum.cal_today", { n: today.length }) +
-              " — " +
+              " - " +
               today.slice(0, 6).map(label).join(", ")
             : t("sum.cal_none"),
           next ? t("sum.cal_next", { date: next.date, title: next.title }) : "",

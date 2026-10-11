@@ -4,7 +4,7 @@
 // Increment 4 — Backup & data page (backup/restore, auto schedule).
 // Increment 5a — Appearance page (theme editor).
 // Increment 5b — Widgets & layout page (list/add/move/close, presets, saved layouts).
-import { chromium } from "playwright";
+import { chromium } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -258,6 +258,7 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     await p.$eval("#about-update-offer", (e) => e.hidden),
     "no update offer before a check",
   );
+  await p.evaluate(() => { window.__mockUpdate = { found: "0.12.1", notes: "New: x\nFixed: y" }; });
   // check-now finds a version: notes as plain text + Install / Later / Skip
   await p.click("#about-update-now");
   await p.waitForTimeout(100);
@@ -434,20 +435,28 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   let rows = await p.$$eval("#wg-list .set-list-row", (r) => r.length);
   ok(rows === 2, "widget list shows seeded widgets", String(rows));
 
-  // close a widget → replace_widgets without it
-  await p.click("#wg-list .set-list-row:first-child button:last-child");
-  await p.waitForTimeout(100);
-  ok(
-    (await p.evaluate(
-      () => JSON.parse(localStorage.getItem("wb-widgets")).length,
-    )) === 1,
-    "close removes a widget via replace_widgets",
-  );
-
-  await p.waitForTimeout(500); // list re-renders after board changes
+  // close a widget → the owning board closes its live copy (widget-close)
   const nat = () => p.evaluate(() => window.__native || []);
   const sent = async (ev, test) =>
     (await nat()).some(([c, e, pl]) => c === "emit" && e === ev && test(pl));
+  await p.click("#wg-list .set-list-row:first-child button:last-child");
+  await p.waitForTimeout(100);
+  ok(
+    await sent("widget-close", (pl) => pl === "a"),
+    "close asks the board to close the widget",
+  );
+  ok(
+    (await p.evaluate(() => JSON.parse(localStorage.getItem("wb-widgets")).length)) === 2,
+    "the settings window itself rewrites nothing",
+  );
+  // what the board then does (bin + layout), so the rest of the page can be checked
+  await p.evaluate(() => {
+    const ws = JSON.parse(localStorage.getItem("wb-widgets"));
+    localStorage.setItem("wb-bin", JSON.stringify([{ at: 1790000000, w: ws.find((w) => w.id === "a") }]));
+    localStorage.setItem("wb-widgets", JSON.stringify(ws.filter((w) => w.id !== "a")));
+  });
+  await p.click(".set-nav button[data-page=widgets]");
+  await p.waitForTimeout(500);
   ok(
     (await p.$$eval("#wg-bin .set-list-row", (r) => r.length)) === 1,
     "closed widget waits in the bin",
@@ -549,6 +558,13 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     (await p.$$eval("#wg-archive-list details", (d) => d.length)) === 1,
     "archived versions grouped into one memo",
   );
+  // opened straight on the Widgets page, init and showPage both render the list: still one entry
+  await p.goto("http://localhost:8765/settings.html?lang=ko&page=widgets");
+  await p.waitForTimeout(500);
+  ok(
+    (await p.$$eval("#wg-archive-list details", (d) => d.length)) === 1,
+    "RT14: archive list not doubled when opened on the Widgets page",
+  );
   await p.click("#wg-archive-list summary");
   await p.waitForTimeout(50);
   ok(
@@ -618,6 +634,35 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   ok(
     (await p.$$eval("#wg-layouts .set-list-row", (r) => r.length)) === 1,
     "saved layout listed",
+  );
+  // apply goes to the board, which merges current contents into the saved positions
+  await p.click("#wg-layouts .set-list-row button");
+  await p.waitForTimeout(50);
+  ok(
+    await p.evaluate(() =>
+      (window.__native || []).some(
+        ([c, ev, pl]) =>
+          c === "emit_primary" && ev === "apply-layout" && pl === "My setup",
+      ),
+    ),
+    "apply emits apply-layout with the layout name",
+  );
+  ok(
+    (await p.$$eval("#wg-add-type option", (o) => o.length)) === 13,
+    "add list offers every widget type",
+  );
+  // delete asks first
+  await p.click("#wg-layouts .set-list-row button:last-child");
+  ok(
+    /My setup/.test(await p.textContent("#wg-layouts .set-list-row")) &&
+      JSON.parse(await p.evaluate(() => localStorage.getItem("wb-store-layouts"))).length === 1,
+    "deleting a layout asks for confirmation first",
+  );
+  await p.click("#wg-layouts .set-list-row button.primary");
+  await p.waitForTimeout(100);
+  ok(
+    JSON.parse(await p.evaluate(() => localStorage.getItem("wb-store-layouts"))).length === 0,
+    "confirmed delete removes the layout",
   );
   await p.close();
 }
@@ -873,6 +918,22 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     "English General page",
   );
   ok(!RAW.test(body), "no raw keys visible (en)", (body.match(RAW) || [])[0]);
+  await p.close();
+}
+
+// --- config.json typo: saves are refused and the window says why ---
+{
+  const p = await page();
+  await p.evaluate(() => (window.__mockConfigBroken = true));
+  await p.click(".set-nav button[data-page=a11y]");
+  await p.waitForTimeout(100);
+  await p.check("#a11y-highContrast");
+  await p.waitForTimeout(400);
+  ok(
+    /config\.json/.test(await p.textContent(".set-saved")),
+    "a refused save explains the config.json problem",
+    await p.textContent(".set-saved"),
+  );
   await p.close();
 }
 

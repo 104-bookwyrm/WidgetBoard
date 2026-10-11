@@ -8,39 +8,16 @@ import {
   zonedToInstant,
   ymd,
   addDays,
+  syncScheme,
+  isLight,
 } from "./util.js";
-import timer from "./widgets/timer.js";
-import image from "./widgets/image.js";
-import dday from "./widgets/dday.js";
-import checklist from "./widgets/checklist.js";
-import stopwatch from "./widgets/stopwatch.js";
-import memo from "./widgets/memo.js";
-import nowplaying from "./widgets/nowplaying.js";
-import calendar from "./widgets/calendar.js";
-import diary from "./widgets/diary.js";
-import showcase from "./widgets/showcase.js";
-import audioplayer from "./widgets/audioplayer.js";
-import collection from "./widgets/collection.js";
-import clock from "./widgets/clock.js";
+import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
+import { icon } from "./icons.js";
+import { contentForType } from "./widget-state.js";
+import REGISTRY from "./widgets/index.js";
+import { createMockTauri } from "./mock-tauri.js";
 
-/** Widget registry. Add a widget = add a module here and an id in main.rs WIDGETS. */
-const REGISTRY = {
-  checklist,
-  calendar,
-  dday,
-  diary,
-  memo,
-  nowplaying,
-  timer,
-  stopwatch,
-  image,
-  showcase,
-  audioplayer,
-  collection,
-  clock,
-};
-
-const T = window.__TAURI__ ?? mockTauri();
+const T = window.__TAURI__ ?? createMockTauri();
 const invoke = (cmd, args, opts) => T.core.invoke(cmd, args, opts);
 /** Writes that fail (disk full, file locked, ...) tell the user instead of failing silently. */
 const saveFailed = (e) => {
@@ -50,7 +27,13 @@ const saveFailed = (e) => {
   err.reported = true; // the global handler must not replace this message
   throw err;
 };
-const write = (cmd, args, opts) => invoke(cmd, args, opts).catch(saveFailed);
+const activeWrites = new Set();
+const write = (cmd, args, opts) => {
+  const promise = invoke(cmd, args, opts).catch(saveFailed);
+  activeWrites.add(promise);
+  promise.then(() => activeWrites.delete(promise), () => activeWrites.delete(promise));
+  return promise;
+};
 const win = T.webviewWindow.getCurrentWebviewWindow();
 const listen = (ev, h) => win.listen(ev, h); // only events for this board (or broadcasts)
 
@@ -61,7 +44,6 @@ let widgets = []; // widgets on this monitor
 let myDisplay = "";
 let displays = []; // [{ label, display, index, primary }]
 let assetsDir = "";
-let themeCss = "";
 let editMode = false;
 let lang = "ko";
 let config = {};
@@ -75,6 +57,14 @@ function setMotion(on) {
 }
 const storeSubs = new Set(); // { key, src, cb }
 const configSubs = new Set(); // cb(config)
+// One date watcher for every widget (api.onDayChange); a minute's lag at midnight is fine.
+const daySubs = new Set(); // cb(ymd)
+let curDay = ymd();
+setInterval(() => {
+  if (ymd() === curDay) return;
+  curDay = ymd();
+  daySubs.forEach((cb) => cb(curDay));
+}, 60000);
 
 // ---------------- geometry ----------------
 function metrics() {
@@ -220,13 +210,20 @@ function place(el, r) {
 
 // ---------------- persistence (per widget; Rust owns layout.json) ----------------
 const pending = new Map();
+const unsaved = new Map();
+async function persistWidget(w) {
+  const revision = unsaved.get(w.id);
+  await write("put_widget", { widget: w });
+  if (unsaved.get(w.id) === revision) unsaved.delete(w.id);
+}
 function save(w) {
+  unsaved.set(w.id, { w });
   clearTimeout(pending.get(w.id));
   pending.set(
     w.id,
     setTimeout(() => {
       pending.delete(w.id);
-      write("put_widget", { widget: w }).catch(() => {});
+      persistWidget(w).catch(() => {});
     }, 300),
   );
   if (w.type === "memo") archiveMemo(w);
@@ -307,9 +304,9 @@ const MIME_EXT = {
   "image/vnd.microsoft.icon": "ico",
   "image/avif": "avif",
 };
-async function uploadImage(file) {
+async function uploadImage(file, tooBigKey = "toast.too_big") {
   if (file.size > 30 * 1024 * 1024) {
-    toast(t("toast.too_big"));
+    toast(t(tooBigKey));
     throw new Error("file too large");
   }
   const ext =
@@ -362,11 +359,6 @@ function sanitizeWidget(w, def) {
   )
     delete w.frameSvg;
 }
-const cleanFont = (f) =>
-  String(f || "")
-    .replace(/["';{}\\<>]/g, "")
-    .trim()
-    .slice(0, 80);
 
 function mount(w) {
   const def = REGISTRY[w.type] ?? UNKNOWN;
@@ -391,9 +383,9 @@ function mount(w) {
     <div class="w-body"></div>
     <div class="w-frame" aria-hidden="true"></div>
     <div class="w-head">
-      <button class="grip" data-act="grip" title="${esc(t("a11y.grip", { name }))}">⋮⋮</button><span class="title">${esc(name)}</span>
+      <button class="grip" data-act="grip" title="${esc(t("a11y.grip", { name }))}">${icon("grip")}</button><span class="title">${esc(name)}</span>
       <span class="w-hint" title="${esc(t("hint." + w.type))}">${esc(t("hint." + w.type))}</span>
-      <button data-act="remove" title="${esc(t("menu.close"))}">✕</button>
+      <button data-act="remove" title="${esc(t("menu.close"))}">${icon("x")}</button>
     </div>
     <div class="w-resize" aria-hidden="true"></div>`;
   place(el, w);
@@ -407,6 +399,9 @@ function mount(w) {
     uploadImage,
     assetUrl,
     toast,
+    /** "Deleted" toast with an undo button; restore() puts the item back. */
+    deleted: (restore) =>
+      toast(t("toast.deleted"), { label: t("toast.undo"), fn: restore }),
     t,
     lang,
     wheelScrollX,
@@ -458,6 +453,11 @@ function mount(w) {
     onConfig: (cb) => {
       configSubs.add(cb);
       subs.push(() => configSubs.delete(cb));
+    },
+    /** cb(ymd) when the local date changes (midnight, or waking up on a later day). */
+    onDayChange: (cb) => {
+      daySubs.add(cb);
+      subs.push(() => daySubs.delete(cb));
     },
     /** Ask for a bigger/smaller size; neighbours are pushed aside if needed. Returns true on success. */
     requestSize: (size) => {
@@ -545,11 +545,6 @@ function closeFontPanel() {
   fontTarget = null;
   syncHits();
 }
-const firstFamily = (v) =>
-  (v || "")
-    .split(",")[0]
-    .trim()
-    .replace(/^["']|["']$/g, "");
 $("#fp-family").addEventListener("change", () => {
   if (!fontTarget) return;
   const { w, el } = fontTarget;
@@ -576,7 +571,8 @@ $("#fp-reset").onclick = () => {
   save(w);
   openFontPanel(w, el);
 };
-/** Per-widget colours: an unset colour follows the theme (shown faded, no ↺). */
+for (const b of document.querySelectorAll("#font-panel .mini")) b.innerHTML = icon("reset");
+/** Per-widget colours: an unset colour follows the theme (shown faded, no reset button). */
 function fillLook(w, el) {
   const c = w.colors || {};
   const cs = getComputedStyle(el);
@@ -658,11 +654,12 @@ $("#fp-svg").onclick = async () => {
 $("#fp-close").onclick = closeFontPanel;
 
 function unmount(w) {
-  clearTimeout(pending.get(w.id));
-  pending.delete(w.id);
   const m = mounted.get(w.id);
-  m?.inst.destroy?.();
+  m?.inst.destroy?.(); // may flush a last edit into w (memo) and queue a save...
   m?.inst.unsub?.();
+  clearTimeout(pending.get(w.id)); // ...which must not land after a remove/move: callers write w themselves
+  pending.delete(w.id);
+  unsaved.delete(w.id);
   m?.el.remove();
   mounted.delete(w.id);
   widgets = widgets.filter((o) => o.id !== w.id);
@@ -672,9 +669,9 @@ function unmount(w) {
 
 let lastClosed = null;
 function removeWidget(w) {
+  unmount(w); // first: the widget's destroy flushes its latest edit into w
   if (w.type === "memo") archiveMemo(w, true);
   lastClosed = structuredClone(w);
-  unmount(w);
   write("remove_widget", { id: w.id }).catch(() => {});
   write("bin_put", { widget: lastClosed }).catch(() => {});
   toast(t("toast.closed", { name: widgetName(w) }), {
@@ -735,16 +732,13 @@ function locate(id) {
 function changeType(w, type) {
   const def = REGISTRY[type];
   if (!def || type === w.type) return;
-  w.stash = w.stash && typeof w.stash === "object" ? w.stash : {};
-  w.stash[w.type] = w.settings;
   const m = mounted.get(w.id);
   m?.inst.destroy?.();
   m?.inst.unsub?.();
   m?.el.remove();
   mounted.delete(w.id);
+  Object.assign(w, contentForType(w, type, { settings: def.defaults ?? {} }));
   w.type = type;
-  w.settings = w.stash[type] ?? structuredClone(def.defaults ?? {});
-  delete w.stash[type];
   const min = def.min ?? { w: 1, h: 1 };
   if (w.w < min.w || w.h < min.h) {
     const g = metrics();
@@ -773,7 +767,8 @@ async function setBg(w, el) {
 }
 
 async function moveTo(w, display) {
-  unmount(w);
+  unmount(w); // destroy flushes the latest edit into w; its queued save is dropped
+  await write("put_widget", { widget: w }).catch(() => {});
   await invoke("move_widget", { id: w.id, display });
 }
 
@@ -1133,224 +1128,26 @@ function receiveWidget(w) {
   syncHits();
 }
 
-// ---------------- theme ----------------
-const PANEL_VARS = [...document.querySelectorAll("#theme-panel [data-var]")];
-function sanitize(css) {
-  // Shared themes may not pull remote content.
-  return css
-    .replace(/@import[^;]*;?/gi, "")
-    .replace(/url\(\s*['"]?\s*(https?:|\/\/)[^)]*\)/gi, "none");
-}
+// ---------------- theme (edited in the settings window; theme-changed brings it here) ----------------
 function applyTheme(css) {
-  themeCss = typeof css === "string" ? css : "";
-  for (const i of PANEL_VARS)
-    document.documentElement.style.removeProperty(i.dataset.var);
-  $("#user-theme").textContent = sanitize(themeCss);
+  $("#user-theme").textContent = sanitize(typeof css === "string" ? css : "");
   // a broken theme (e.g. --cell: abc) must not wreck the grid
+  document.documentElement.style.removeProperty("--cell");
   const cell = parseFloat(
     getComputedStyle(document.documentElement).getPropertyValue("--cell"),
   );
   if (!(cell >= 24 && cell <= 400))
     document.documentElement.style.setProperty("--cell", "80px");
-  fillPanel();
+  syncScheme();
   syncHits();
   reflowSoon();
 }
-function setVar(css, name, value) {
-  const esc = name.replace(/[-]/g, "\\-");
-  const re = new RegExp(`(^|[\\s;{])(${esc}\\s*:\\s*)([^;]*)(;)`, "m");
-  if (re.test(css)) return css.replace(re, `$1$2${value}$4`);
-  if (/:root\s*\{/.test(css))
-    return css.replace(/:root\s*\{/, (m) => `${m}\n  ${name}: ${value};`);
-  return `${css}\n:root { ${name}: ${value}; }\n`;
-}
-const cvs = document.createElement("canvas").getContext("2d");
-function toHex(color) {
-  cvs.fillStyle = "#000";
-  cvs.fillStyle = color.trim();
-  return cvs.fillStyle.startsWith("#") ? cvs.fillStyle : "#000000";
-}
-function fillPanel() {
-  const cs = getComputedStyle(document.documentElement);
-  $("#theme-font").value = firstFamily(cs.getPropertyValue("--font"));
-  for (const i of PANEL_VARS) {
-    const v = cs.getPropertyValue(i.dataset.var).trim();
-    i.value = i.type === "color" ? toHex(v) : parseFloat(v) || 0;
-  }
-}
-for (const i of PANEL_VARS) {
-  const val = () => i.value + (i.dataset.unit ?? "");
-  i.addEventListener("input", () => {
-    document.documentElement.style.setProperty(i.dataset.var, val());
-    syncHits();
-  });
-  i.addEventListener("change", () => {
-    themeCss = setVar(themeCss, i.dataset.var, val());
-    write("save_theme", { css: themeCss }).catch(() => {});
-  });
-}
-$("#theme-font").addEventListener("change", () => {
-  const name = cleanFont($("#theme-font").value);
-  const val = name
-    ? `"${name}", "Malgun Gothic", system-ui, sans-serif`
-    : '"Segoe UI Variable", "Segoe UI", "Malgun Gothic", system-ui, sans-serif';
-  themeCss = setVar(themeCss, "--font", val);
-  write("save_theme", { css: themeCss }).catch(() => {});
-});
-$("#theme-close").onclick = () => {
-  $("#theme-panel").hidden = true;
-  syncHits();
-};
-$("#theme-file").onclick = () => invoke("open_theme_file");
-
-// ---------------- AI themes: copy the master prompt, paste the answer back ----------------
-/** Pull the CSS out of an AI answer: the first ``` block if there is one, otherwise the whole text. */
-function extractCss(text) {
-  const m = String(text).match(/```(?:css)?\s*\n([\s\S]*?)```/i);
-  return (m ? m[1] : String(text)).trim();
-}
-/** Check a theme before using it. Returns { ok, css, warnings[], error }. */
-function checkTheme(text) {
-  const css = extractCss(text);
-  if (!css) return { ok: false, error: t("ai.err_empty") };
-  let sheet;
-  try {
-    sheet = new CSSStyleSheet();
-    sheet.replaceSync(sanitize(css));
-  } catch {
-    return { ok: false, error: t("ai.err_syntax") };
-  }
-  const rules = [...sheet.cssRules];
-  const style = rules.filter((r) => r.style);
-  if (!style.some((r) => [...r.style].some((p) => p.startsWith("--"))))
-    return { ok: false, error: t("ai.err_no_vars") };
-  const warnings = [];
-  const outside = style.filter(
-    (r) =>
-      !/^(:root|\[data-widget=("|')?[a-z]+("|')?\])(\s*,\s*(:root|\[data-widget=("|')?[a-z]+("|')?\]))*$/.test(
-        r.selectorText,
-      ),
-  );
-  if (outside.length || rules.length !== style.length)
-    warnings.push(
-      t("ai.warn_outside", { n: outside.length + rules.length - style.length }),
-    );
-  if (/@import|url\(\s*['"]?\s*(https?:|\/\/)/i.test(css))
-    warnings.push(t("ai.warn_remote"));
-  if (/--(cell|gap)\s*:/.test(css)) warnings.push(t("ai.warn_grid"));
-  return { ok: true, css, warnings };
-}
-/** WCAG contrast ratio between two CSS colours (as resolved by the browser). */
-function contrast(a, b) {
-  const lum = (c) => {
-    const p = document.createElement("i");
-    p.style.color = c;
-    document.body.append(p);
-    const v = getComputedStyle(p).color;
-    p.remove();
-    const n = v.match(/[\d.]+/g)?.map(Number) || [0, 0, 0];
-    const rgb = v.startsWith("color(")
-      ? n.slice(0, 3).map((x) => x * 255)
-      : n.slice(0, 3);
-    const ch = rgb.map((x) =>
-      (x /= 255) <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4,
-    );
-    return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-  };
-  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
-  return (x + 0.05) / (y + 0.05);
-}
-function contrastWarnings() {
-  const w = [];
-  const text = contrast("var(--c3)", "var(--c1)");
-  const acc = contrast("var(--on-accent)", "var(--c2)");
-  if (text < 4.5) w.push(t("ai.warn_contrast_text", { r: text.toFixed(1) }));
-  if (acc < 3) w.push(t("ai.warn_contrast_accent", { r: acc.toFixed(1) }));
-  return w;
-}
-let themeBackup = null;
-async function copyText(txt) {
-  try {
-    await navigator.clipboard.writeText(txt);
-    return true;
-  } catch {
-    const ta = Object.assign(document.createElement("textarea"), {
-      value: txt,
-    });
-    document.body.append(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    ta.remove();
-    return ok;
-  }
-}
-$("#theme-ai-copy").onclick = async () => {
-  const prompt = await fetch("ai-theme-prompt.md")
-    .then((r) => r.text())
-    .catch(() => "");
-  const body =
-    prompt
-      .split("<!-- PROMPT START -->")[1]
-      ?.split("<!-- PROMPT END -->")[0]
-      ?.trim() || prompt;
-  const full = `${body}\n\n## My current theme (start from this if I ask to change it)\n\`\`\`css\n${themeCss.trim()}\n\`\`\`\n\n## What I want\n`;
-  toast(t((await copyText(full)) ? "ai.copied" : "ai.copy_failed"));
-};
-$("#theme-ai-paste").onclick = () => {
-  $("#paste-panel").hidden = false;
-  $("#paste-result").textContent = "";
-  $("#paste-text").focus();
-  syncHits();
-};
-$("#paste-cancel").onclick = () => {
-  $("#paste-panel").hidden = true;
-  syncHits();
-};
-$("#paste-apply").onclick = async () => {
-  const res = $("#paste-result");
-  const r = checkTheme($("#paste-text").value);
-  res.className = "";
-  if (!r.ok) {
-    res.className = "bad";
-    res.textContent = r.error;
-    return;
-  }
-  themeBackup = themeCss;
-  invoke("store_set", {
-    key: "theme_backup",
-    value: themeBackup,
-    src: "host",
-  }).catch(() => {});
-  applyTheme(r.css);
-  await write("save_theme", { css: r.css }).catch(() => {});
-  const warnings = [...r.warnings, ...contrastWarnings()];
-  res.className = warnings.length ? "warn" : "";
-  res.textContent = warnings.length ? warnings.join(" · ") : t("ai.applied");
-  $("#theme-undo").hidden = false;
-};
-$("#theme-undo").onclick = async () => {
-  const prev =
-    themeBackup ??
-    (await invoke("store_get", { key: "theme_backup" }).catch(() => null));
-  if (typeof prev !== "string") return toast(t("ai.no_backup"));
-  applyTheme(prev);
-  await write("save_theme", { css: prev }).catch(() => {});
-  themeBackup = null;
-  $("#theme-undo").hidden = true;
-  toast(t("ai.undone"));
-};
 
 // ---------------- edit mode ----------------
 function setEdit(on) {
   editMode = on;
   document.body.classList.toggle("edit", on);
   $("#editbar").hidden = !on;
-  if (!on)
-    $("#theme-panel").hidden =
-      $("#paste-panel").hidden =
-      $("#settings-panel").hidden =
-      $("#layouts-panel").hidden =
-        true;
   syncHits();
 }
 $("#edit-done").onclick = () => invoke("set_edit_mode", { on: false });
@@ -1358,8 +1155,7 @@ addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!$("#font-panel").hidden) return closeFontPanel();
   if (!$("#overview-panel").hidden) return $("#overview-close").click();
-  if (!$("#layouts-panel").hidden) return $("#layouts-close").click();
-  if (!$("#settings-panel").hidden) return $("#settings-close").click();
+  if (!$("#welcome").hidden) return hideWelcome();
   if (document.body.classList.contains("focus-mode")) return exitFocus();
   if (document.body.classList.contains("kbd-mode"))
     return invoke("set_kbd_mode", { on: false });
@@ -1490,7 +1286,6 @@ function applyUi() {
       m.el,
       widgets.find((x) => x.id === id),
     );
-  fillSettings();
   syncHits();
 }
 let sentNative = { dwell: 0, zoom: 1, hotkey: "" };
@@ -1534,7 +1329,6 @@ $("#overview-close").onclick = () => (
   ($("#overview-panel").hidden = true),
   syncHits()
 );
-$("#settings-overview").onclick = openOverview;
 
 // focus mode (cognitive load): show one widget, hide the rest until you leave
 function enterFocus(id) {
@@ -1649,7 +1443,10 @@ async function checkEventReminders() {
   if (!Array.isArray(events)) return;
   const now = Date.now();
   const today = ymd();
-  const days = [today, addDays(today, 1)]; // tomorrow too, so a long lead can fire early
+  // An event's date is in its own zone: one in a zone behind ours (LA seen from Seoul) can fire on our
+  // next or second-next day (UTC+14 vs UTC-12), so look two days back. Tomorrow too, for long leads.
+  const oldest = addDays(today, -2);
+  const days = [oldest, addDays(today, -1), today, addDays(today, 1)];
   for (const e of events) {
     if (!e || !e.notify || e.done) continue;
     for (const d of days) {
@@ -1667,9 +1464,9 @@ async function checkEventReminders() {
       if (now - fireAt <= 12 * 3600000) fireEventReminder(e);
     }
   }
-  // prune keys for days already past so the set can't grow without bound
+  // prune keys older than anything still checked, so the set can't grow without bound (and nothing re-fires)
   for (const key of firedSet)
-    if (key.slice(key.indexOf("|") + 1) < today) firedSet.delete(key);
+    if (key.slice(key.indexOf("|") + 1) < oldest) firedSet.delete(key);
 }
 setInterval(() => {
   checkReminder();
@@ -1763,12 +1560,7 @@ function applyFrame(el, w) {
   );
 }
 function onAccentFor(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  const ch = [n >> 16, (n >> 8) & 255, n & 255].map((x) =>
-    (x /= 255) <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4,
-  );
-  const L = 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
-  return (L + 0.05) / 0.05 > 1.05 / (L + 0.05) ? "#111111" : "#ffffff";
+  return isLight(hex) ? "#111111" : "#ffffff";
 }
 function applyColors(el, w) {
   const c = w.colors && typeof w.colors === "object" ? w.colors : {};
@@ -1810,6 +1602,13 @@ const PRESETS = {
     ["dday", 3, 3],
     ["calendar", 4, 4, { view: "mini" }],
   ],
+  oshi: [
+    ["showcase", 4, 4],
+    ["collection", 3, 4],
+    ["dday", 3, 3],
+    ["image", 3, 3],
+    ["audioplayer", 3, 2],
+  ],
 };
 /** Pack slots onto an empty cols×rows grid, right-aligned. Returns [{slot, x, y, w, h}] (slots that don't fit are left out). */
 function packSlots(slots, cols, rows) {
@@ -1836,17 +1635,23 @@ function packSlots(slots, cols, rows) {
   return placed;
 }
 async function flushSaves() {
+  // Editors own their debounce buffers. Drain them before consulting the board queue.
+  for (const { inst } of mounted.values()) {
+    if (await inst.flush?.() === false) throw new Error(t("diary.save_failed"));
+  }
+  await Promise.all([...activeWrites]);
   for (const id of [...archiveTimers.keys()]) {
     const w = widgets.find((x) => x.id === id);
-    if (w) archiveMemo(w, true);
+    if (w) await archiveMemo(w, true);
   }
-  for (const [id, timer] of [...pending]) {
-    clearTimeout(timer);
-    pending.delete(id);
-    const w = widgets.find((x) => x.id === id);
-    if (w) await write("put_widget", { widget: w }).catch(() => {});
-  }
+  for (const timer of pending.values()) clearTimeout(timer);
+  pending.clear();
+  // Retain failed writes for the next flush attempt, even after their debounce fired.
+  for (const { w } of [...unsaved.values()]) await persistWidget(w);
+  await Promise.all([...activeWrites]);
 }
+const flushBoards = () => invoke("flush_boards");
+
 /**
  * Widgets a layout puts away go on a shelf (latest copy per id, max 60), so switching layouts back and forth
  * never loses a memo or a photo list: presets reuse shelved widgets of the same type, saved layouts their own ids.
@@ -1857,8 +1662,8 @@ async function getShelf() {
   );
   return s && typeof s === "object" && !Array.isArray(s) ? s : {};
 }
-async function replaceAll(next, label) {
-  await flushSaves();
+async function replaceAll(next, label, { undo = true } = {}) {
+  await flushBoards();
   const before = await invoke("get_all_widgets");
   const shelf = await getShelf();
   const now = Date.now();
@@ -1875,18 +1680,18 @@ async function replaceAll(next, label) {
   });
   await write("store_set", {
     key: "layouts_undo",
-    value: before,
+    value: undo ? before : null,
     src: "layouts",
   });
   try {
-    sessionStorage.setItem("wb-layout-applied", label);
+    if (label) sessionStorage.setItem("wb-layout-applied", label);
   } catch {}
   await write("replace_widgets", { widgets: next }); // every board reloads
 }
 async function applyPreset(name) {
   const slots = PRESETS[name];
   if (!slots) return;
-  await flushSaves();
+  await flushBoards();
   const all = await invoke("get_all_widgets");
   const others = all.filter((w) => !widgets.some((m) => m.id === w.id)); // other monitors stay as they are
   // reuse same-type widgets (this board first, then the shelf): notes, photos, settings survive
@@ -1908,174 +1713,75 @@ async function applyPreset(name) {
             settings: structuredClone(REGISTRY[slot[0]].defaults ?? {}),
           };
     if (slot[3]) base.settings = { ...base.settings, ...slot[3] };
+    delete base.hidden; // a reused widget shows in its preset slot
     return { ...base, display: myDisplay, x, y, w, h };
   });
   if (packed.length < slots.length) toast(t("lay.partial"));
   await replaceAll([...others, ...mine], t("lay." + name));
 }
-let savedLayouts = [];
-async function renderLayouts() {
+/**
+ * Apply a saved layout (sent by the settings window): positions come from the layout,
+ * contents (memo text...) from the newest copy, on a board or else the shelf.
+ */
+async function applySavedLayout(name) {
   const list = await invoke("store_get", { key: "layouts" }).catch(() => null);
-  savedLayouts = (Array.isArray(list) ? list : []).filter(
-    (l) => l && typeof l.name === "string" && Array.isArray(l.widgets),
+  const l = (Array.isArray(list) ? list : []).find(
+    (x) => x && x.name === name && Array.isArray(x.widgets),
   );
-  $("#layout-list").innerHTML = savedLayouts.length
-    ? savedLayouts
-        .map(
-          (
-            l,
-            i,
-          ) => `<li><span title="${esc(l.name)}">${esc(l.name)}</span><small>${esc(t("lay.count", { n: l.widgets.length }))}</small>
-        <button data-apply="${i}">${esc(t("lay.apply"))}</button><button class="mini" data-del="${i}" title="${esc(t("lay.delete", { name: l.name }))}">✕</button></li>`,
-        )
-        .join("")
-    : `<li class="empty">${esc(t("lay.none"))}</li>`;
-  const undo = await invoke("store_get", { key: "layouts_undo" }).catch(
-    () => null,
-  );
-  $("#layout-undo").hidden = !Array.isArray(undo);
+  if (!l) return;
+  await replaceAll(await withLatestContents(l.widgets), l.name);
 }
-function openLayouts() {
-  for (const p of ["#theme-panel", "#paste-panel", "#settings-panel"])
-    $(p).hidden = true;
-  $("#layouts-panel").hidden = false;
-  renderLayouts();
-  $("#layouts-panel .presets button").focus();
-  syncHits();
-}
-$("#layouts-close").onclick = () => (
-  ($("#layouts-panel").hidden = true),
-  syncHits()
-);
-$("#settings-layouts").onclick = openLayouts;
-$("#layouts-panel .presets").onclick = (e) => {
-  const b = e.target.closest("[data-preset]");
-  if (b) applyPreset(b.dataset.preset).catch(reportError);
-};
-$("#layout-save").onclick = async () => {
-  await flushSaves();
-  const now = new Date();
-  const name =
-    $("#layout-name").value.trim().slice(0, 40) ||
-    t("lay.default_name", {
-      date: `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
-    });
-  const all = await invoke("get_all_widgets");
-  const next = [
-    ...savedLayouts.filter((l) => l.name !== name),
-    { name, saved: now.toISOString(), widgets: all },
-  ].slice(-20);
-  await write("store_set", { key: "layouts", value: next, src: "layouts" });
-  $("#layout-name").value = "";
-  toast(t("lay.saved_as", { name }));
-  renderLayouts();
-};
-$("#layout-name").addEventListener(
-  "keydown",
-  (e) => e.key === "Enter" && $("#layout-save").click(),
-);
-$("#layout-list").onclick = async (e) => {
-  const a = e.target.closest("[data-apply]"),
-    d = e.target.closest("[data-del]");
-  if (a) {
-    const l = savedLayouts[+a.dataset.apply];
-    if (!l) return;
-    await flushSaves();
-    const current = await invoke("get_all_widgets");
-    const shelf = await getShelf();
-    // positions come from the layout; contents (memo text…) come from the newest copy: on the board, else the shelf
-    const next = l.widgets
-      .filter((w) => w && w.id)
-      .map((w) => {
-        const c =
-          current.find((x) => x.id === w.id && x.type === w.type) ??
-          (shelf[w.id]?.w?.type === w.type ? shelf[w.id].w : null);
-        return c
-          ? { ...structuredClone(w), settings: c.settings, stash: c.stash }
-          : structuredClone(w);
-      });
-    await replaceAll(next, l.name);
-  } else if (d) {
-    const i = +d.dataset.del;
-    const gone = savedLayouts[i];
-    const next = savedLayouts.filter((_, k) => k !== i);
-    await write("store_set", { key: "layouts", value: next, src: "layouts" });
-    renderLayouts();
-    toast(t("lay.deleted", { name: gone.name }), {
-      label: t("toast.undo"),
-      fn: async () => {
-        await write("store_set", {
-          key: "layouts",
-          value: [...savedLayouts, gone],
-          src: "layouts",
-        });
-        renderLayouts();
-      },
-    });
-  }
-};
+/** Undo the last layout change: positions go back, what was typed since stays. */
 async function undoLayout() {
   const prev = await invoke("store_get", { key: "layouts_undo" }).catch(
     () => null,
   );
   if (!Array.isArray(prev)) return;
-  await write("store_set", {
-    key: "layouts_undo",
-    value: null,
-    src: "layouts",
-  });
-  await write("replace_widgets", { widgets: prev });
+  await replaceAll(await withLatestContents(prev), null, { undo: false });
 }
-$("#layout-undo").onclick = () => undoLayout().catch(reportError);
+/**
+ * Positions from `layout`, contents (memo text, photo lists...) from the newest copy: on a board,
+ * else whichever of the bin or the shelf got it last. Widgets brought back from the bin leave it,
+ * so a later "restore" there can't swap in an older copy.
+ */
+async function withLatestContents(layout) {
+  await flushBoards();
+  const current = await invoke("get_all_widgets");
+  const shelf = await getShelf();
+  const list = await invoke("bin_list").catch(() => null);
+  const bin = Array.isArray(list) ? list : [];
+  const fromBin = [];
+  const next = layout
+    .filter((w) => w && w.id)
+    .map((w) => {
+      let c = current.find((x) => x.id === w.id);
+      if (!c) {
+        const b = bin.find((e) => e?.w?.id === w.id);
+        const sh = shelf[w.id];
+        const useBin = b?.w && (!sh || b.at * 1000 >= sh.at); // bin `at` is seconds, shelf ms
+        c = useBin ? b.w : sh?.w;
+        if (useBin) fromBin.push(w.id);
+      }
+      return c
+        ? { ...structuredClone(w), ...contentForType(c, w.type, w) }
+        : structuredClone(w);
+    });
+  for (const id of fromBin) await invoke("bin_take", { id }).catch(() => {});
+  return next;
+}
 
-function fillSettings() {
-  const u = ui();
-  for (const i of document.querySelectorAll("#settings-panel [data-ui]")) {
-    const v = u[i.dataset.ui];
-    if (i.type === "checkbox") i.checked = !!v;
-    else i.value = String(v);
-  }
-}
-for (const i of document.querySelectorAll("#settings-panel [data-ui]")) {
-  i.addEventListener(i.type === "range" ? "input" : "change", () => {
-    const k = i.dataset.ui;
-    const v =
-      i.type === "checkbox"
-        ? i.checked
-        : /^-?\d+(\.\d+)?$/.test(i.value)
-          ? +i.value
-          : i.value;
-    config = { ...config, ui: { ...(config.ui || {}), [k]: v } };
-    applyUi();
-    configSubs.forEach((cb) => cb(config));
-    clearTimeout(i._t);
-    i._t = setTimeout(
-      () => write("save_config", { patch: { ui: { [k]: v } } }).catch(() => {}),
-      250,
-    );
-  });
-}
-$("#set-autostart").addEventListener("change", async (e) => {
-  const on = await invoke("set_autostart", { on: e.target.checked }).catch(
-    () => !e.target.checked,
-  );
-  e.target.checked = !!on;
-});
-$("#settings-close").onclick = () => {
-  $("#settings-panel").hidden = true;
+// first-run card: a preset, or an empty board. Leaving it any way is remembered, so it doesn't come back.
+function hideWelcome() {
+  if (!$("#welcome").hidden) write("store_set", { key: "welcomed", value: true, src: "host" }).catch(() => {});
+  $("#welcome").hidden = true;
   syncHits();
+}
+$("#welcome").onclick = (e) => {
+  const b = e.target.closest("[data-preset]");
+  if (b) return hideWelcome(), applyPreset(b.dataset.preset).catch(reportError);
+  if (e.target.closest("#wc-blank")) hideWelcome();
 };
-$("#settings-file").onclick = () => invoke("open_config_file");
-function openSettings() {
-  $("#theme-panel").hidden = $("#paste-panel").hidden = true;
-  fillSettings();
-  invoke("update_status")
-    .then(showUpdate)
-    .catch(() => {});
-  $("#settings-panel").hidden = false;
-  $("#settings-panel select, #settings-panel input")?.focus();
-  syncHits();
-}
+
 addEventListener("dragover", (e) => e.preventDefault());
 addEventListener("drop", (e) => e.preventDefault());
 addEventListener("contextmenu", (e) => {
@@ -2114,7 +1820,6 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   setMotion(st.reduceMotion);
   isPrimary = !!st.primary;
   applyUi();
-  $("#set-autostart").checked = !!st.autostart;
   matchMedia("(prefers-reduced-motion: reduce)").addEventListener?.(
     "change",
     () => setMotion(reduceMotion),
@@ -2142,7 +1847,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   setEdit(!!st.edit);
   syncHits();
 
-  await listen("add-widget", (e) => addWidget(e.payload));
+  await listen("add-widget", (e) => (hideWelcome(), addWidget(e.payload)));
   await listen("apply-preset", (e) =>
     applyPreset(e.payload).catch(reportError),
   );
@@ -2163,12 +1868,25 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     save(w);
   });
   await listen("widget-locate", (e) => locate(e.payload));
+  // close / move from the settings window: the owning board acts on its live copy (unsaved edits included)
+  await listen("widget-close", (e) => {
+    const w = widgets.find((x) => x.id === e.payload);
+    if (w) removeWidget(w);
+  });
+  await listen("widget-move", (e) => {
+    const { id, display } = e.payload || {};
+    const w = widgets.find((x) => x.id === id);
+    if (w && display && display !== w.display)
+      moveTo(w, display).catch(reportError);
+  });
+  await listen("undo-layout", () => undoLayout().catch(reportError));
   // restored from the bin: the board of its monitor takes it (the primary if that monitor is gone)
   await listen("widget-restore", (e) => {
     const w = e.payload;
     if (!w?.id) return;
     const known = displays.some((d) => d.display === w.display);
-    if (mounted.has(w.id)) return;
+    // already on this board (a saved layout brought it back): keep the bin copy rather than lose it
+    if (mounted.has(w.id)) return void write("bin_put", { widget: w }).catch(() => {});
     if (w.display === myDisplay && fits(w, w.id)) {
       widgets.push(w); // its old spot is free: put it back exactly there
       mount(w);
@@ -2187,23 +1905,14 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     applyUi();
     configSubs.forEach((cb) => cb(config));
   });
-  await listen("open-settings", openSettings);
-  await listen("open-layouts", openLayouts);
+  await listen("apply-layout", (e) =>
+    applySavedLayout(e.payload).catch(reportError),
+  );
   await listen("kbd-mode", (e) => setKbd(!!e.payload));
   await listen("layout-replaced", () => location.reload());
   await listen("store-changed", (e) => {
     const p = e.payload || {};
     for (const s of storeSubs) if (s.key === p.key && s.src !== p.src) s.cb(p);
-  });
-  invoke("store_get", { key: "theme_backup" })
-    .then((b) => ($("#theme-undo").hidden = typeof b !== "string"))
-    .catch(() => {});
-  await listen("open-theme-panel", () => {
-    $("#settings-panel").hidden = true;
-    loadFonts();
-    fillPanel();
-    $("#theme-panel").hidden = false;
-    syncHits();
   });
   let applied = null;
   try {
@@ -2215,10 +1924,19 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       label: t("toast.undo"),
       fn: () => undoLayout().catch(reportError),
     });
+  else if (st.configBroken) toast(t("toast.config_bad"));
   else if (st.justUpdated) toast(t("upd.done", { v: st.justUpdated }));
-  else if (st.primary && !widgets.length) toast(t("toast.empty"));
+  else if (st.primary && !widgets.length && !(await invoke("get_all_widgets").catch(() => [])).length) {
+    // an empty board is invisible and click-through: offer a start until "empty board" is picked once
+    const welcomed = await invoke("store_get", { key: "welcomed" }).catch(() => null);
+    if (welcomed) toast(t("toast.empty"));
+    else {
+      $("#welcome").hidden = false;
+      syncHits();
+      $("#welcome button").focus();
+    }
+  }
 
-  await listen("update-status", (e) => showUpdate(e.payload));
   await listen("update-available", (e) => {
     const v = e.payload?.version;
     if (v)
@@ -2230,265 +1948,16 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   await listen("update-failed", (e) =>
     toast(t("upd.failed", { e: updateError(e.payload) })),
   );
-  await listen("flush-saves", () => flushSaves());
+  await listen("flush-saves", async (event) => {
+    let error = null;
+    try { await flushSaves(); }
+    catch (e) { error = String(e?.message ?? e); }
+    if (event.payload?.request != null)
+      await T.event.emit("saves-flushed", { request: event.payload.request, label: win.label, error });
+    else if (error) reportError(new Error(error));
+  });
 })();
 
 // ---------------- updates (checked by Rust on a slow schedule; see updater.rs) ----------------
 const updateError = (e) =>
-  e === "not_configured" ? t("upd.not_configured") : String(e || "");
-function showUpdate(info) {
-  if (!info) return;
-  $("#set-update").value = ["weekly", "daily", "off"].includes(info.check)
-    ? info.check
-    : "weekly";
-  const when = info.lastCheck
-    ? new Date(info.lastCheck * 1000).toLocaleString(
-        lang === "ko" ? "ko-KR" : "en-US",
-        { dateStyle: "medium", timeStyle: "short" },
-      )
-    : "";
-  const lines = [t("upd.current", { v: info.current })];
-  if (info.busy) lines.push(t("upd.checking"));
-  else if (info.available)
-    lines.push(
-      t("upd.available", { v: info.available.version }) +
-        (info.available.notes ? ` — ${info.available.notes}` : ""),
-    );
-  else if (!info.configured) lines.push(t("upd.not_configured"));
-  else if (info.lastError)
-    lines.push(t("upd.failed", { e: updateError(info.lastError) }));
-  else if (when) lines.push(t("upd.last", { when }));
-  $("#update-status").textContent = lines.join(" · ");
-  $("#update-now").disabled = !!info.busy;
-  const a = $("#update-apply");
-  a.hidden = !info.available;
-  a.textContent = info.available
-    ? t("upd.apply", { v: info.available.version })
-    : "";
-}
-async function applyUpdate() {
-  await flushSaves();
-  invoke("update_install").catch((e) =>
-    toast(t("upd.failed", { e: updateError(e) })),
-  );
-}
-$("#update-now").onclick = () => invoke("update_check").catch(() => {});
-$("#update-apply").onclick = applyUpdate;
-$("#set-update").addEventListener("change", async () => {
-  await write("save_config", {
-    patch: { update: { check: $("#set-update").value } },
-  }).catch(() => {});
-  invoke("update_status")
-    .then(showUpdate)
-    .catch(() => {});
-});
-
-// Lets the UI run in a normal browser for quick testing (no Rust side).
-function mockTauri() {
-  const handlers = {};
-  const emit = (ev, payload) =>
-    (handlers[ev] || []).forEach((h) => h({ payload }));
-  const ls = {
-    get: (k) => {
-      try {
-        return localStorage.getItem(k);
-      } catch {
-        return null;
-      }
-    },
-    set: (k, v) => {
-      try {
-        localStorage.setItem(k, v);
-      } catch {}
-    },
-  };
-  const all = () => JSON.parse(ls.get("wb-widgets") || "[]");
-  const lang = new URLSearchParams(location.search).get("lang") || "ko";
-  window.__mock = { emit, menus: [] };
-  return {
-    core: {
-      convertFileSrc: (p) => p,
-      async invoke(cmd, args) {
-        if (window.__mockFail?.has(cmd))
-          throw new Error("mock failure: " + cmd);
-        switch (cmd) {
-          case "save_config": {
-            const merge = (b, p) => {
-              for (const [k, v] of Object.entries(p))
-                b[k] =
-                  v && typeof v === "object" && !Array.isArray(v)
-                    ? merge(b[k] && typeof b[k] === "object" ? b[k] : {}, v)
-                    : v;
-              return b;
-            };
-            const cfg = merge(
-              JSON.parse(ls.get("wb-config") || "null") || window.__mockConfig,
-              args.patch,
-            );
-            ls.set("wb-config", JSON.stringify(cfg));
-            return emit("config-changed", cfg);
-          }
-          case "set_autostart":
-            ls.set("wb-autostart", args.on ? "1" : "");
-            return !!args.on;
-          case "set_dwell":
-          case "set_zoom":
-          case "set_hotkey":
-          case "notify":
-            (window.__native ||= []).push([cmd, args]);
-            return;
-          case "set_kbd_mode":
-            return emit("kbd-mode", args.on);
-          case "get_all_widgets":
-            return all();
-          case "update_status": {
-            const cfg = JSON.parse(ls.get("wb-config") || "null") || {};
-            return {
-              current: "0.11.0",
-              check: cfg.update?.check || "weekly",
-              configured: !!window.__mockUpdate,
-              lastCheck: null,
-              lastError: null,
-              available: window.__mockUpdate?.available ?? null,
-              busy: false,
-            };
-          }
-          case "update_check": {
-            const u = window.__mockUpdate;
-            if (!u) return emit("update-failed", "not_configured");
-            if (u.found) {
-              u.available = { version: u.found, notes: u.notes || "" };
-              emit("update-status", await this.invoke("update_status"));
-              return emit("update-available", u.available);
-            }
-            return emit("toast", "upd.latest");
-          }
-          case "update_install":
-          case "open_settings":
-            (window.__native ||= []).push([cmd, args]);
-            return;
-          case "replace_widgets":
-            ls.set("wb-widgets", JSON.stringify(args.widgets));
-            return emit("layout-replaced");
-          case "load_state":
-            return {
-              autostart: !!ls.get("wb-autostart"),
-              display: "D1",
-              primary: true,
-              lang,
-              widgets: all().filter(
-                (w) =>
-                  !w.display ||
-                  w.display === "D1" ||
-                  !["D1", "D2"].includes(w.display),
-              ),
-              reduceMotion: new URLSearchParams(location.search).has("rm"),
-              config:
-                JSON.parse(ls.get("wb-config") || "null") ||
-                (window.__mockConfig = {
-                  timer: {
-                    presets: [
-                      { label: "", time: "1" },
-                      { label: "라면", time: "3" },
-                      { label: "", time: "1:30" },
-                    ],
-                  },
-                  holidays: {
-                    country: "KR",
-                    add: { "2026-10-15": "회사 창립기념일" },
-                    remove: [],
-                  },
-                }),
-              theme: ls.get("wb-theme") || "",
-              assetsDir: "",
-              displays: [
-                { label: "board-0", display: "D1", index: 1, primary: true },
-                { label: "board-1", display: "D2", index: 2, primary: false },
-              ],
-            };
-          case "put_widget":
-            return ls.set(
-              "wb-widgets",
-              JSON.stringify([
-                ...all().filter((w) => w.id !== args.widget.id),
-                args.widget,
-              ]),
-            );
-          case "remove_widget":
-            return ls.set(
-              "wb-widgets",
-              JSON.stringify(all().filter((w) => w.id !== args.id)),
-            );
-          case "move_widget":
-            return ls.set(
-              "wb-widgets",
-              JSON.stringify(
-                all().map((w) =>
-                  w.id === args.id ? { ...w, display: args.display } : w,
-                ),
-              ),
-            );
-          case "save_theme":
-            ls.set("wb-theme", args.css);
-            return setTimeout(() => emit("theme-changed", args.css), 20);
-          case "save_asset":
-            return URL.createObjectURL(new Blob([args]));
-          case "set_edit_mode":
-            return emit("edit-mode", args.on);
-          case "set_hit_rects":
-            window.__hits = args.rects;
-            return;
-          case "store_get":
-            return JSON.parse(ls.get("wb-store-" + args.key) || "null");
-          case "store_set":
-            ls.set("wb-store-" + args.key, JSON.stringify(args.value));
-            return emit("store-changed", { key: args.key, src: args.src });
-          case "diary_get":
-            return ls.get("wb-diary-" + args.date) || "";
-          case "diary_set":
-            if (args.text.trim()) ls.set("wb-diary-" + args.date, args.text);
-            else localStorage.removeItem("wb-diary-" + args.date);
-            return emit("store-changed", {
-              key: "diary",
-              date: args.date,
-              src: args.src,
-            });
-          case "diary_dates":
-            return Object.keys(localStorage)
-              .filter((k) => k.startsWith("wb-diary-"))
-              .map((k) => k.slice(9))
-              .sort();
-          case "list_assets":
-            return [];
-          case "list_fonts":
-            return ["Malgun Gothic", "Segoe UI", "Arial", "Consolas"];
-          case "media_subscribe":
-            return window.__mockMedia || { has: false };
-          case "media_control":
-            (window.__mockMediaCmds ||= []).push([args.action, args.seconds]);
-            return;
-          default:
-            (window.__calls ||= []).push([cmd, args]); // bin_put, memo_archive… for tests
-            return null;
-        }
-      },
-    },
-    webviewWindow: {
-      getCurrentWebviewWindow: () => ({
-        listen: async (ev, h) => {
-          (handlers[ev] ||= []).push(h);
-          return () => (handlers[ev] = handlers[ev].filter((x) => x !== h));
-        },
-      }),
-    },
-    menu: {
-      Menu: {
-        new: async ({ items }) => ({
-          items,
-          popup: async () => window.__mock.menus.push(items),
-          close: async () => {},
-        }),
-      },
-    },
-  };
-}
+  e === "not_configured" || e === "not_writable" ? t("upd." + e) : String(e || "");

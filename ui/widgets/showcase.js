@@ -3,7 +3,8 @@
 // Birthday auto-syncs as a recurring calendar entry via shared data/events.json.
 // Frameless mode hides widget chrome so transparent PNGs sit on the desktop.
 // Data is inspectable: right-click → Export data (JSON to clipboard) / Import data.
-import { esc, ymd, daysBetween, uid } from '../util.js';
+import { esc, ymd, daysBetween, uid, dropZone } from '../util.js';
+import { icon } from '../icons.js';
 
 const QUOTE_INTERVAL = 8000; // ms between quote rotations
 
@@ -29,36 +30,35 @@ export default {
       opacity: 0; transition: opacity .6s; }
     .sc .hero img.on { opacity: 1; }
     .sc .hero .empty { position: absolute; inset: 0; display: flex; flex-direction: column;
-      align-items: center; justify-content: center; gap: 4px; font-size: .85em; opacity: .6;
+      align-items: center; justify-content: center; gap: var(--space-2); font-size: var(--fs-small); color: var(--text-faint);
       text-align: center; padding: 8px; cursor: pointer; }
     .sc .hero .empty .ico { font-size: 2.2em; line-height: 1; }
-    .sc .band { flex: none; padding: 6px 10px; display: flex; align-items: baseline; gap: 6px;
+    .sc .band { flex: none; padding: 6px 10px; display: flex; align-items: baseline; gap: var(--space-3);
       background: color-mix(in srgb, var(--sc-color, var(--c2)) 15%, transparent); min-height: 1.6em; }
-    .sc .band .nm { font-weight: 700; font-size: 1.05em; white-space: nowrap; overflow: hidden;
+    .sc .band .nm { font-weight: 700; font-size: var(--fs-title); white-space: nowrap; overflow: hidden;
       text-overflow: ellipsis; flex: 1; min-width: 0; }
-    .sc .band .bd { font-size: .8em; font-weight: 600; white-space: nowrap; flex: none;
+    .sc .band .bd { font-size: var(--fs-meta); font-weight: 600; font-family: var(--font-num, var(--font)); white-space: nowrap; flex: none;
       color: var(--sc-color, var(--c2)); font-variant-numeric: tabular-nums; }
     .sc .band .bd.today { background: var(--sc-color, var(--c2)); color: var(--on-accent);
       padding: 0 .45em; border-radius: 999px; }
-    .sc .qt { flex: none; padding: 4px 10px 6px; font-size: .8em; font-style: italic; opacity: .7;
+    .sc .qt { flex: none; padding: 4px 10px 6px; font-size: var(--fs-meta); font-style: italic; color: var(--text-muted);
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.4em;
       transition: opacity .4s; }
     .sc .qt.fade { opacity: 0; }
     .sc .nav { position: absolute; left: 4px; right: 4px; bottom: 4px; display: flex;
-      justify-content: center; gap: 4px; opacity: 0; transition: opacity .15s; z-index: 2; }
+      justify-content: center; gap: var(--space-2); opacity: 0; transition: opacity .15s; z-index: 2; }
     .widget:hover .sc .nav { opacity: 1; }
-    .sc .nav button { font-size: .75em; padding: 1px 7px; background: color-mix(in srgb, var(--c1) 75%, transparent);
+    .sc .nav button { font-size: var(--fs-meta); padding: 1px 7px; background: color-mix(in srgb, var(--c1) 75%, transparent);
       border-radius: 999px; }
-    @container (max-width: 9em) { .sc .qt { display: none; } .sc .band .bd { font-size: .7em; } }
+    @container (max-width: 9em) { .sc .qt { display: none; } .sc .band .bd { font-size: var(--fs-meta); } }
     @container (max-width: 7em) { .sc .nav { display: none; } }
-    .sc .hero.drop { outline: 2px dashed var(--c2); outline-offset: -6px; }
     .sc-edit { position: absolute; inset: 0; z-index: 6; padding: calc(var(--head-h) + 4px) calc(var(--pad) + 2px)
       calc(var(--pad) + 2px); box-sizing: border-box; background: color-mix(in srgb, var(--c1) 96%, transparent);
-      overflow-y: auto; display: flex; flex-direction: column; gap: 6px; font-size: .9em; }
-    .sc-edit label { font-size: .8em; opacity: .6; }
+      overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--fs-small); }
+    .sc-edit label { font-size: var(--fs-meta); color: var(--text-faint); }
     .sc-edit input, .sc-edit textarea { width: 100%; box-sizing: border-box; }
     .sc-edit textarea { resize: vertical; min-height: 3.5em; font-family: inherit; }
-    .sc-edit .btns { display: flex; gap: 6px; margin-top: auto; }
+    .sc-edit .btns { display: flex; gap: var(--space-3); margin-top: auto; }
     .sc-edit .btns .sp { flex: 1; }
   `,
   mount(root, s, api) {
@@ -115,7 +115,7 @@ export default {
     function buildHero() {
       const usable = s.imgs.filter((x) => !bad.has(x));
       if (!usable.length) {
-        hero.innerHTML = `<div class="empty"><span class="ico">🖼</span><span>${esc(t('sc.add_image'))}</span></div>`;
+        hero.innerHTML = `<div class="empty"><span class="ico">${icon('image')}</span><span>${esc(t('sc.add_image'))}</span></div>`;
         hero.firstElementChild.onclick = chooseImg;
         return;
       }
@@ -123,8 +123,8 @@ export default {
       hero.innerHTML = `
         <img draggable="false" alt=""><img draggable="false" alt="">
         ${many ? `<div class="nav">
-          <button data-a="prev" title="${esc(t('image.prev'))}">‹</button>
-          <button data-a="next" title="${esc(t('image.next'))}">›</button>
+          <button data-a="prev" title="${esc(t('image.prev'))}">${icon('left')}</button>
+          <button data-a="next" title="${esc(t('image.next'))}">${icon('right')}</button>
         </div>` : ''}`;
       for (const img of hero.querySelectorAll('img')) {
         img.style.objectFit = s.fit;
@@ -165,9 +165,7 @@ export default {
         chooseImg();
       }
     });
-    hero.addEventListener('dragover', (e) => { e.preventDefault(); hero.classList.add('drop'); });
-    hero.addEventListener('dragleave', () => hero.classList.remove('drop'));
-    hero.addEventListener('drop', (e) => { e.preventDefault(); hero.classList.remove('drop'); addImages(e.dataTransfer.files); });
+    dropZone(hero, t('w.drop'), addImages);
 
     // ---- name & birthday band ----
     function renderBand() {
@@ -181,10 +179,10 @@ export default {
       if (daysBetween(ymd(), next) < 0) next = `${thisYear + 1}-${md}`;
       const diff = daysBetween(ymd(), next);
       if (diff === 0) {
-        bandBd.textContent = `🎂 ${t('sc.birthday_today')}`;
+        bandBd.innerHTML = `${icon('cake')} ${esc(t('sc.birthday_today'))}`;
         bandBd.classList.add('today');
       } else {
-        bandBd.textContent = `🎂 D-${diff}`;
+        bandBd.innerHTML = `${icon('cake')} D-${diff}`;
       }
     }
 
@@ -219,9 +217,12 @@ export default {
       const events = (await api.store.get('events').catch(() => null)) || [];
       const existing = s._calId && events.find((e) => e.id === s._calId);
       if (existing) {
-        if (existing.title !== title || existing.repeat !== 'yearly') {
+        // a changed birthday moves the entry too (yearly: only month-day matters)
+        const moved = String(existing.date || '').slice(5) !== md;
+        if (existing.title !== title || existing.repeat !== 'yearly' || moved) {
           existing.title = title;
           existing.repeat = 'yearly';
+          if (moved) existing.date = `${new Date().getFullYear()}-${md}`;
           await api.store.set('events', events).catch(() => {});
         }
         return;
@@ -263,7 +264,7 @@ export default {
         <textarea data-f="quotes" placeholder="${esc(t('sc.quotes_hint'))}" rows="3">${esc(draft.quotes)}</textarea>
         <label>${esc(t('sc.accent'))}</label>
         <input data-f="color" type="color" value="${draft.color || '#888888'}" style="width:2.5em;height:2em;padding:0;border:0;">
-        <label style="display:flex;gap:6px;align-items:center;font-size:1em;opacity:1;">
+        <label style="display:flex;gap: var(--space-3);align-items:center;font-size:1em;color:var(--c3);">
           <input data-f="calSync" type="checkbox" ${draft.calSync ? 'checked' : ''}> ${esc(t('sc.cal_sync'))}
         </label>
         <div class="btns">
@@ -338,14 +339,13 @@ export default {
     }
 
     // re-render at midnight (birthday countdown changes)
-    let day = ymd();
-    const tick = setInterval(() => { if (ymd() !== day) { day = ymd(); renderBand(); } }, 60000);
+    api.onDayChange(() => renderBand());
 
     render();
     syncBirthday();
 
     return {
-      destroy: () => { clearInterval(quoteTimer); clearInterval(tick); },
+      destroy: () => clearInterval(quoteTimer),
       resized: () => {}, // CSS container queries handle responsive layout
       summary: () => {
         const parts = [];
