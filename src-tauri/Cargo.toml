@@ -1,6 +1,6 @@
 [package]
 name = "widgetboard"
-version = "0.12.0"
+version = "0.13.0"
 description = "Lightweight, grid-based desktop widgets for Windows"
 edition = "2021"
 
