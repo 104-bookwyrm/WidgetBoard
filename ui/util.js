@@ -36,6 +36,27 @@ export const addMonths = (s, n) => {
 };
 export const uid = () => crypto.randomUUID();
 
+/**
+ * Three-way merge of id'd lists (events, checklist) after a stale write: `base` is what the writer last read,
+ * `mine` what it wants to write, `theirs` what is stored now. My edits and additions win; their additions stay;
+ * a deletion on either side stays deleted. Lists without ids fall back to `mine`.
+ */
+export function mergeById(base, mine, theirs) {
+  const lists = [base, mine, theirs];
+  if (!lists.every((l) => Array.isArray(l) && l.every((x) => x && x.id != null))) return mine;
+  const B = new Map(base.map((x) => [x.id, JSON.stringify(x)]));
+  const M = new Map(mine.map((x) => [x.id, x]));
+  const out = theirs
+    .filter((t) => M.has(t.id) || !B.has(t.id)) // gone from mine but known before: I deleted it
+    .map((t) => {
+      const m = M.get(t.id);
+      return m && JSON.stringify(m) !== B.get(t.id) ? m : t;
+    });
+  const kept = new Set(out.map((x) => x.id));
+  for (const m of mine) if (!B.has(m.id) && !kept.has(m.id)) out.push(m); // added by me
+  return out;
+}
+
 /** Milliseconds `tz` is ahead of UTC at instant `at` (handles DST for the date in question). */
 function tzOffset(tz, at) {
   const parts = Object.fromEntries(

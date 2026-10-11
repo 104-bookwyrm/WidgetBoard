@@ -10,6 +10,7 @@ import {
   addDays,
   syncScheme,
   isLight,
+  mergeById,
 } from "./util.js";
 import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
 import { icon } from "./icons.js";
@@ -30,6 +31,12 @@ const saveFailed = (e) => {
 const activeWrites = new Set();
 const write = (cmd, args, opts) => {
   const promise = invoke(cmd, args, opts).catch(saveFailed);
+  activeWrites.add(promise);
+  promise.then(() => activeWrites.delete(promise), () => activeWrites.delete(promise));
+  return promise;
+};
+/** Count a write the flush must wait for. */
+const tracked = (promise) => {
   activeWrites.add(promise);
   promise.then(() => activeWrites.delete(promise), () => activeWrites.delete(promise));
   return promise;
@@ -466,6 +473,40 @@ function mount(w) {
   board.append(el);
 
   const subs = [];
+  // Shared stores: each write names the revision this widget last read. A stale one is merged by id with
+  // what is stored now (mergeById), then the widget re-reads so it shows the merged list.
+  const seen = new Map(); // key -> { value, rev }
+  async function writeStore(key, value) {
+    for (let tries = 0; tries < 3; tries++) {
+      const base = seen.get(key);
+      try {
+        const rev = await invoke("store_set", { key, value, src: w.id, rev: base?.rev ?? null });
+        seen.set(key, { value: structuredClone(value), rev });
+        if (tries) for (const s of storeSubs) if (s.key === key && s.src === w.id) s.cb({ key, src: "merge" });
+        return;
+      } catch (e) {
+        if (e !== "conflict") return saveFailed(e);
+        const latest = await invoke("store_read", { key });
+        value = mergeById(base?.value, value, latest.value);
+        seen.set(key, { value: structuredClone(latest.value), rev: latest.rev });
+      }
+    }
+    saveFailed("conflict");
+  }
+  // Diary pages are plain text: on a stale revision the latest typing wins.
+  async function writeDiary(date, text) {
+    for (let tries = 0; tries < 3; tries++) {
+      try {
+        const rev = await invoke("diary_set", { date, text, src: w.id, rev: seen.get("diary:" + date)?.rev ?? null });
+        seen.set("diary:" + date, { rev });
+        return;
+      } catch (e) {
+        if (e !== "conflict") return saveFailed(e);
+        seen.set("diary:" + date, { rev: (await invoke("diary_read", { date })).rev });
+      }
+    }
+    saveFailed("conflict");
+  }
   const api = {
     save: () => save(w),
     pickImage,
@@ -510,12 +551,20 @@ function mount(w) {
     openUrl: (url) => invoke("open_url", { url }).catch(() => {}),
     listAssets: () => invoke("list_assets"),
     store: {
-      get: (key) => invoke("store_get", { key }),
-      set: (key, value) => write("store_set", { key, value, src: w.id }),
+      get: async (key) => {
+        const r = await invoke("store_read", { key });
+        seen.set(key, { value: structuredClone(r.value), rev: r.rev });
+        return r.value;
+      },
+      set: (key, value) => tracked(writeStore(key, value)),
     },
     diary: {
-      get: (date) => invoke("diary_get", { date }),
-      set: (date, text) => write("diary_set", { date, text, src: w.id }),
+      get: async (date) => {
+        const r = await invoke("diary_read", { date });
+        seen.set("diary:" + date, { rev: r.rev });
+        return r.text;
+      },
+      set: (date, text) => tracked(writeDiary(date, text)),
       dates: () => invoke("diary_dates"),
     },
     /** cb(payload) when another widget changes `key` ('diary' for diary pages). */

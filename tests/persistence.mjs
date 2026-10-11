@@ -109,6 +109,30 @@ await test("checklist edit commits to refreshed item by id", async () => {
   assert.equal(saved.find((x) => x.id === "other").title, "added elsewhere");
   await p.close();
 });
+await test("a stale checklist write merges with the newer list instead of replacing it", async () => {
+  const p = await page([widget("a", "checklist")], {
+    "wb-store-checklist": [{ id: "x", title: "first", date: "2020-01-01", done: false }],
+  });
+  // another window saved an item this board has not heard about yet
+  await p.evaluate(() => {
+    const items = JSON.parse(localStorage.getItem("wb-store-checklist"));
+    items.push({ id: "y", title: "from elsewhere", date: "2020-01-01", done: false });
+    localStorage.setItem("wb-store-checklist", JSON.stringify(items));
+    const revs = JSON.parse(localStorage.getItem("wb-revs") || "{}");
+    revs["store:checklist"] = (revs["store:checklist"] ?? 0) + 1;
+    localStorage.setItem("wb-revs", JSON.stringify(revs));
+  });
+  await p.locator('[data-id="a"] .ck-add').fill("added here");
+  await p.locator('[data-id="a"] .ck-add').press("Enter");
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem("wb-store-checklist")).length === 3);
+  const titles = await p.evaluate(() =>
+    JSON.parse(localStorage.getItem("wb-store-checklist")).map((x) => x.title).sort(),
+  );
+  assert.deepEqual(titles, ["added here", "first", "from elsewhere"]);
+  // and the widget shows the merged list
+  await p.waitForFunction(() => document.querySelectorAll('[data-id="a"] .ck-title').length >= 2);
+  await p.close();
+});
 await test("diary navigation retains unsaved text on write failure and can retry", async () => {
   const p = await page([widget("d", "diary")], {
     "wb-diary-2020-01-01": "prior page",

@@ -1333,11 +1333,15 @@ fn backups_root(app: &AppHandle, dir: &Path) -> PathBuf {
     if !custom.is_empty() {
         return PathBuf::from(custom);
     }
+    // other builds (devtest) keep their own folder: production must never count, prune or restore their snapshots
+    let id = &app.config().identifier;
+    let folder = if id == PRODUCTION_IDENTIFIER { "Backups".to_string() } else { format!("Backups-{id}") };
     app.path()
         .document_dir()
-        .map(|d| d.join("WidgetBoard").join("Backups"))
-        .unwrap_or_else(|_| dir.join("Backups"))
+        .map(|d| d.join("WidgetBoard").join(&folder))
+        .unwrap_or_else(|_| dir.join(&folder))
 }
+const PRODUCTION_IDENTIFIER: &str = "app.widgetboard.desktop"; // tauri.conf.json
 
 /// Copy the live data into a new timestamped folder under `root`. `tag` ("", "auto", "pre-restore")
 /// is appended to the folder name. Returns the folder path.
