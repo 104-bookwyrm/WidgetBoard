@@ -13,7 +13,7 @@ function fmtSession(ms) {
     d = t % 10;
   return h ? `${h}:${p2(m)}:${p2(s)}` : `${p2(m)}:${p2(s)}.${d}`;
 }
-function fmtTotal(ms) {
+export function fmtTotal(ms) {
   const t = Math.floor(ms / 1000);
   const h = Math.floor(t / 3600),
     m = Math.floor((t % 3600) / 60),

@@ -748,14 +748,14 @@ function renderWidgetList(all) {
       );
     // the board closes its live copy (bin + undo toast), so nothing else on screen rolls back
     const close = btn("✕", () => emit("widget-close", w.id).then(afterBoardChange));
-    close.title = close.ariaLabel = t("set.bin.close", { name: wName(w) });
+    close.title = close.ariaLabel = t("set.widgets.close", { name: wName(w) });
     row.append(close);
     host.append(row);
   }
 }
 
 // -- closed-widgets bin --
-function confirmInline(row, msgKey, onYes, back, { vars, yes = "set.bin.erase_yes" } = {}) {
+function confirmInline(row, msgKey, onYes, back, { vars, yes = "lib.delete" } = {}) {
   row.innerHTML = "";
   const msg = document.createElement("span");
   msg.className = "grow";
@@ -765,49 +765,6 @@ function confirmInline(row, msgKey, onYes, back, { vars, yes = "set.bin.erase_ye
     btn(t(yes), onYes, "primary"),
     btn(t("set.close"), back, ""),
   );
-}
-async function renderBin() {
-  const bin = await invoke("bin_list").catch(() => []);
-  const host = $("#wg-bin");
-  host.innerHTML = "";
-  $("#wg-bin-empty").hidden = !bin.length;
-  if (!bin.length) return hintRow(host, "set.bin.none");
-  for (const { at, w } of bin) {
-    const row = document.createElement("div");
-    row.className = "set-list-row";
-    const txt = document.createElement("span");
-    txt.className = "grow";
-    txt.textContent = `${wName(w)} · ${t("widget." + w.type)}`;
-    const ts = document.createElement("span");
-    ts.className = "muted";
-    ts.textContent = when(at);
-    row.append(
-      txt,
-      ts,
-      btn(
-        t("set.bin.restore"),
-        async () => {
-          const back = await invoke("bin_take", { id: w.id }).catch(() => null);
-          if (back) emit("widget-restore", back);
-          afterBoardChange();
-          renderBin();
-        },
-        "",
-      ),
-      btn(t("set.bin.erase"), () =>
-        confirmInline(
-          row,
-          "set.bin.erase_confirm",
-          async () => {
-            await invoke("bin_erase", { id: w.id }).catch(() => {});
-            renderBin();
-          },
-          renderBin,
-        ),
-      ),
-    );
-    host.append(row);
-  }
 }
 
 // -- memo archive (opt-in) --
@@ -915,20 +872,7 @@ async function renderWgLayouts() {
   $("#wg-layout-undo").hidden = !Array.isArray(undo);
 }
 function bindWidgets() {
-  $("#wg-bin-empty").onclick = () => {
-    const row = document.createElement("div");
-    row.className = "set-list-row";
-    $("#wg-bin").prepend(row);
-    confirmInline(
-      row,
-      "set.bin.empty_confirm",
-      async () => {
-        await invoke("bin_erase", { id: null }).catch(() => {});
-        renderBin();
-      },
-      renderBin,
-    );
-  };
+  $("#wg-library").onclick = () => invoke("open_library").catch(() => {});
   $("#wg-archive").onchange = () =>
     invoke("save_config", {
       patch: { archive: { memos: $("#wg-archive").checked } },
@@ -992,7 +936,6 @@ async function fillWidgets() {
   const all = await invoke("get_all_widgets").catch(() => []);
   renderWidgetList(Array.isArray(all) ? all : []);
   renderWgLayouts();
-  renderBin();
   renderArchive();
   fillUiControls('[data-page="widgets"] [data-ui]');
 }

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "settings",
   "description": "Standalone settings window permissions",
-  "windows": ["settings"],
+  "windows": ["settings", "library"],
   "permissions": [
     "core:default",
     "core:event:default",

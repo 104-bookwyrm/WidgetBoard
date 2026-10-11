@@ -619,74 +619,10 @@ fn set_autostart(on: bool) -> Result<bool, String> {
     Ok(autostart_get())
 }
 
-// ---------- closed-widgets bin + memo archive ----------
-
-/// Closed widgets wait here (newest first, max BIN_MAX) until restored or erased.
-static BIN_LOCK: Mutex<()> = Mutex::new(());
-const BIN_MAX: usize = 50;
-
-fn bin_path(dir: &Path) -> PathBuf {
-    dir.join("data").join("bin.json")
-}
-fn bin_read(dir: &Path) -> Vec<Value> {
-    read_json(&bin_path(dir)).unwrap_or_default()
-}
-fn bin_write(dir: &Path, bin: &[Value]) -> Result<(), String> {
-    fs::create_dir_all(dir.join("data")).map_err(|e| e.to_string())?;
-    write_atomic(&bin_path(dir), serde_json::to_string_pretty(bin).unwrap().as_bytes())
-}
-fn entry_is(e: &Value, id: &str) -> bool {
-    widget_id(&e["w"]) == Some(id)
-}
-
-#[tauri::command]
-fn bin_put(state: State<AppState>, widget: Value) -> Result<(), String> {
-    let id = widget_id(&widget).ok_or("widget without id")?.to_string();
-    let dropped = {
-        let _g = BIN_LOCK.lock().unwrap();
-        let mut bin = bin_read(&state.dir);
-        bin.retain(|e| !entry_is(e, &id));
-        bin.insert(0, json!({ "at": now_secs(), "w": widget }));
-        let dropped = if bin.len() > BIN_MAX { bin.split_off(BIN_MAX) } else { vec![] };
-        bin_write(&state.dir, &bin)?;
-        dropped
-    };
-    purge_assets(&state.dir, &dropped);
-    Ok(())
-}
-
-#[tauri::command]
-fn bin_list(state: State<AppState>) -> Vec<Value> {
-    bin_read(&state.dir)
-}
-
-/// Remove one entry and hand its widget back (restore / undo). Its images stay.
-#[tauri::command]
-fn bin_take(state: State<AppState>, id: String) -> Result<Option<Value>, String> {
-    let _g = BIN_LOCK.lock().unwrap();
-    let mut bin = bin_read(&state.dir);
-    let Some(i) = bin.iter().position(|e| entry_is(e, &id)) else { return Ok(None) };
-    let e = bin.remove(i);
-    bin_write(&state.dir, &bin)?;
-    Ok(Some(e["w"].clone()))
-}
-
-/// Erase one entry (or the whole bin when id is None) for good, with images nothing else uses.
-#[tauri::command]
-fn bin_erase(state: State<AppState>, id: Option<String>) -> Result<(), String> {
-    let gone = {
-        let _g = BIN_LOCK.lock().unwrap();
-        let (gone, keep): (Vec<Value>, Vec<Value>) =
-            bin_read(&state.dir).into_iter().partition(|e| id.as_deref().map_or(true, |id| entry_is(e, id)));
-        bin_write(&state.dir, &keep)?;
-        gone
-    };
-    purge_assets(&state.dir, &gone);
-    Ok(())
-}
+// ---------- assets + memo archive ----------
 
 /// Delete asset files that only `gone` referenced. A name still mentioned in layout.json, config.json,
-/// theme.css or any data/*.json (bin, saved layouts, shelf, undo) is kept.
+/// theme.css or any data/*.json (content, saved layouts, undo) is kept.
 // ponytail: substring scan over a few small JSON files; index asset refs if this ever gets slow
 fn purge_assets(dir: &Path, gone: &[Value]) {
     if gone.is_empty() {
@@ -710,7 +646,7 @@ fn purge_assets(dir: &Path, gone: &[Value]) {
     }
 }
 
-/// Opt-in (config.archive.memos): append-only memo history in archive/memos.jsonl. Survives the bin,
+/// Opt-in (config.archive.memos): append-only memo history in archive/memos.jsonl. Survives deletion,
 /// erase and restore (restore never touches archive/); backups include it.
 static MEMO_LAST: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 
@@ -779,6 +715,7 @@ fn get_settings(state: State<AppState>) -> Value {
         "widgets": widgets,
         "widgetTypes": WIDGETS,
         "dataDir": state.dir.to_string_lossy(),
+        "assetsDir": state.dir.join("assets"),
     })
 }
 
@@ -834,6 +771,29 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
         .build()?;
     let _ = w.set_focus();
     Ok(())
+}
+
+/// The Library: every content item, on the board or not, plus Recently deleted.
+fn open_library_window(app: &AppHandle) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window("library") {
+        let _ = w.unminimize();
+        return w.set_focus();
+    }
+    let lang = app.state::<AppState>().settings.lock().unwrap().lang.clone();
+    let w = WebviewWindowBuilder::new(app, "library", WebviewUrl::App("library.html".into()))
+        .title(tr(&lang, "lib.title"))
+        .inner_size(760.0, 560.0)
+        .min_inner_size(420.0, 360.0)
+        .resizable(true)
+        .center()
+        .build()?;
+    let _ = w.set_focus();
+    Ok(())
+}
+
+#[tauri::command]
+async fn open_library(app: AppHandle) -> Result<(), String> {
+    open_library_window(&app).map_err(|e| e.to_string())
 }
 
 /// async: building a window inside a sync command deadlocks the IPC on Windows (tauri docs).
@@ -1699,13 +1659,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let config = MenuItem::with_id(app, "config", t("tray.open_config"), true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", t("tray.settings"), true, None::<&str>)?;
     let layouts = MenuItem::with_id(app, "layouts", t("tray.layouts"), true, None::<&str>)?;
+    let library = MenuItem::with_id(app, "library", t("tray.library"), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", t("tray.quit"), true, None::<&str>)?;
     let update = MenuItem::with_id(app, "update", t("tray.update_check"), true, None::<&str>)?;
     let sep = || PredefinedMenuItem::separator(app);
 
     let menu = Menu::with_items(
         app,
-        &[&add, &edit, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
+        &[&add, &edit, &library, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
     )?;
     // a found (not skipped) update sits at the very bottom until it is installed or skipped
     if let Some(a) = updater::available(&st.dir.join("updates")) {
@@ -1744,6 +1705,9 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         "layouts" => {
             let _ = open_settings_window(app, "widgets");
+        }
+        "library" => {
+            let _ = open_library_window(app);
         }
         "theme" => {
             let _ = open_settings_window(app, "appearance");
@@ -1853,6 +1817,8 @@ fn main() {
             store_set,
             content::content_list,
             content::content_put,
+            content::content_erase,
+            open_library,
             diary_get,
             diary_read,
             diary_set,
@@ -1864,10 +1830,6 @@ fn main() {
             media_control,
             save_config,
             set_autostart,
-            bin_put,
-            bin_list,
-            bin_take,
-            bin_erase,
             memo_archive,
             memo_archive_list,
             set_dwell,

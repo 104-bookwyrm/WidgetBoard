@@ -36,6 +36,10 @@ export const addMonths = (s, n) => {
 };
 export const uid = () => crypto.randomUUID();
 
+/** An uploaded file's URL: `dir` is the assets folder ("" in the browser mock), `convert` Tauri's convertFileSrc. */
+export const assetUrl = (dir, name, convert) =>
+  !name ? "" : !dir ? name : convert(dir + (dir.includes("\\") ? "\\" : "/") + name);
+
 /**
  * Three-way merge of id'd lists (events, checklist) after a stale write: `base` is what the writer last read,
  * `mine` what it wants to write, `theirs` what is stored now. My edits and additions win; their additions stay;

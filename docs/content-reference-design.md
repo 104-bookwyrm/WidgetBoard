@@ -77,7 +77,7 @@ Placement           { id, type, display, x, y, w, h, name?, settings: {...} }
 - A stopped app cannot create past snapshots; perform a due backup after startup without inventing historical dates.
 - Search normalizes Unicode consistently for matching and keeps original text for display. Test Korean substrings and composed/decomposed Hangul.
 
-## UI copy (ships with the Library, step 3)
+## UI copy (shipped with the Library, step 3)
 
 - `lay.help` en: "Arranges all your widgets at once. Your notes and photos stay in your Library, so switching never loses them. You can always undo."
 - `lay.help` ko: "위젯 배치를 한 번에 바꿉니다. 메모와 사진은 보관함에 남아 있어 배치를 바꿔도 사라지지 않습니다. 언제든 되돌릴 수 있습니다."

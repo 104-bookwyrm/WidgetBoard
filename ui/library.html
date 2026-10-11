@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="lib.title">보관함</title>
+    <link rel="stylesheet" href="base.css" />
+    <style>
+      /* An opaque window like Settings. */
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--c1);
+        color: var(--c3);
+        font: var(--font-size, 14px) / 1.5 var(--font);
+        display: flex;
+        flex-direction: column;
+      }
+      .lib-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 12px 16px 8px;
+      }
+      .lib-chips button[aria-pressed="true"] {
+        background: var(--c2);
+        color: #fff;
+      }
+      .lib-grid {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px 16px 16px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        grid-auto-rows: min-content;
+        gap: 10px;
+      }
+      .lib-card {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px;
+        border-radius: var(--radius, 8px);
+        border: var(--line-width) var(--line-style) var(--line-color);
+        background: color-mix(in srgb, var(--c3) 4%, var(--c1));
+        min-height: 150px;
+      }
+      .lib-card h3 {
+        margin: 0;
+        font-size: 1em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .lib-card input {
+        font: inherit;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .lib-preview {
+        flex: 1;
+        min-height: 60px;
+        color: var(--text-muted);
+        font-size: 0.9em;
+        overflow: hidden;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+      }
+      .lib-preview.memo {
+        color: #2a2a2a;
+        padding: 6px;
+        border-radius: 4px;
+      }
+      .lib-preview img {
+        width: 100%;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 4px;
+        display: block;
+      }
+      .lib-preview .big {
+        font-size: 1.6em;
+        font-weight: 600;
+        color: var(--c3);
+        font-variant-numeric: tabular-nums;
+      }
+      .lib-type {
+        font-size: 0.8em;
+        color: var(--text-faint);
+      }
+      .lib-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      .lib-actions .badge {
+        font-size: 0.8em;
+        color: var(--c2);
+        margin-inline-end: auto;
+      }
+      .lib-empty {
+        grid-column: 1 / -1;
+        color: var(--text-muted);
+        text-align: center;
+        padding: 40px 0;
+      }
+      .lib-flash {
+        position: fixed;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: var(--c3);
+        color: var(--c1);
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="lib-chips" role="toolbar"></nav>
+    <main class="lib-grid" aria-live="polite"></main>
+    <div class="lib-flash" role="status" hidden></div>
+    <script type="module" src="library.js"></script>
+  </body>
+</html>

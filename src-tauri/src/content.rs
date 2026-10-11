@@ -73,6 +73,26 @@ pub fn content_put(app: AppHandle, state: State<AppState>, item: Value, rev: Opt
     Ok(stored)
 }
 
+/// "Delete permanently": only for an item already in Recently deleted. Image/audio files nothing else uses go too.
+#[tauri::command]
+pub fn content_erase(app: AppHandle, state: State<AppState>, id: String) -> Result<(), String> {
+    let mut items = state.content.lock().unwrap();
+    let Some(item) = items.get(&id).cloned() else { return Ok(()) };
+    if item.get("deletedAt").is_none_or(Value::is_null) {
+        return Err("only deleted content can be erased".into());
+    }
+    items.remove(&id);
+    let file = json!({ "version": SCHEMA, "items": &*items });
+    if let Err(e) = write_atomic(&path(&state.dir), serde_json::to_string_pretty(&file).unwrap().as_bytes()) {
+        items.insert(id, item);
+        return Err(e);
+    }
+    drop(items);
+    crate::purge_assets(&state.dir, &[item]);
+    let _ = app.emit("content-erased", json!({ "id": id }));
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

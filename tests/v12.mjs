@@ -4,7 +4,7 @@
 // Increment 4 — Backup & data page (backup/restore, auto schedule).
 // Increment 5a — Appearance page (theme editor).
 // Increment 5b — Widgets & layout page (list/add/move/close, presets, saved layouts).
-import { chromium, ready } from "./browser.mjs";
+import { chromium, ready, settled } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -449,18 +449,13 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     (await p.evaluate(() => __mock.widgets().length)) === 2,
     "the settings window itself rewrites nothing",
   );
-  // what the board then does (bin + layout), so the rest of the page can be checked
+  // what the board then does, so the rest of the page can be checked
   await p.evaluate(() => {
     const ws = __mock.widgets();
-    localStorage.setItem("wb-bin", JSON.stringify([{ at: 1790000000, w: ws.find((w) => w.id === "a") }]));
     localStorage.setItem("wb-widgets", JSON.stringify(ws.filter((w) => w.id !== "a")));
   });
   await p.click(".set-nav button[data-page=widgets]");
   await p.waitForTimeout(500);
-  ok(
-    (await p.$$eval("#wg-bin .set-list-row", (r) => r.length)) === 1,
-    "closed widget waits in the bin",
-  );
 
   // name: focusing it locates the widget, changing it renames via widget-patch
   const nm = "#wg-list .set-list-row:first-child input";
@@ -496,40 +491,11 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     "hidden widget marked in the list",
   );
 
-  // restore from the bin → widget-restore broadcast, entry leaves the bin
-  await p.click("#wg-bin .set-list-row button");
-  await p.waitForTimeout(100);
+  // closed widgets live in the Library now; the page only opens it
+  await p.click("#wg-library");
   ok(
-    await sent("widget-restore", (pl) => pl.id === "a"),
-    "restore broadcasts the widget",
-  );
-  ok(
-    (await p.$$eval("#wg-bin .set-list-row", (r) => r.length)) === 0,
-    "restored widget leaves the bin",
-  );
-
-  // erase asks first
-  await p.evaluate(() =>
-    localStorage.setItem(
-      "wb-bin",
-      JSON.stringify([{ at: 1790000000, w: { id: "z", type: "memo" } }]),
-    ),
-  );
-  await p.click(".set-nav button[data-page=widgets]");
-  await p.waitForTimeout(100);
-  await p.click("#wg-bin .set-list-row button:last-child");
-  await p.waitForTimeout(50);
-  ok(
-    JSON.parse(await p.evaluate(() => localStorage.getItem("wb-bin")))
-      .length === 1,
-    "erase asks before deleting",
-  );
-  await p.click("#wg-bin .set-list-row button.primary");
-  await p.waitForTimeout(100);
-  ok(
-    JSON.parse(await p.evaluate(() => localStorage.getItem("wb-bin")))
-      .length === 0,
-    "confirmed erase removes the entry",
+    (await p.evaluate(() => window.__native || [])).some(([c]) => c === "open_library"),
+    "Open Library opens the Library window",
   );
 
   // memo archive: visible opt-in → config.archive.memos; versions grouped per memo
@@ -937,6 +903,75 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     await p.textContent(".set-saved"),
   );
   await p.close();
+}
+
+// --- Library window: everything that was ever on the board, plus Recently deleted ---
+{
+  const ctx = await b.newContext({ viewport: { width: 1440, height: 900 } });
+  const board = await ctx.newPage();
+  board.on("pageerror", (e) => errs.push(e.message));
+  await board.goto("http://localhost:8765/index.html?lang=en");
+  const item = (id, type, data, extra = {}) =>
+    ({ id, type, name: "", tags: [], rev: 1, created: 1, updated: 1, deletedAt: null, data, ...extra });
+  await board.evaluate(
+    ({ items }) => {
+      localStorage.clear();
+      localStorage.setItem("wb-widgets", JSON.stringify([
+        { id: "on", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: {} },
+      ]));
+      localStorage.setItem("wb-content", JSON.stringify(items));
+    },
+    {
+      items: {
+        on: item("on", "memo", { text: "on the board", color: "yellow" }, { updated: 3 }),
+        off: item("off", "memo", { text: "closed earlier", color: "pink" }, {
+          updated: 2, placement: { id: "off", type: "memo", display: "D1", x: 6, y: 0, w: 3, h: 3, settings: {} },
+        }),
+        gone: item("gone", "timer", { duration: 60000, remaining: 60000, endAt: null }, { deletedAt: 5 }),
+      },
+    },
+  );
+  await board.reload();
+  await ready(board);
+  const lib = await ctx.newPage();
+  lib.on("pageerror", (e) => errs.push(e.message));
+  await lib.goto("http://localhost:8765/library.html?lang=en");
+  await lib.waitForSelector("html[data-ready]", { state: "attached" });
+  const card = (id) => `.lib-card[data-id="${id}"]`;
+  ok(
+    (await lib.$$(".lib-card")).length === 2 && !(await lib.$(card("gone"))),
+    "Library lists live content, not deleted",
+  );
+  ok(/On the board/.test(await lib.textContent(card("on"))), "content on the board says so");
+  await lib.click(`${card("off")} [data-act=show]`);
+  await board.waitForSelector('.widget[data-id="off"]');
+  await settled(board);
+  const back = await board.evaluate(() => __mock.widgets().find((w) => w.id === "off"));
+  ok(back.x === 6 && back.settings.text === "closed earlier", "Show on board puts it back where it was", JSON.stringify(back));
+  await lib.click(`${card("on")} [data-act=rename]`);
+  await lib.fill(".lib-name", "Groceries");
+  await lib.press(".lib-name", "Enter");
+  await board.waitForFunction(() => document.querySelector('.widget[data-id="on"] .title')?.textContent === "Groceries");
+  ok(true, "renaming in the Library renames the widget");
+  await lib.click(`${card("on")} [data-act=delete]`);
+  await board.waitForSelector('.widget[data-id="on"]', { state: "detached" });
+  ok(true, "deleting takes it off the board");
+  await lib.click("[data-filter=deleted]");
+  await lib.waitForSelector(card("on"));
+  ok((await lib.$$(".lib-card")).length === 2, "Recently deleted lists both deleted items");
+  await lib.click(`${card("on")} [data-act=restore]`);
+  await lib.click("[data-filter=all]");
+  ok(!!(await lib.$(card("on"))), "restore brings it back to the Library");
+  await lib.click("[data-filter=deleted]");
+  await lib.click(`${card("gone")} [data-act=erase]`);
+  ok(/can't be undone/.test(await lib.textContent(card("gone"))), "delete permanently asks first");
+  await lib.click(`${card("gone")} [data-act=erase-yes]`);
+  await lib.waitForSelector(card("gone"), { state: "detached" });
+  ok(
+    !(await lib.evaluate(async () => (await __mock.invoke("content_list")).some((c) => c.id === "gone"))),
+    "delete permanently removes it",
+  );
+  await ctx.close();
 }
 
 console.log(`\n${passes} passed, ${fails} failed`);

@@ -1,6 +1,6 @@
 // Memo: a sticky note that keeps whatever you write (no daily reset). Each memo widget is its own note.
 // Paper colour: hover → colour dots (bottom-right), or right-click → 메모 색.
-const COLORS = {
+export const COLORS = {
   theme: null, // the widget's normal theme surface
   yellow: "#fff1a6",
   pink: "#ffcfe1",

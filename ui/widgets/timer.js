@@ -1,7 +1,7 @@
 // Timer widget. Stores the end timestamp (not ticks), so it stays correct across sleep/restart.
 import { icon } from "../icons.js";
 
-const fmt = (ms) => {
+export const fmt = (ms) => {
   const t = Math.ceil(ms / 1000);
   const h = Math.floor(t / 3600),
     m = Math.floor((t % 3600) / 60),

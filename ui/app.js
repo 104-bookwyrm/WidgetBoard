@@ -11,6 +11,7 @@ import {
   syncScheme,
   isLight,
   mergeById,
+  assetUrl as assetUrlOf,
 } from "./util.js";
 import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
 import { icon } from "./icons.js";
@@ -279,6 +280,7 @@ function remountWith(w, item) {
   mounted.delete(w.id);
   contents.set(item.id, item);
   mount(w);
+  save(w); // the placement's name copy follows a rename; unchanged content is not written again
   syncHits();
 }
 async function persistWidget(w) {
@@ -347,12 +349,7 @@ function syncHits() {
 }
 
 // ---------------- assets ----------------
-function assetUrl(name) {
-  if (!name) return "";
-  if (!assetsDir) return name; // browser mock
-  const sep = assetsDir.includes("\\") ? "\\" : "/";
-  return T.core.convertFileSrc(assetsDir + sep + name);
-}
+const assetUrl = (name) => assetUrlOf(assetsDir, name, T.core.convertFileSrc);
 function pickFiles(multiple) {
   return new Promise((resolve) => {
     const input = $("#file-picker");
@@ -921,6 +918,7 @@ async function openMenu(w, el) {
       ? { text: t("menu.show"), action: () => setHidden(w, false) }
       : { text: t("menu.hide"), action: () => setHidden(w, true) },
     { text: t("menu.close"), action: () => removeWidget(w) },
+    { text: t("menu.library"), action: () => invoke("open_library").catch(() => {}) },
   ];
   let items;
   if (editMode) {
@@ -2005,14 +2003,16 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       moveTo(w, display).catch(reportError);
   });
   await listen("undo-layout", () => undoLayout().catch(reportError));
-  // restored from the bin: the board of its monitor takes it (the primary if that monitor is gone)
+  // "Show on board" from the Library: the board of its last monitor takes it (the primary if that monitor is gone)
   await listen("widget-restore", (e) => {
     const w = e.payload;
-    if (!w?.id) return;
+    const def = REGISTRY[w?.type];
+    if (!w?.id || !def) return;
+    if (mounted.has(w.id)) return locate(w.id); // already here
+    w.w ??= def.size?.w ?? def.min?.w ?? 2;
+    w.h ??= def.size?.h ?? def.min?.h ?? 2;
     const known = displays.some((d) => d.display === w.display);
-    // already on this board (a saved layout brought it back): keep the bin copy rather than lose it
-    if (mounted.has(w.id)) return void write("bin_put", { widget: w }).catch(() => {});
-    if (w.display === myDisplay && fits(w, w.id)) {
+    if (w.display === myDisplay && Number.isFinite(w.x) && Number.isFinite(w.y) && fits(w, w.id)) {
       widgets.push(w); // its old spot is free: put it back exactly there
       mount(w);
       save(w);
@@ -2041,7 +2041,12 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     if (!item?.id || src === CONTENT_SRC) return;
     if ((contents.get(item.id)?.rev ?? 0) >= item.rev) return;
     const w = widgets.find((x) => x.id === item.id);
-    if (w && mounted.has(w.id)) remountWith(w, item);
+    if (w && mounted.has(w.id) && item.deletedAt) {
+      // deleted in the Library: off the board too (the content stays in Recently deleted)
+      contents.set(item.id, item);
+      unmount(w);
+      write("remove_widget", { id: w.id }).catch(() => {});
+    } else if (w && mounted.has(w.id)) remountWith(w, item);
     else contents.set(item.id, item);
   });
   // backup restore: nothing typed now could be saved, so the widgets stop taking input until the relaunch

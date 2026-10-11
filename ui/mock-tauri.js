@@ -276,37 +276,20 @@ export function createMockTauri() {
         emit("content-changed", { item: stored, src: args.src });
         return stored;
       }
+      case "content_erase": {
+        const items = get("wb-content", {});
+        if (!items[args.id]) return;
+        if (items[args.id].deletedAt == null) throw "only deleted content can be erased";
+        delete items[args.id];
+        set("wb-content", items);
+        emit("content-erased", { id: args.id });
+        return;
+      }
       case "diary_dates":
         return Object.keys(localStorage)
           .filter((k) => k.startsWith("wb-diary-"))
           .map((k) => k.slice(9))
           .sort();
-      case "bin_list":
-        return get("wb-bin", []);
-      case "bin_put":
-        set(
-          "wb-bin",
-          [
-            { at: Math.floor(Date.now() / 1000), w: args.widget },
-            ...get("wb-bin", []).filter((e) => e?.w?.id !== args.widget.id),
-          ].slice(0, 50),
-        );
-        return;
-      case "bin_take": {
-        const bin = get("wb-bin", []);
-        const entry = bin.find((e) => e?.w?.id === args.id);
-        set(
-          "wb-bin",
-          bin.filter((e) => e !== entry),
-        );
-        return entry?.w ?? null;
-      }
-      case "bin_erase":
-        set(
-          "wb-bin",
-          args.id ? get("wb-bin", []).filter((e) => e?.w?.id !== args.id) : [],
-        );
-        return;
       case "memo_archive_list":
         return get("wb-archive", []);
       case "memo_archive":
@@ -422,6 +405,7 @@ export function createMockTauri() {
       case "set_hotkey":
       case "notify":
       case "open_settings":
+      case "open_library":
       case "open_url":
         native(cmd, args);
         return;
