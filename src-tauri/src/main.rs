@@ -597,19 +597,62 @@ fn save_config(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(
 }
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+/// The Run / StartupApproved value name: "WidgetBoard" for the production build, its own name for any other
+/// build (devtest), so toggling autostart there never repoints the real entry. Set once at startup.
+static RUN_NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+fn run_name() -> &'static str {
+    RUN_NAME.get().map(String::as_str).unwrap_or("WidgetBoard")
+}
 
-/// Start with Windows: a value under HKCU\...\Run pointing at this exe.
-fn autostart_get() -> bool {
+/// Task Manager's Startup tab keeps its own on/off here: a REG_BINARY whose first byte is 02 when enabled and
+/// 03 (plus a timestamp) when the user disabled it. Odd = disabled (checked against this machine's entries).
+const APPROVED_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+/// The Run entry's target, quotes removed (None = no entry).
+fn autostart_target() -> Option<String> {
     #[cfg(windows)]
     {
         use winreg::{enums::HKEY_CURRENT_USER, RegKey};
         return RegKey::predef(HKEY_CURRENT_USER)
             .open_subkey(RUN_KEY)
-            .and_then(|k| k.get_value::<String, _>("WidgetBoard"))
-            .is_ok();
+            .and_then(|k| k.get_value::<String, _>(run_name()))
+            .ok()
+            .map(|v| v.trim().trim_matches('"').to_string());
+    }
+    #[allow(unreachable_code)]
+    None
+}
+
+/// Disabled in Task Manager (the Run entry stays, but Windows will not start it).
+fn disabled_by_windows() -> bool {
+    #[cfg(windows)]
+    {
+        use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+        return RegKey::predef(HKEY_CURRENT_USER)
+            .open_subkey(APPROVED_KEY)
+            .and_then(|k| k.get_raw_value(run_name()))
+            .is_ok_and(|v| v.bytes.first().is_some_and(|b| b & 1 == 1));
     }
     #[allow(unreachable_code)]
     false
+}
+
+/// Start with Windows: a Run entry pointing at this exe that Task Manager has not disabled.
+fn autostart_get() -> bool {
+    autostart_target().is_some() && !disabled_by_windows()
+}
+
+/// At startup: a Run entry whose exe is gone (the app was moved) is pointed at this exe. Only an entry that
+/// already exists is touched, and only by the production build, so a devtest run never takes it over.
+fn repair_autostart(identifier: &str) {
+    if identifier != PRODUCTION_IDENTIFIER {
+        return;
+    }
+    if let Some(target) = autostart_target() {
+        if !Path::new(&target).exists() {
+            let _ = set_autostart(true);
+        }
+    }
 }
 
 #[tauri::command]
@@ -620,9 +663,13 @@ fn set_autostart(on: bool) -> Result<bool, String> {
         let (key, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(RUN_KEY).map_err(|e| e.to_string())?;
         if on {
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-            key.set_value("WidgetBoard", &format!("\"{}\"", exe.display())).map_err(|e| e.to_string())?;
+            key.set_value(run_name(), &format!("\"{}\"", exe.display())).map_err(|e| e.to_string())?;
+            // turning it on here also clears a "Disabled" set in Task Manager
+            if let Ok(approved) = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(APPROVED_KEY, winreg::enums::KEY_SET_VALUE) {
+                let _ = approved.delete_value(run_name());
+            }
         } else {
-            let _ = key.delete_value("WidgetBoard");
+            let _ = key.delete_value(run_name());
         }
     }
     let _ = on;
@@ -719,7 +766,7 @@ fn get_settings(state: State<AppState>) -> Value {
         "app": { "lang": s.lang, "reduceMotion": s.reduce_motion },
         "theme": theme,
         "config": read_config(&state.dir),
-        "autostart": { "on": autostart_get(), "disabledByWindows": false },
+        "autostart": { "on": autostart_get(), "disabledByWindows": autostart_target().is_some() && disabled_by_windows() },
         "version": updater::CURRENT,
         "displays": state.boards.lock().unwrap().clone(),
         "widgets": widgets,
@@ -1826,6 +1873,9 @@ fn main() {
                 .unwrap_or_default();
             migrate_config(&dir); // v0.12: fold settings.json + checklist.weekStart into config.json
             let settings = load_settings(&dir);
+            let id = app.config().identifier.clone();
+            let _ = RUN_NAME.set(if id == PRODUCTION_IDENTIFIER { "WidgetBoard".into() } else { format!("WidgetBoard ({id})") });
+            repair_autostart(&id);
             let content = content::load(&dir);
             app.manage(AppState {
                 dir,
