@@ -265,17 +265,8 @@
               ></p>
             </div>
             <div class="set-row">
-              <label for="set-weekstart" data-i18n="set.general.weekStart"
-                >한 주 시작</label
-              >
-              <select id="set-weekstart">
-                <option
-                  value="default"
-                  data-i18n="set.weekStart.default"
-                ></option>
-                <option value="mon" data-i18n="set.weekStart.mon"></option>
-                <option value="sun" data-i18n="set.weekStart.sun"></option>
-              </select>
+              <label for="wg-lock" data-i18n="set.lock"></label>
+              <input type="checkbox" id="wg-lock" data-ui="lockLayout" />
             </div>
             <div class="set-row">
               <label for="set-tz" data-i18n="set.general.tz">내 시간대</label>
@@ -436,87 +427,7 @@
           </fieldset>
         </section>
         <section data-page="widgets" hidden>
-          <h2 data-i18n="set.nav.widgets">위젯과 배치</h2>
-
-          <fieldset>
-            <legend data-i18n="set.widgets.list_legend"></legend>
-            <div id="wg-list" class="set-list"></div>
-            <div class="set-row set-add">
-              <select id="wg-add-type"></select>
-              <button id="wg-add" data-i18n="set.widgets.add"></button>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend data-i18n="set.widgets.layout_legend"></legend>
-            <div class="set-row">
-              <label for="wg-lock" data-i18n="set.lock"></label>
-              <input type="checkbox" id="wg-lock" data-ui="lockLayout" />
-            </div>
-            <div class="set-row">
-              <label data-i18n="set.widgets.edit"></label>
-              <button id="wg-edit" data-i18n="set.widgets.edit_btn"></button>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend data-i18n="lay.builtin"></legend>
-            <div class="set-row set-add">
-              <button id="wg-preset-work" data-preset="work">
-                <span data-i18n="lay.work"></span>
-              </button>
-              <button id="wg-preset-study" data-preset="study">
-                <span data-i18n="lay.study"></span>
-              </button>
-              <button id="wg-preset-oshi" data-preset="oshi">
-                <span data-i18n="lay.oshi"></span>
-              </button>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend data-i18n="lay.saved"></legend>
-            <div id="wg-layouts" class="set-list"></div>
-            <div class="set-row set-add">
-              <input
-                type="text"
-                id="wg-layout-name"
-                maxlength="40"
-                data-i18n-placeholder="lay.name"
-              />
-              <button id="wg-layout-save" data-i18n="lay.save"></button>
-              <button id="wg-layout-undo" data-i18n="lay.undo" hidden></button>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend data-i18n="lib.title"></legend>
-            <p class="hint" data-i18n="set.lib.hint"></p>
-            <div class="set-row set-add">
-              <button id="wg-library" data-i18n="set.lib.open"></button>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend data-i18n="set.archive.legend"></legend>
-            <div class="set-row">
-              <label for="wg-archive" data-i18n="set.archive.toggle"></label>
-              <input
-                type="checkbox"
-                id="wg-archive"
-                aria-describedby="wg-archive-hint"
-              />
-            </div>
-            <p
-              class="hint"
-              id="wg-archive-hint"
-              data-i18n="set.archive.hint"
-            ></p>
-            <div id="wg-archive-list" class="set-list"></div>
-          </fieldset>
-        </section>
-        <section data-page="timer" hidden>
-          <h2 data-i18n="set.nav.timer">타이머 · 달력</h2>
+          <h2 data-i18n="set.nav.widgets">위젯</h2>
 
           <fieldset>
             <legend data-i18n="set.timer.alarm"></legend>
@@ -554,6 +465,23 @@
               id="timer-preset-add"
               data-i18n="set.timer.add_preset"
             ></button>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.cal.legend"></legend>
+            <div class="set-row">
+              <label for="set-weekstart" data-i18n="set.general.weekStart"
+                >한 주 시작</label
+              >
+              <select id="set-weekstart">
+                <option
+                  value="default"
+                  data-i18n="set.weekStart.default"
+                ></option>
+                <option value="mon" data-i18n="set.weekStart.mon"></option>
+                <option value="sun" data-i18n="set.weekStart.sun"></option>
+              </select>
+            </div>
           </fieldset>
 
           <fieldset>
@@ -595,6 +523,23 @@
               />
               <button id="cal-remove-btn" data-i18n="set.cal.exclude"></button>
             </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.archive.legend"></legend>
+            <div class="set-row">
+              <label for="wg-archive" data-i18n="set.archive.toggle"></label>
+              <input
+                type="checkbox"
+                id="wg-archive"
+                aria-describedby="wg-archive-hint"
+              />
+            </div>
+            <p
+              class="hint"
+              id="wg-archive-hint"
+              data-i18n="set.archive.hint"
+            ></p>
           </fieldset>
         </section>
         <section data-page="a11y" hidden>

@@ -32,7 +32,6 @@ const PAGES = [
   "general",
   "appearance",
   "widgets",
-  "timer",
   "a11y",
   "backup",
   "about",
@@ -99,7 +98,6 @@ function showPage(page) {
   const main = $(".set-main");
   main.scrollTop = 0;
   main.focus();
-  if (page === "widgets" && data) fillWidgets(); // board widgets may have changed since last view
 }
 function currentPage() {
   return (
@@ -410,7 +408,7 @@ function saveRemoves(arr) {
   });
 }
 function bindTimer() {
-  bindUiControls('[data-page="timer"] [data-ui]');
+  bindUiControls('[data-page="widgets"] [data-ui]');
   $("#timer-preset-add").onclick = () => {
     presets.push({ label: "", time: "" });
     renderPresets();
@@ -449,7 +447,7 @@ function bindTimer() {
   };
 }
 function fillTimer() {
-  fillUiControls('[data-page="timer"] [data-ui]');
+  fillUiControls('[data-page="widgets"] [data-ui]');
   presets = Array.isArray(data?.config?.timer?.presets)
     ? data.config.timer.presets.map((p) => ({
         label: p.label || "",
@@ -670,274 +668,17 @@ async function fillFontList() {
 // ---- Widgets & layout page ----
 // Board-geometry actions (add, presets, applying a saved layout) go to the primary board via
 // emit_primary; everything else (close, move, save/undo layouts, lock) is plain commands.
-const afterBoardChange = () => {
-  saved();
-  setTimeout(fillWidgets, 400); // board-side ops land asynchronously
-};
-// Boards listen for these broadcasts and act on their own widgets (name / hidden / locate / restore).
-const emit = (ev, payload) => T.event.emit(ev, payload).catch(() => {});
-const wName = (w) => w.name || t("widget." + w.type);
-const when = (secs) =>
-  new Date(secs * 1000).toLocaleString(
-    data.app.lang === "ko" ? "ko-KR" : "en-US",
-    {
-      dateStyle: "medium",
-      timeStyle: "short",
-    },
-  );
-function hintRow(host, key) {
-  const p = document.createElement("p");
-  p.className = "hint";
-  p.textContent = t(key);
-  host.append(p);
-}
-function renderWidgetList(all) {
-  const host = $("#wg-list");
-  host.innerHTML = "";
-  if (!all.length) return hintRow(host, "set.widgets.none");
-  const displays = (data.displays || []).map((d) => d.display);
-  for (const w of all) {
-    const row = document.createElement("div");
-    row.className = "set-list-row" + (w.hidden ? " is-hidden" : "");
-    // the name field: clicking it flashes the real widget, typing renames it
-    const name = document.createElement("input");
-    name.type = "text";
-    name.className = "grow";
-    name.maxLength = 40;
-    name.value = w.name || "";
-    name.placeholder = t("widget." + w.type);
-    name.setAttribute(
-      "aria-label",
-      t("set.widgets.name", { type: t("widget." + w.type) }),
-    );
-    name.onfocus = () => emit("widget-locate", w.id);
-    name.onchange = () => {
-      w.name = name.value.trim();
-      emit("widget-patch", { id: w.id, patch: { name: w.name } });
-      saved();
-    };
-    const meta = document.createElement("span");
-    meta.className = "muted";
-    meta.textContent =
-      t("widget." + w.type) +
-      (w.display && displays.length > 1 ? ` · ${w.display}` : "");
-    const hide = btn(
-      t(w.hidden ? "set.widgets.show" : "set.widgets.hide"),
-      () => {
-        w.hidden = !w.hidden;
-        emit("widget-patch", { id: w.id, patch: { hidden: w.hidden } });
-        saved();
-        renderWidgetList(all);
-      },
-      "",
-    );
-    hide.setAttribute("aria-pressed", String(!!w.hidden));
-    row.append(name, meta, hide);
-    if (displays.length > 1)
-      row.append(
-        btn(
-          "⇆",
-          () => {
-            const i = displays.indexOf(w.display);
-            const to = displays[(i + 1) % displays.length];
-            // the board moves its live copy; this list can be minutes old
-            emit("widget-move", { id: w.id, display: to }).then(afterBoardChange);
-          },
-          "",
-        ),
-      );
-    // the board closes its live copy (bin + undo toast), so nothing else on screen rolls back
-    const close = btn("✕", () => emit("widget-close", w.id).then(afterBoardChange));
-    close.title = close.ariaLabel = t("set.widgets.close", { name: wName(w) });
-    row.append(close);
-    host.append(row);
-  }
-}
-
-// -- closed-widgets bin --
-function confirmInline(row, msgKey, onYes, back, { vars, yes = "lib.delete" } = {}) {
-  row.innerHTML = "";
-  const msg = document.createElement("span");
-  msg.className = "grow";
-  msg.textContent = t(msgKey, vars);
-  row.append(
-    msg,
-    btn(t(yes), onYes, "primary"),
-    btn(t("set.close"), back, ""),
-  );
-}
-
-// -- memo archive (opt-in) --
-async function renderArchive() {
-  const on = !!data.config?.archive?.memos;
-  $("#wg-archive").checked = on;
-  const host = $("#wg-archive-list");
-  const lines = await invoke("memo_archive_list").catch(() => []);
-  host.innerHTML = ""; // after the await: overlapping renders would both append
-  if (!lines.length) return on ? hintRow(host, "set.archive.none") : undefined;
-  const byId = new Map();
-  for (const v of lines)
-    (byId.get(v.id) || byId.set(v.id, []).get(v.id)).push(v);
-  const memos = [...byId.values()].sort((a, b) => b.at(-1).t - a.at(-1).t);
-  for (const versions of memos) {
-    const last = versions.at(-1);
-    const d = document.createElement("details");
-    const sum = document.createElement("summary");
-    const title = last.name || last.text.split("\n")[0].slice(0, 40);
-    sum.textContent = `${title} · ${t("set.archive.versions", { n: versions.length })} · ${when(last.t)}`;
-    d.append(sum);
-    d.ontoggle = () => {
-      if (!d.open || d.children.length > 1) return;
-      for (const v of [...versions].reverse()) {
-        const row = document.createElement("div");
-        row.className = "set-list-row";
-        const pre = document.createElement("pre");
-        pre.textContent = v.text;
-        const ts = document.createElement("span");
-        ts.className = "muted";
-        ts.textContent = when(v.t);
-        row.append(
-          ts,
-          pre,
-          btn(
-            t("set.archive.copy"),
-            () =>
-              copyText(v.text).then((ok) =>
-                flash(t(ok ? "ai.copied" : "ai.copy_failed")),
-              ),
-            "",
-          ),
-        );
-        d.append(row);
-      }
-    };
-    host.append(d);
-  }
-}
-
-async function renderWgLayouts() {
-  const list = await invoke("store_get", { key: "layouts" }).catch(() => null);
-  const layouts = (Array.isArray(list) ? list : []).filter(
-    (l) => l && typeof l.name === "string" && Array.isArray(l.widgets),
-  );
-  const host = $("#wg-layouts");
-  host.innerHTML = "";
-  if (!layouts.length) {
-    const p = document.createElement("p");
-    p.className = "hint";
-    p.textContent = t("lay.none");
-    host.append(p);
-  } else {
-    for (const l of layouts) {
-      const row = document.createElement("div");
-      row.className = "set-list-row";
-      const txt = document.createElement("span");
-      txt.className = "grow";
-      txt.textContent = `${l.name} · ${t("lay.count", { n: l.widgets.length })}`;
-      row.append(
-        txt,
-        btn(
-          t("lay.apply"),
-          // the board merges current contents (memo text...) into the saved positions
-          () =>
-            invoke("emit_primary", { event: "apply-layout", payload: l.name })
-              .then(afterBoardChange)
-              .catch(() => {}),
-          "",
-        ),
-        btn("✕", () =>
-          confirmInline(
-            row,
-            "lay.delete_confirm",
-            () =>
-              invoke("store_set", {
-                key: "layouts",
-                value: layouts.filter((x) => x !== l),
-                src: "settings",
-              }).then(() => {
-                saved();
-                renderWgLayouts();
-              }),
-            renderWgLayouts,
-            { vars: { name: l.name }, yes: "dday.delete" },
-          ),
-        ),
-      );
-      host.append(row);
-    }
-  }
-  const undo = await invoke("store_get", { key: "layouts_undo" }).catch(
-    () => null,
-  );
-  $("#wg-layout-undo").hidden = !Array.isArray(undo);
-}
+// ---- Widgets page: memo archive on/off (the versions live in the Library's memo History) ----
 function bindWidgets() {
-  $("#wg-library").onclick = () => invoke("open_library").catch(() => {});
   $("#wg-archive").onchange = () =>
     invoke("save_config", {
       patch: { archive: { memos: $("#wg-archive").checked } },
-    }).then(() => {
-      saved();
-      renderArchive();
-    });
-  bindUiControls('[data-page="widgets"] [data-ui]');
-  const sel = $("#wg-add-type");
-  $("#wg-add").onclick = () =>
-    invoke("emit_primary", { event: "add-widget", payload: sel.value })
-      .then(afterBoardChange)
-      .catch(() => {});
-  $("#wg-edit").onclick = () =>
-    invoke("set_edit_mode", { on: true }).catch(() => {});
-  for (const id of ["work", "study", "oshi"])
-    $("#wg-preset-" + id).onclick = () =>
-      invoke("emit_primary", { event: "apply-preset", payload: id })
-        .then(afterBoardChange)
-        .catch(() => {});
-  $("#wg-layout-save").onclick = async () => {
-    const all = await invoke("get_all_widgets").catch(() => []);
-    const now = new Date();
-    const name =
-      $("#wg-layout-name").value.trim().slice(0, 40) ||
-      t("lay.default_name", {
-        date: `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
-      });
-    const list = await invoke("store_get", { key: "layouts" }).catch(
-      () => null,
-    );
-    const prev = Array.isArray(list) ? list : [];
-    const next = [
-      ...prev.filter((l) => l.name !== name),
-      { name, saved: now.toISOString(), widgets: all },
-    ].slice(-20);
-    await invoke("store_set", {
-      key: "layouts",
-      value: next,
-      src: "settings",
-    }).catch(() => {});
-    $("#wg-layout-name").value = "";
-    saved();
-    renderWgLayouts();
-  };
-  // the board undoes it: positions go back, contents typed since stay
-  $("#wg-layout-undo").onclick = () =>
-    invoke("emit_primary", { event: "undo-layout", payload: null })
-      .then(afterBoardChange)
-      .catch(() => {});
+    }).then(saved);
+  bindUiControls('[data-page="general"] [data-ui]'); // layout lock
 }
-async function fillWidgets() {
-  const sel = $("#wg-add-type");
-  sel.innerHTML = "";
-  for (const type of data.widgetTypes || []) {
-    const o = document.createElement("option");
-    o.value = type;
-    o.textContent = t("widget." + type);
-    sel.append(o);
-  }
-  const all = await invoke("get_all_widgets").catch(() => []);
-  renderWidgetList(Array.isArray(all) ? all : []);
-  renderWgLayouts();
-  renderArchive();
-  fillUiControls('[data-page="widgets"] [data-ui]');
+function fillWidgets() {
+  $("#wg-archive").checked = !!data.config?.archive?.memos;
+  fillUiControls('[data-page="general"] [data-ui]');
 }
 
 // ---- init ----

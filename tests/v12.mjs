@@ -54,10 +54,10 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   const nav = await p.$$eval(".set-nav button", (bs) =>
     bs.map((b) => b.textContent.trim()),
   );
-  ok(nav.length === 7, "seven sidebar pages", String(nav.length));
+  ok(nav.length === 6, "six sidebar pages", String(nav.length));
   ok(
     nav.join("|") ===
-      "일반|모양|위젯 · 배치|타이머 · 달력|접근성|백업 · 데이터|정보 · 업데이트",
+      "일반|모양|위젯|접근성|백업 · 데이터|정보 · 업데이트",
     "nav localized (ko)",
     nav.join("|"),
   );
@@ -104,7 +104,8 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     "autostart stays on after config-changed",
   );
 
-  // week start writes ui.weekStart
+  // week start (on the Widgets page) writes ui.weekStart
+  await p.click(".set-nav button[data-page=widgets]");
   await p.selectOption("#set-weekstart", "sun");
   await p.waitForTimeout(100);
   ok(
@@ -113,6 +114,7 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     )) === "sun",
     "weekStart saved to config.ui.weekStart",
   );
+  await p.click(".set-nav button[data-page=general]");
 
   // language change re-renders the nav in the new language
   await p.selectOption("#set-lang", "en");
@@ -146,9 +148,9 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
       "none",
     "page select shown when narrow",
   );
-  await p.selectOption(".set-nav-select", "timer");
+  await p.selectOption(".set-nav-select", "widgets");
   ok(
-    await p.$eval(".set-main [data-page=timer]", (s) => !s.hidden),
+    await p.$eval(".set-main [data-page=widgets]", (s) => !s.hidden),
     "select navigates pages",
   );
   await p.close();
@@ -311,9 +313,9 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
       holidays: { country: "KR", add: {}, remove: [] },
     },
   });
-  await p.click(".set-nav button[data-page=timer]");
+  await p.click(".set-nav button[data-page=widgets]");
   await p.waitForTimeout(50);
-  const body = await p.$eval(".set-main [data-page=timer]", (e) => e.innerText);
+  const body = await p.$eval(".set-main [data-page=widgets]", (e) => e.innerText);
   ok(
     !RAW.test(body),
     "no raw keys on timer page (ko)",
@@ -413,222 +415,30 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   await p.close();
 }
 
-// --- Widgets & layout page ---
+// --- Widgets page (per-type preferences) and the layout lock in General ---
 {
-  const p = await page("ko", {
-    seedWidgets: [
-      { id: "a", type: "memo", display: "D1" },
-      { id: "b", type: "timer", display: "D2" },
-    ],
-  });
+  const p = await page("en");
   await p.click(".set-nav button[data-page=widgets]");
   await p.waitForTimeout(100);
-  const body = await p.$eval(
-    ".set-main [data-page=widgets]",
-    (e) => e.innerText,
-  );
+  const body = await p.$eval(".set-main [data-page=widgets]", (e) => e.innerText);
   ok(
-    !RAW.test(body),
-    "no raw keys on widgets page (ko)",
-    (body.match(RAW) || [])[0],
+    /Week starts on/i.test(body) && /Memo archive/.test(body) && !/Saved layouts/.test(body),
+    "Widgets page gathers per-type preferences; layouts are not here",
+    body.slice(0, 200),
   );
-  let rows = await p.$$eval("#wg-list .set-list-row", (r) => r.length);
-  ok(rows === 2, "widget list shows seeded widgets", String(rows));
-
-  // close a widget → the owning board closes its live copy (widget-close)
-  const nat = () => p.evaluate(() => window.__native || []);
-  const sent = async (ev, test) =>
-    (await nat()).some(([c, e, pl]) => c === "emit" && e === ev && test(pl));
-  await p.click("#wg-list .set-list-row:first-child button:last-child");
-  await p.waitForTimeout(100);
-  ok(
-    await sent("widget-close", (pl) => pl === "a"),
-    "close asks the board to close the widget",
-  );
-  ok(
-    (await p.evaluate(() => __mock.widgets().length)) === 2,
-    "the settings window itself rewrites nothing",
-  );
-  // what the board then does, so the rest of the page can be checked
-  await p.evaluate(() => {
-    const ws = __mock.widgets();
-    localStorage.setItem("wb-widgets", JSON.stringify(ws.filter((w) => w.id !== "a")));
-  });
-  await p.click(".set-nav button[data-page=widgets]");
-  await p.waitForTimeout(500);
-
-  // name: focusing it locates the widget, changing it renames via widget-patch
-  const nm = "#wg-list .set-list-row:first-child input";
-  await p.focus(nm);
-  await p.fill(nm, "Groceries");
-  await p.press(nm, "Tab");
-  await p.waitForTimeout(50);
-  ok(
-    await sent("widget-locate", (pl) => pl === "b"),
-    "focusing a name locates the widget",
-  );
-  ok(
-    await sent(
-      "widget-patch",
-      (pl) => pl.id === "b" && pl.patch.name === "Groceries",
-    ),
-    "rename sends widget-patch",
-  );
-  // hide (first button in the row)
-  await p.click("#wg-list .set-list-row:first-child button");
-  await p.waitForTimeout(50);
-  ok(
-    await sent(
-      "widget-patch",
-      (pl) => pl.id === "b" && pl.patch.hidden === true,
-    ),
-    "hide sends widget-patch hidden",
-  );
-  ok(
-    await p.$eval("#wg-list .set-list-row:first-child", (e) =>
-      e.classList.contains("is-hidden"),
-    ),
-    "hidden widget marked in the list",
-  );
-
-  // closed widgets live in the Library now; the page only opens it
-  await p.click("#wg-library");
-  ok(
-    (await p.evaluate(() => window.__native || [])).some(([c]) => c === "open_library"),
-    "Open Library opens the Library window",
-  );
-
-  // memo archive: visible opt-in → config.archive.memos; versions grouped per memo
-  ok(
-    !(await p.$eval("#wg-archive", (e) => e.checked)),
-    "memo archive is off by default",
-  );
-  await p.evaluate(() =>
-    localStorage.setItem(
-      "wb-archive",
-      JSON.stringify([
-        { t: 1790000000, id: "m1", name: "", text: "milk, eggs" },
-        { t: 1790000100, id: "m1", name: "", text: "milk, eggs, bread" },
-      ]),
-    ),
-  );
+  ok(!(await p.$eval("#wg-archive", (e) => e.checked)), "memo archive is off by default");
   await p.click("#wg-archive");
   await p.waitForTimeout(100);
   ok(
-    (await p.evaluate(
-      () => JSON.parse(localStorage.getItem("wb-config")).archive?.memos,
-    )) === true,
+    (await p.evaluate(() => JSON.parse(localStorage.getItem("wb-config")).archive?.memos)) === true,
     "archive opt-in saved to config.archive.memos",
   );
-  ok(
-    (await p.$$eval("#wg-archive-list details", (d) => d.length)) === 1,
-    "archived versions grouped into one memo",
-  );
-  // opened straight on the Widgets page, init and showPage both render the list: still one entry
-  await p.goto("http://localhost:8765/settings.html?lang=ko&page=widgets");
-  await p.waitForTimeout(500);
-  ok(
-    (await p.$$eval("#wg-archive-list details", (d) => d.length)) === 1,
-    "RT14: archive list not doubled when opened on the Widgets page",
-  );
-  await p.click("#wg-archive-list summary");
-  await p.waitForTimeout(50);
-  ok(
-    (await p.$$eval("#wg-archive-list pre", (d) => d.length)) === 2,
-    "opening a memo lists its versions",
-  );
-
-  // add a widget → emit_primary add-widget to the board
-  await p.selectOption("#wg-add-type", "calendar");
-  await p.click("#wg-add");
-  await p.waitForTimeout(100);
-  ok(
-    await p.evaluate(() =>
-      (window.__native || []).some(
-        ([c, ev, pl]) =>
-          c === "emit_primary" && ev === "add-widget" && pl === "calendar",
-      ),
-    ),
-    "add widget emits add-widget to the primary board",
-  );
-
-  // lock layout → config.ui.lockLayout
+  await p.click(".set-nav button[data-page=general]");
   await p.click("#wg-lock");
   await p.waitForTimeout(100);
   ok(
-    (await p.evaluate(
-      () => JSON.parse(localStorage.getItem("wb-config")).ui.lockLayout,
-    )) === true,
-    "lock layout saved to config.ui",
-  );
-
-  // edit layout → set_edit_mode
-  await p.click("#wg-edit");
-  await p.waitForTimeout(50);
-  ok(
-    await p.evaluate(() =>
-      (window.__native || []).some(
-        ([c, on]) => c === "set_edit_mode" && on === true,
-      ),
-    ),
-    "edit layout enables edit mode",
-  );
-
-  // preset → emit_primary apply-preset
-  await p.click("#wg-preset-work");
-  await p.waitForTimeout(50);
-  ok(
-    await p.evaluate(() =>
-      (window.__native || []).some(
-        ([c, ev, pl]) =>
-          c === "emit_primary" && ev === "apply-preset" && pl === "work",
-      ),
-    ),
-    "preset emits apply-preset",
-  );
-
-  // save a named layout → store
-  await p.fill("#wg-layout-name", "My setup");
-  await p.click("#wg-layout-save");
-  await p.waitForTimeout(100);
-  ok(
-    (await p.evaluate(
-      () => JSON.parse(localStorage.getItem("wb-store-layouts"))[0].name,
-    )) === "My setup",
-    "layout saved to the layouts store",
-  );
-  ok(
-    (await p.$$eval("#wg-layouts .set-list-row", (r) => r.length)) === 1,
-    "saved layout listed",
-  );
-  // apply goes to the board, which merges current contents into the saved positions
-  await p.click("#wg-layouts .set-list-row button");
-  await p.waitForTimeout(50);
-  ok(
-    await p.evaluate(() =>
-      (window.__native || []).some(
-        ([c, ev, pl]) =>
-          c === "emit_primary" && ev === "apply-layout" && pl === "My setup",
-      ),
-    ),
-    "apply emits apply-layout with the layout name",
-  );
-  ok(
-    (await p.$$eval("#wg-add-type option", (o) => o.length)) === 13,
-    "add list offers every widget type",
-  );
-  // delete asks first
-  await p.click("#wg-layouts .set-list-row button:last-child");
-  ok(
-    /My setup/.test(await p.textContent("#wg-layouts .set-list-row")) &&
-      JSON.parse(await p.evaluate(() => localStorage.getItem("wb-store-layouts"))).length === 1,
-    "deleting a layout asks for confirmation first",
-  );
-  await p.click("#wg-layouts .set-list-row button.primary");
-  await p.waitForTimeout(100);
-  ok(
-    JSON.parse(await p.evaluate(() => localStorage.getItem("wb-store-layouts"))).length === 0,
-    "confirmed delete removes the layout",
+    (await p.evaluate(() => JSON.parse(localStorage.getItem("wb-config")).ui.lockLayout)) === true,
+    "layout lock (in General) saved to config.ui",
   );
   await p.close();
 }
