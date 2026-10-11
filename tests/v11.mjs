@@ -1,5 +1,5 @@
 // v0.11: update UI (the Rust updater itself is covered by tools/updater-test)
-import { chromium } from "./browser.mjs";
+import { chromium, ready } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -27,7 +27,7 @@ async function page(lang = "ko") {
   await p.goto(`http://localhost:8765/index.html?lang=${lang}`);
   await p.evaluate(() => localStorage.clear());
   await p.reload();
-  await p.waitForTimeout(500);
+  await ready(p);
   return p;
 }
 // The update controls live in the settings window (tests/v12.mjs). The board only shows the

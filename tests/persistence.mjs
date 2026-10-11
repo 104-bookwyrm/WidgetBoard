@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chromium } from "./browser.mjs";
+import { chromium, ready } from "./browser.mjs";
 const browser = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
 );
@@ -27,7 +27,7 @@ async function page(widgets, store = {}) {
     { widgets, store },
   );
   await p.reload();
-  await p.waitForTimeout(600);
+  await ready(p);
   return p;
 }
 async function test(name, fn) {
@@ -158,7 +158,7 @@ await test("backup waits for memo and diary buffers on every board", async () =>
   ]);
   const second = await p.context().newPage();
   await second.goto("http://localhost:8765/index.html?lang=en&display=D2");
-  await second.waitForTimeout(600);
+  await ready(second);
   const settings = await p.context().newPage();
   await settings.goto("http://localhost:8765/settings.html?lang=en");
   await settings.waitForFunction(() => !!window.__mock);

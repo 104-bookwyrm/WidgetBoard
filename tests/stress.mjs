@@ -1,4 +1,4 @@
-import { chromium, artifact } from "./browser.mjs";
+import { chromium, ready, reloadsAfter, settled, artifact } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -78,7 +78,7 @@ async function seed(p, widgets, extra = {}) {
     { widgets, extra },
   );
   await p.reload();
-  await p.waitForTimeout(700);
+  await ready(p);
 }
 const W = (type, i = 0) => `.widget[data-widget=${type}] >> nth=${i} >>`;
 async function dragHead(p, sel, dxCells, dyCells) {
@@ -89,7 +89,7 @@ async function dragHead(p, sel, dxCells, dyCells) {
     steps: 10,
   });
   await p.mouse.up();
-  await p.waitForTimeout(450);
+  await settled(p);
 }
 async function dragResize(p, sel, dw, dh) {
   const bb = await (await p.$(`${sel} >> .w-resize`)).boundingBox();
@@ -97,7 +97,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.mouse.down();
   await p.mouse.move(bb.x + 8 + dw * 90, bb.y + 8 + dh * 90, { steps: 10 });
   await p.mouse.up();
-  await p.waitForTimeout(450);
+  await settled(p);
 }
 
 // ===== A. corrupt / hostile saved data =====
@@ -230,7 +230,7 @@ async function dragResize(p, sel, dw, dh) {
   );
   await p.mouse.move(bb.x + 30, bb.y + 8, { steps: 6 });
   await p.mouse.up();
-  await p.waitForTimeout(450);
+  await settled(p);
   ok(
     preview.length === 3,
     "B: preview computed during drag",
@@ -302,7 +302,7 @@ async function dragResize(p, sel, dw, dh) {
   ok(r.n === 7, "C: nothing lost", r.n);
   // persisted layout equals shown layout
   await p.reload();
-  await p.waitForTimeout(700);
+  await ready(p);
   await invariants(p, "C after reload");
   await p.close();
 }
@@ -916,7 +916,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.waitForTimeout(200);
   await p.evaluate(() => window.dispatchEvent(new Event("focus")));
   await p.reload();
-  await p.waitForTimeout(700);
+  await ready(p);
   R = await rows();
   ok(
     JSON.stringify(R) ===
@@ -972,7 +972,7 @@ async function dragResize(p, sel, dw, dh) {
   // so the real (load-dependent) time the reload takes can't leak into the reading.
   await p.waitForTimeout(400); // let the running state flush to disk
   await p.reload();
-  await p.waitForTimeout(400); // widget mounts and reads the saved start time
+  await ready(p); // widget mounts and reads the saved start time
   const t0 = new Date("2026-09-26T09:00:00+09:00").getTime();
   await p.clock.setFixedTime(new Date(t0 + 70000 + 10000 + 3600000)); // go + 10s run + 1h closed
   await p.clock.runFor(200); // re-render the running display at the pinned time
@@ -1027,7 +1027,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.close();
   const p2 = await b.newPage({ reducedMotion: "reduce" });
   await p2.goto("http://localhost:8765/index.html");
-  await p2.waitForTimeout(400);
+  await ready(p2);
   ok(
     await p2.evaluate(() => document.body.classList.contains("reduce-motion")),
     'P: Windows "animation effects off" is respected automatically',
@@ -1084,7 +1084,7 @@ async function dragResize(p, sel, dw, dh) {
     await p.waitForTimeout(400);
     await p.clock.fastForward(dur);
     await p.reload();
-    await p.waitForTimeout(600);
+    await ready(p);
   };
   await next(24 * 3600 * 1000); // Sun 9/27 — same Monday-start week
   await tab("week");
@@ -1155,7 +1155,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.click(".widget >> nth=1 >> textarea");
   await p.waitForTimeout(900);
   await p.reload();
-  await p.waitForTimeout(700);
+  await ready(p);
   ok(
     (await p.$eval(".widget[data-id=m1] textarea", (e) => e.value)).includes(
       "다음 주 발표 준비",
@@ -1482,7 +1482,7 @@ async function dragResize(p, sel, dw, dh) {
   await s.waitForTimeout(400);
   const boardReload = async () => {
     await p.reload();
-    await p.waitForTimeout(600);
+    await ready(p);
   };
   await s.click("#th-ai-copy");
   await s.waitForTimeout(300);
@@ -1811,7 +1811,7 @@ async function dragResize(p, sel, dw, dh) {
   // keyboard move / resize with push-aside
   await p.focus(".widget[data-id=t] .grip");
   await p.keyboard.press("ArrowRight");
-  await p.waitForTimeout(450);
+  await settled(p);
   let l = await L();
   ok(
     l.t.x === 1 && l.n.x >= 3,
@@ -1824,7 +1824,7 @@ async function dragResize(p, sel, dw, dh) {
     await p.textContent("#sr"),
   );
   await p.keyboard.press("Shift+ArrowDown");
-  await p.waitForTimeout(450);
+  await settled(p);
   l = await L();
   ok(l.t.h === 3, "W: Shift+arrow resizes");
   // change type / set background now live in edit mode
@@ -1855,7 +1855,7 @@ async function dragResize(p, sel, dw, dh) {
       .items.find((x) => x.text === "스톱워치")
       .action(),
   );
-  await p.waitForTimeout(450);
+  await settled(p);
   l = await L();
   ok(
     l.t.type === "stopwatch" && l.t.x === 1 && l.t.h === 3,
@@ -1877,7 +1877,7 @@ async function dragResize(p, sel, dw, dh) {
       .items.find((x) => x.text === "타이머")
       .action(),
   );
-  await p.waitForTimeout(450);
+  await settled(p);
   ok(
     (await p.textContent(".widget[data-id=t] .t-display")) === "25:00",
     "W: switching back restores the timer’s own settings",
@@ -1923,7 +1923,7 @@ async function dragResize(p, sel, dw, dh) {
       .items.find((x) => x.text === "달력")
       .action(),
   );
-  await p.waitForTimeout(450);
+  await settled(p);
   l = await L();
   ok(
     l.k.w >= 3 && l.k.h >= 3,
@@ -2059,15 +2059,14 @@ async function dragResize(p, sel, dw, dh) {
   const p = await page();
   await seed(p, []);
   ok(!(await p.isHidden("#welcome")), "X: empty board offers the welcome card");
-  await p.click("#welcome [data-preset=oshi]");
-  await p.waitForTimeout(1200);
+  await reloadsAfter(p, () => p.click("#welcome [data-preset=oshi]"));
   const types = (await layout(p)).map((w) => w.type).sort().join(",");
   ok(types === "audioplayer,collection,dday,image,showcase", "X: oshi preset widgets", types);
   ok(await p.isHidden("#welcome"), "X: card gone once the board has widgets");
   await seed(p, []);
   await p.click("#wc-blank");
   await p.reload();
-  await p.waitForTimeout(700);
+  await ready(p);
   ok(await p.isHidden("#welcome"), "X: empty board choice is remembered");
   // undo after deleting a checklist item
   await seed(p, [{ id: "ck", type: "checklist", x: 0, y: 0, w: 3, h: 4 }]);
@@ -2097,7 +2096,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.mouse.move(c.x + c.width * 0.8, c.y + c.height / 2, { steps: 8 });
   ok((await p.$$(".coll-item.drop-after")).length === 1, "Y: drop spot is marked while dragging");
   await p.mouse.up();
-  await p.waitForTimeout(450);
+  await settled(p);
   ok((await order()) === "BCAD", "Y: drag after the third item reorders", await order());
   ok((await p.$$(".coll-lb")).length === 0, "Y: ending a drag does not open the full view");
   await p.click('.coll-item[data-i="0"] img');
@@ -2106,7 +2105,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.keyboard.press("Escape");
   await p.focus('.coll-item[data-i="0"]');
   await p.keyboard.press("Alt+ArrowRight");
-  await p.waitForTimeout(450);
+  await settled(p);
   ok((await order()) === "CBAD", "Y: Alt+Right moves the focused item", await order());
   ok(
     await p.evaluate(() => document.activeElement?.dataset.i === "1"),
@@ -2153,13 +2152,11 @@ async function dragResize(p, sel, dw, dh) {
 
   // 2. undo layout puts positions back but keeps what was typed since
   await seed(p, [{ id: "m2", type: "memo", x: 0, y: 0, w: 3, h: 3, settings: { text: "v1" } }]);
-  await p.evaluate(() => __mock.emit("apply-preset", "work"));
-  await p.waitForTimeout(1200);
+  await reloadsAfter(p, () => p.evaluate(() => __mock.emit("apply-preset", "work")));
   await p.fill(".memo textarea", "v2 typed after the preset");
   await p.evaluate(() => document.activeElement.blur());
   await p.waitForTimeout(400);
-  await p.evaluate(() => __mock.emit("undo-layout"));
-  await p.waitForTimeout(1200);
+  await reloadsAfter(p, () => p.evaluate(() => __mock.emit("undo-layout")));
   const m2 = await memo("m2");
   ok(m2?.x === 0 && m2.settings.text === "v2 typed after the preset",
     "RT2: undo restores positions, keeps newer text", JSON.stringify(m2));
@@ -2169,8 +2166,7 @@ async function dragResize(p, sel, dw, dh) {
     "wb-store-layouts": [{ name: "A", widgets: [{ id: "m3", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: { text: "old" } }] }],
     "wb-bin": [{ at: Math.floor(Date.now() / 1000), w: { id: "m3", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: { text: "newest, then closed" } } }],
   });
-  await p.evaluate(() => __mock.emit("apply-layout", "A"));
-  await p.waitForTimeout(1200);
+  await reloadsAfter(p, () => p.evaluate(() => __mock.emit("apply-layout", "A")));
   ok((await memo("m3"))?.settings.text === "newest, then closed", "RT3: layout brings back the bin's newer text",
     JSON.stringify(await memo("m3")));
   ok(!/m3/.test(await p.evaluate(() => localStorage.getItem("wb-bin") || "")), "RT3: and it leaves the bin");
@@ -2323,8 +2319,7 @@ async function dragResize(p, sel, dw, dh) {
   // RT12: a preset that reuses a hidden widget shows it
   const p = await page();
   await seed(p, [{ id: "mh", type: "memo", x: 0, y: 0, w: 3, h: 3, hidden: true, settings: { text: "keep" } }]);
-  await p.evaluate(() => __mock.emit("apply-preset", "work"));
-  await p.waitForTimeout(1200);
+  await reloadsAfter(p, () => p.evaluate(() => __mock.emit("apply-preset", "work")));
   const m = (await layout(p)).find((w) => w.id === "mh");
   ok(m && !m.hidden && m.settings.text === "keep", "RT12: preset unhides a reused widget", JSON.stringify(m));
   await p.close();

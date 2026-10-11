@@ -433,6 +433,7 @@
   "set.backup.confirm": "Replace current data with this backup?",
   "set.backup.confirm_yes": "Restore and restart",
   "set.backup.restoring": "Restoring…",
+  "restore.busy": "Restoring a backup. Changes are not saved; WidgetBoard will restart.",
   "set.backup.data_legend": "Data",
   "set.backup.open_config": "Open config.json",
   "set.appearance.board": "Board",

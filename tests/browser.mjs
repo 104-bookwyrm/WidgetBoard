@@ -34,6 +34,36 @@ const types = {
   ".woff2": "font/woff2",
 };
 
+/** Resolves once the board has booted and run its first reflow (app.js boot). */
+export async function ready(p) {
+  await p.waitForSelector("html[data-ready]", { state: "attached" });
+  // ponytail: a paused fake clock (clock.pauseAt) never fires the reflow timer; cap at 1 s real time
+  await p
+    .waitForSelector("html[data-reflowed]", { state: "attached", timeout: 1000 })
+    .catch(() => {});
+}
+
+/**
+ * Resolves once no widget save is queued or in flight and no finite animation (widgets sliding into place) runs.
+ * Editors with their own buffers (memo text) need their own wait.
+ */
+export const settled = (p) =>
+  p.waitForFunction(
+    () =>
+      window.__wbIdle?.() &&
+      document
+        .getAnimations()
+        .every((a) => a.playState !== "running" || a.effect?.getTiming().iterations === Infinity),
+  );
+
+/** Run `fn` (layout apply, preset, undo) and wait for the board it reloads to boot again. */
+export async function reloadsAfter(p, fn) {
+  const nav = p.waitForEvent("framenavigated", (f) => f === p.mainFrame());
+  await fn();
+  await nav;
+  await ready(p);
+}
+
 // Serve the actual UI files through Playwright. Tests need no background HTTP server.
 export const chromium = {
   async launch(options) {

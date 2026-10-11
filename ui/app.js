@@ -1843,7 +1843,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       reportError(e);
     }
   }
-  setTimeout(reflow, 400);
+  setTimeout(() => (reflow(), (document.documentElement.dataset.reflowed = "")), 400);
   setEdit(!!st.edit);
   syncHits();
 
@@ -1910,6 +1910,17 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   );
   await listen("kbd-mode", (e) => setKbd(!!e.payload));
   await listen("layout-replaced", () => location.reload());
+  // backup restore: nothing typed now could be saved, so the widgets stop taking input until the relaunch
+  await listen("restoring", () => {
+    $("#board").inert = true;
+    toast(t("restore.busy"));
+    clearTimeout(toastTimer); // stays up until the relaunch
+  });
+  await listen("restore-failed", () => {
+    $("#board").inert = false;
+    $("#toast").hidden = true;
+    syncHits();
+  });
   await listen("store-changed", (e) => {
     const p = e.payload || {};
     for (const s of storeSubs) if (s.key === p.key && s.src !== p.src) s.cb(p);
@@ -1956,6 +1967,8 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       await T.event.emit("saves-flushed", { request: event.payload.request, label: win.label, error });
     else if (error) reportError(new Error(error));
   });
+  document.documentElement.dataset.ready = ""; // tests wait on html[data-ready] (and data-reflowed)
+  window.__wbIdle = () => !pending.size && !activeWrites.size; // tests: no widget save queued or in flight
 })();
 
 // ---------------- updates (checked by Rust on a slow schedule; see updater.rs) ----------------

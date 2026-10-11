@@ -9,8 +9,9 @@ User decisions recorded 2026-10-11. This is an agreed-scope record with explicit
 - Closing a placement keeps its content available. Windows Sticky Notes is the reference for this behavior.
 - Recovery is essential. Internal bins, shelves and type stashes must not become separate user concepts.
 - Nothing destructive happens that the user can't easily see or block. No silent caps drop closed content.
-- One placement per memo, image or showcase item. Opening one already on the board brings it to the front (Sticky Notes behavior). Calendar, checklist and diary placements are views of their shared stores.
-- Clock, timer and stopwatch are tools, not content. Their state belongs to the placement and they never appear in the Library (Windows Clock behavior).
+- One placement per Library item (memo, image, showcase, timer, stopwatch...). Opening one already on the board brings it to the front (Sticky Notes behavior). Calendar, checklist and diary placements are views of their shared stores.
+- Clock and now-playing are tools, not content: their state belongs to the placement and they never appear in the Library. Timers and stopwatches are Library items: each name has one true state, a stopwatch's total stacks across sessions, and closing one keeps its state in the Library.
+- Changing a widget's type is closing it and adding a new widget in its place. The old content stays in the Library; the type stash goes away.
 - Preset slots have persistent bindings. Showcase and image placement must preserve the user's chosen content and arrangement.
 - JSON writes use revision checks to prevent stale writers replacing newer content.
 - The board menu offers a simple baseline with ample decoration and customization.
@@ -26,7 +27,7 @@ Migration converts existing saved data when opening the new version. It is not a
 
 Existing placement IDs remain. Content gets its own stable identity where one is missing. Existing task/event IDs and diary date keys remain usable. Placements store content references; layouts store placements and bindings rather than authoritative copies of content.
 
-Memo text, image lists, showcase profiles and collection/playlist content currently embedded in settings must be extracted. Existing shared checklist/calendar/diary data must remain shared unless the user chooses a future collection feature. Timer/stopwatch state stays on its placement.
+Memo text, image lists, showcase profiles and collection/playlist content currently embedded in settings must be extracted. Existing shared checklist/calendar/diary data must remain shared unless the user chooses a future collection feature. Timer and stopwatch state becomes Library content.
 
 Read current state during conversion: active widgets, type stashes, saved layouts, shelf, bin and the memo archive. Layout undo is not converted; the pre-migration snapshot keeps it. Use known identity to group copies. Do not merge separate notes merely because their text matches. Keep the newest copy as current and the rest as memo-archive entries.
 
@@ -34,13 +35,37 @@ Saved data carries a schema version integer. Migration runs when the stored vers
 
 Take a pre-migration snapshot. Stage and validate the converted data before activation. Make restart after interruption safe. Leave the original snapshot intact. The migration must preserve referenced assets and be idempotent.
 
+## Content contract (QA answered 2026-10-11, see content-contract-qa.md)
+
+```
+data/content.json   { version, items: { <id>: ContentItem } }
+ContentItem         { id, type, name, tags: [], rev, created, updated, deletedAt: null, data: {...} }
+layout.json         { version: 3, widgets: [ Placement ] }
+Placement           { id, type, display, x, y, w, h, contentId | null, view: {...} }
+```
+
+- Library types: memo, image, showcase, collection, audioplayer, timer, stopwatch. Shared stores (events, checklist, diary) stay as they are.
+- Revision per content item; one revision per file for events and checklist; per date for diary. Rust compares and writes under one lock and broadcasts `content-changed`.
+- Content fields: memo text and color, image list, showcase profile, collection items, audio playlist. Audio volume, shuffle and loop stay on the placement. Other display options (fit, interval, columns, frameless) stay where they are for now; whether they belong to content or layout is deferred.
+- The widget title is the content's name. An unnamed memo shows its first line.
+- Migration duplicates and rejected stale drafts always go to the memo archive, even with automatic memo history off.
+- Every item has a `tags` field from the start.
+- The Library is its own window, opened from the tray and the board menu.
+- The schema version lives in `layout.json` (2 to 3) and `content.json`. Migration runs in Rust at startup before any board loads. `content.json` joins the backup set.
+
 ## Persistence and recovery requirements
 
 - Revision comparison and the write occur under the same backend synchronization boundary.
 - Every saved change is pushed live to every view of the same content (board placement, Library, settings window), so stale edits are rare. The revision check is a silent safety net: a rejected stale save never overwrites the newer edit. A rejected memo draft goes to the memo archive.
 - Data updates do not overwrite placement geometry; geometry changes do not overwrite data.
 - Library exposes content whether displayed or absent from the board.
-- Deletion is explicit. "Delete" moves content to a Recently deleted view in the Library, purged after 30 days. "Delete permanently" is the only irreversible action and asks first. Closing a widget is not content deletion.
+- Deletion is explicit. "Delete" moves content to a Recently deleted view in the Library. There is no automatic purge: data is small, so items stay until the user deletes them permanently. "Delete permanently" is the only irreversible action and asks first. Closing a widget is not content deletion.
+- Image and audio files are deleted only when the last item referencing them is permanently deleted.
+- Content reopened from the Library returns to its last position and monitor; if the spot is taken or the monitor is gone, it goes to a free spot on the primary monitor.
+- Applying a saved layout (all monitors) moves content shown elsewhere into the layout's slot. Built-in presets (this monitor) never take content already on the board.
+- "Undo last layout change" stays and stores placements only.
+- While a backup restore runs, writes are no-ops and every window says so: an overlay ("Restoring a backup. Changes are not saved; WidgetBoard will restart.") blocks input until the restart.
+- Keep the newest 5 pre-restore snapshots. Pre-migration and manual snapshots are never pruned.
 - Layout restore resolves current content by reference. A placement whose content was deleted is skipped; a widget type that works without content restores empty instead. A backup restore is the distinct operation that restores an earlier data state.
 - Preset bindings use stable slot IDs. A built-in preset slot fills in this order: the content last shown in that slot in that layout, else the most recently used content of that type not already on the board, else new empty content.
 - Daily pruning does not remove weekly/monthly snapshots, manual snapshots or pre-migration snapshots.
@@ -55,6 +80,8 @@ Take a pre-migration snapshot. Stage and validate the converted data before acti
 - Library 보관함 · Recently deleted 최근 삭제된 항목 · Delete 삭제 · Delete permanently 영구 삭제.
 
 ## Open decisions to surface
+
+- Whether display options (frameless, fit, columns) belong to content or layout.
 
 1. Occurrence exceptions now: support changing/skipping/completing one occurrence, or defer while exposing existing recurrence controls? Editing this-and-future occurrences is a larger separate scope.
 2. Calendar-month backup cadence versus a fixed 30-day interval. Proposed interpretation: calendar month.

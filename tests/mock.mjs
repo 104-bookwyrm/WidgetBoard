@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { chromium } from "./browser.mjs";
+import { chromium, ready } from "./browser.mjs";
 const browser = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
 );
@@ -8,7 +8,7 @@ try {
   const ctx = await browser.newContext();
   const board = await ctx.newPage();
   await board.goto("http://localhost:8765/index.html?lang=en");
-  await board.waitForTimeout(600);
+  await ready(board);
   const settings = await ctx.newPage();
   await settings.goto("http://localhost:8765/settings.html?lang=en");
   await settings.waitForTimeout(300);

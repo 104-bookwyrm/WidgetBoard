@@ -4,7 +4,7 @@
 // Increment 4 — Backup & data page (backup/restore, auto schedule).
 // Increment 5a — Appearance page (theme editor).
 // Increment 5b — Widgets & layout page (list/add/move/close, presets, saved layouts).
-import { chromium } from "./browser.mjs";
+import { chromium, ready } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -805,6 +805,10 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     ),
     "restore invokes restore_backup with the backup path",
   );
+  ok(
+    await p.evaluate(() => document.body.inert && !!document.getElementById("restoring")?.textContent),
+    "restore blocks input and says changes are not saved",
+  );
   await p.close();
 }
 
@@ -832,7 +836,7 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     );
   });
   await p.reload();
-  await p.waitForTimeout(500);
+  await ready(p);
   const el = '.widget[data-id="m"]';
   const emit = (ev, pl) =>
     p.evaluate(([e, x]) => window.__mock.emit(e, x), [ev, pl]);

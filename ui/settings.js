@@ -1053,7 +1053,17 @@ async function init() {
     fillUiControls('[data-page="widgets"] [data-ui]');
   });
   await listen("update-status", showUpdate);
+  await listen("restoring", () => {
+    const o = document.createElement("div");
+    o.id = "restoring";
+    o.setAttribute("role", "alert");
+    o.textContent = t("restore.busy");
+    document.body.inert = true;
+    document.documentElement.append(o); // outside the inert body
+  });
   await listen("restore-failed", (e) => {
+    document.body.inert = false;
+    document.getElementById("restoring")?.remove();
     fillBackup(); // drop the stuck "restoring…" row
     $("#backup-now-msg").textContent = String(e);
   });

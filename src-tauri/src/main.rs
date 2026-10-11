@@ -145,7 +145,15 @@ impl AppState {
 
 // ---------- helpers ----------
 
+/// Set while a backup restore copies files: data writes are refused until the relaunch, so a late save
+/// can't put stale data over the restored files. Windows show it (the `restoring` event).
+static RESTORING: AtomicBool = AtomicBool::new(false);
+fn writable() -> Result<(), String> {
+    if RESTORING.load(Ordering::SeqCst) { Err("restoring a backup".into()) } else { Ok(()) }
+}
+
 fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
+    writable()?;
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, data).map_err(|e| e.to_string())?;
     fs::rename(&tmp, path).map_err(|e| e.to_string())
@@ -378,6 +386,7 @@ fn diary_set(app: AppHandle, state: State<AppState>, date: String, text: String,
     if !valid_date(&date) {
         return Err("bad date".into());
     }
+    writable()?;
     let path = state.dir.join("diary").join(format!("{date}.md"));
     if text.trim().is_empty() {
         let _ = fs::remove_file(&path);
@@ -463,6 +472,7 @@ fn save_theme(app: AppHandle, state: State<AppState>, css: String) -> Result<(),
 /// Raw binary upload. JS: invoke('save_asset', uint8array, { headers: { ext: 'png' } })
 #[tauri::command]
 fn save_asset(state: State<AppState>, request: Request) -> Result<String, String> {
+    writable()?;
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("expected raw bytes".into());
     };
@@ -669,6 +679,7 @@ static MEMO_LAST: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 
 #[tauri::command]
 fn memo_archive(state: State<AppState>, id: String, name: String, text: String) -> Result<(), String> {
+    writable()?;
     let on = read_config(&state.dir).pointer("/archive/memos").and_then(Value::as_bool).unwrap_or(false);
     if !on || text.trim().is_empty() {
         return Ok(());
@@ -1338,7 +1349,7 @@ fn backup_to(src_dir: &Path, root: &Path, tag: &str) -> Result<PathBuf, String> 
         copy_dir(&src_dir.join("archive"), &dest.join("archive"))?;
         files.push("archive/".to_string());
     }
-    let tier = match tag { "auto" => "daily", "auto-fortnight" => "fortnight", "auto-monthly" => "monthly", _ => "" };
+    let tier = backup_policy::Tier::from_tag(tag).map_or("", |t| t.key());
     let manifest = json!({ "app": env!("CARGO_PKG_VERSION"), "created": stamp, "createdUnix": now_secs(), "tier": tier, "files": files });
     write_atomic(&dest.join("manifest.json"), serde_json::to_string_pretty(&manifest).unwrap().as_bytes())?;
     fs::rename(&dest, &completed).map_err(|e| e.to_string())?;
@@ -1430,14 +1441,22 @@ fn restore_backup(app: AppHandle, state: State<AppState>, path: String) -> Resul
     let root = backups_root(&app, &state.dir);
     let app2 = app.clone();
     std::thread::spawn(move || {
+        // windows block input first; the flush still saves what was typed before
+        let _ = app2.emit("restoring", true);
         // Safety net: no snapshot of the current state, no overwrite.
         let res = flush::boards(&app2)
             .and_then(|_| backup_to(&dir, &root, "pre-restore"))
-            .and_then(|_| restore_from(&src, &dir));
+            .and_then(|_| {
+                RESTORING.store(true, Ordering::SeqCst);
+                restore_from(&src, &dir)
+            })
+            // after the copy: the folder being restored may itself be the oldest pre-restore snapshot
+            .map(|_| { let _ = backup_policy::prune(&root, backup_policy::Tier::PreRestore, 0); });
         match res {
             Ok(()) => relaunch(&app2),
             Err(e) => {
-                let _ = app2.emit_to("settings", "restore-failed", e);
+                RESTORING.store(false, Ordering::SeqCst);
+                let _ = app2.emit("restore-failed", e);
             }
         }
     });

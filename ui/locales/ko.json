@@ -433,6 +433,7 @@
   "set.backup.confirm": "이 백업으로 현재 데이터를 덮어쓰시겠습니까?",
   "set.backup.confirm_yes": "복원 및 재시작",
   "set.backup.restoring": "복원 중…",
+  "restore.busy": "백업을 복원하고 있습니다. 지금 바꾼 내용은 저장되지 않으며, WidgetBoard가 곧 다시 시작됩니다.",
   "set.backup.data_legend": "데이터",
   "set.backup.open_config": "config.json 열기",
   "set.appearance.board": "보드",

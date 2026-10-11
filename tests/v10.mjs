@@ -1,4 +1,4 @@
-import { chromium, artifact } from "./browser.mjs";
+import { chromium, ready, reloadsAfter, settled, artifact } from "./browser.mjs";
 // ponytail: default = playwright's own browser; PW_CHROMIUM env overrides for other environments
 const b = await chromium.launch(
   process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {},
@@ -76,7 +76,7 @@ async function seed(p, widgets, extra = {}) {
     { widgets, extra },
   );
   await p.reload();
-  await p.waitForTimeout(700);
+  await ready(p);
 }
 const W = (type, i = 0) => `.widget[data-widget=${type}] >> nth=${i} >>`;
 async function dragHead(p, sel, dxCells, dyCells) {
@@ -87,7 +87,7 @@ async function dragHead(p, sel, dxCells, dyCells) {
     steps: 10,
   });
   await p.mouse.up();
-  await p.waitForTimeout(450);
+  await settled(p);
 }
 async function dragResize(p, sel, dw, dh) {
   const bb = await (await p.$(`${sel} >> .w-resize`)).boundingBox();
@@ -95,7 +95,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.mouse.down();
   await p.mouse.move(bb.x + 8 + dw * 90, bb.y + 8 + dh * 90, { steps: 10 });
   await p.mouse.up();
-  await p.waitForTimeout(450);
+  await settled(p);
 }
 const cls = (p) => p.evaluate(() => [...document.body.classList]);
 const native = (p) => p.evaluate(() => window.__native || []);
@@ -431,7 +431,7 @@ const BASE = [
   ]);
   // all off: only the screen-reader announcement
   await p.click(".widget[data-widget=timer] [data-a=go]");
-  await p.waitForTimeout(2200);
+  await p.waitForFunction(() => /타이머/.test(document.querySelector("#sr").textContent));
   let st = await p.evaluate(() => ({
     flash: document.querySelector("#flash").hidden,
     cap: document.querySelector(".t-cap").hidden,
@@ -458,9 +458,9 @@ const BASE = [
     localStorage.setItem("wb-widgets", JSON.stringify(w));
   });
   await p.reload();
-  await p.waitForTimeout(600);
+  await ready(p);
   await p.click(".widget[data-widget=timer] [data-a=go]");
-  await p.waitForTimeout(2300);
+  await p.waitForFunction(() => !document.querySelector("#flash").hidden && !document.querySelector(".t-cap").hidden);
   st = await p.evaluate(() => ({
     flash: document.querySelector("#flash").hidden,
     ft: document.querySelector("#flash b").textContent,
@@ -847,7 +847,7 @@ const BASE = [
     "7: pixel frame drawn via SVG mask",
   );
   await p.reload();
-  await p.waitForTimeout(600);
+  await ready(p);
   ok(
     await p.$eval(
       ".widget[data-id=tm]",
@@ -1043,8 +1043,7 @@ const BASE = [
   // presets and saved layouts are driven from the settings window: it sends apply-preset /
   // apply-layout to the primary board, and stores saved layouts itself
   const preset = async (q, id) => {
-    await q.evaluate((id) => window.__mock.emit("apply-preset", id), id);
-    await q.waitForTimeout(1200);
+    await reloadsAfter(q, () => q.evaluate((id) => window.__mock.emit("apply-preset", id), id));
   };
   const saveLayout = (name) =>
     p.evaluate((name) => {
@@ -1106,8 +1105,7 @@ const BASE = [
     tt,
   );
   await p.screenshot({ path: artifact("v10-work.png") });
-  await p.click("#toast button");
-  await p.waitForTimeout(1200);
+  await reloadsAfter(p, () => p.click("#toast button"));
   L = await layout(p);
   ok(
     L.some((w) => w.id === "im") && L.length === 3,
@@ -1146,8 +1144,7 @@ const BASE = [
     "8: …and the same timer from study",
     "",
   );
-  await p.evaluate(() => window.__mock.emit("apply-layout", "내 책상"));
-  await p.waitForTimeout(1200);
+  await reloadsAfter(p, () => p.evaluate(() => window.__mock.emit("apply-layout", "내 책상")));
   L = await layout(p);
   const me = L.find((w) => w.id === "me");
   ok(
@@ -1388,7 +1385,7 @@ const BASE = [
   );
   // idempotent: reload must not duplicate the migrated events
   await p.reload();
-  await p.waitForTimeout(700);
+  await ready(p);
   const after = await p.evaluate(() =>
     JSON.parse(localStorage.getItem("wb-store-events") || "[]"),
   );

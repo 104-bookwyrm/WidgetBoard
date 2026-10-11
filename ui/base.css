@@ -558,6 +558,21 @@ body.reduce-motion .widget.moving {
 [hidden] {
   display: none !important;
 }
+/* backup restore in progress: input is blocked until the relaunch */
+#board[inert] .widget {
+  opacity: 0.5;
+}
+#restoring {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  background: color-mix(in srgb, var(--c1) 85%, transparent);
+  color: var(--c3);
+}
 
 /* ================= v0.10 accessibility (everything below is opt-in: Settings → 접근성) ================= */
 /* bundled readable fonts (SIL OFL, see fonts/LICENSE-*); Korean falls back to Malgun Gothic */

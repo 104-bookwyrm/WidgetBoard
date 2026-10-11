@@ -367,6 +367,7 @@ export function createMockTauri() {
       }
       case "restore_backup":
         window.__restored = args.path;
+        emit("restoring", true);
         return;
       case "open_theme_file":
       case "open_config_file":
