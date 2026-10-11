@@ -36,6 +36,26 @@ export const addMonths = (s, n) => {
 };
 export const uid = () => crypto.randomUUID();
 
+/**
+ * Settings / Library windows behave like an app, not a browser page: no browser right-click menu (text fields
+ * keep theirs) and no reload / print / find / view-source keys. Tauri does not expose WebView2's own switch.
+ */
+export function appWindow() {
+  addEventListener("contextmenu", (e) => {
+    if (!e.target.closest("input, textarea, [contenteditable]")) e.preventDefault();
+  });
+  addEventListener(
+    "keydown",
+    (e) => {
+      const k = e.key.toLowerCase();
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (["f3", "f5", "f7", "browserrefresh"].includes(k) || (ctrl && ["r", "p", "f", "g", "u", "j", "s"].includes(k)))
+        e.preventDefault();
+    },
+    true,
+  );
+}
+
 /** Search folding: NFC (composed and decomposed Hangul match) and case-insensitive. Display keeps the original. */
 export const fold = (s) => String(s ?? "").normalize("NFC").toLocaleLowerCase();
 

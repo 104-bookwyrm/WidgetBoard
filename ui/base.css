@@ -558,6 +558,11 @@ body.reduce-motion .widget.moving {
 [hidden] {
   display: none !important;
 }
+/* Settings and Library: app windows, not web pages. Native controls take the theme accent. */
+.app-window {
+  accent-color: var(--c2);
+  cursor: default;
+}
 /* backup restore in progress: input is blocked until the relaunch */
 #board[inert] .widget {
   opacity: 0.5;

@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title data-i18n="set.title">설정</title>
+    <link rel="stylesheet" href="default-theme.css" />
     <link rel="stylesheet" href="base.css" />
     <style>
       /* The settings window is a normal opaque window (unlike the transparent boards). */
@@ -77,6 +78,7 @@
         display: none;
       }
       fieldset {
+        min-width: 0; /* a fieldset is never narrower than its content by default */
         border: var(--line-width) var(--line-style) var(--line-color);
         border-radius: var(--radius, 12px);
         margin: 0 0 18px;
@@ -238,7 +240,7 @@
       }
     </style>
   </head>
-  <body class="settings">
+  <body class="settings app-window">
     <div class="set-saved" role="status" aria-live="polite"></div>
     <div class="set-wrap">
       <nav class="set-nav" aria-label="설정 페이지"></nav>

@@ -3,13 +3,21 @@
 import { createMockTauri } from "./mock-tauri.js";
 import { loadLang, t, applyStatic } from "./i18n.js";
 import { sanitize, copyText } from "./theme.js";
-import { syncScheme, esc, assetUrl, fold } from "./util.js";
+import { syncScheme, esc, assetUrl, fold, appWindow } from "./util.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import { COLORS } from "./widgets/memo.js";
 import { fmt as fmtTimer } from "./widgets/timer.js";
 import { fmtTotal } from "./widgets/stopwatch.js";
 
 const T = window.__TAURI__ ?? createMockTauri();
+appWindow();
+// Ctrl+F means "search" here (the browser's find bar is blocked by appWindow)
+addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+    showTab("items");
+    $(".lib-search").focus();
+  }
+});
 const invoke = (cmd, args) => T.core.invoke(cmd, args);
 const win = T.webviewWindow.getCurrentWebviewWindow();
 const listen = (ev, h) => win.listen(ev, (e) => h(e.payload));

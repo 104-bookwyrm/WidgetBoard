@@ -28,6 +28,7 @@ use tauri::{
     ipc::{InvokeBody, Request},
     menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    webview::ScrollBarStyle,
     AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry,
 };
 
@@ -771,6 +772,7 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
     }
     let lang = app.state::<AppState>().settings.lock().unwrap().lang.clone();
     let w = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App(format!("settings.html?page={page}").into()))
+        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
         .title(tr(&lang, "set.title"))
         .inner_size(760.0, 560.0)
         .min_inner_size(560.0, 420.0)
@@ -793,6 +795,7 @@ fn open_library_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
     }
     let lang = app.state::<AppState>().settings.lock().unwrap().lang.clone();
     let w = WebviewWindowBuilder::new(app, "library", WebviewUrl::App(format!("library.html?page={page}").into()))
+        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
         .title(tr(&lang, "lib.title"))
         .inner_size(760.0, 560.0)
         .min_inner_size(420.0, 360.0)
@@ -1160,6 +1163,7 @@ fn create_boards(app: &AppHandle) -> tauri::Result<()> {
         let wa = m.work_area();
         let sf = m.scale_factor();
         let w = WebviewWindowBuilder::new(app, &b.label, WebviewUrl::App("index.html".into()))
+        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
             .title("WidgetBoard")
             // start at the right size so the page never lays out on a wrong-sized board
             .position(wa.position.x as f64 / sf, wa.position.y as f64 / sf)

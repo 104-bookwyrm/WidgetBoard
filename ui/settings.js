@@ -2,7 +2,7 @@ import { createMockTauri } from "./mock-tauri.js";
 // Standalone settings window. Plain module, no build step (like the rest of ui/).
 // Reads everything once via get_settings, applies changes instantly, mirrors the app's a11y settings.
 import { loadLang, t, applyStatic } from "./i18n.js";
-import { tzOptions, osZone, syncScheme } from "./util.js";
+import { tzOptions, osZone, syncScheme, appWindow } from "./util.js";
 import {
   sanitize,
   setVar,
@@ -15,6 +15,7 @@ import {
 } from "./theme.js";
 
 const T = window.__TAURI__ ?? createMockTauri();
+appWindow();
 const invoke = (cmd, args) =>
   T.core.invoke(cmd, args).catch((e) => {
     // a hand-edit typo in config.json: Rust refuses to overwrite it, so say why nothing saved
