@@ -70,7 +70,7 @@ async function page(lang = "ko") {
   ok(
     (await p.evaluate(
       () =>
-        JSON.parse(localStorage.getItem("wb-widgets")).find(
+        __mock.widgets().find(
           (w) => w.type === "memo",
         )?.settings.text,
     )) === "저장돼야 함",

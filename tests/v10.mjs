@@ -27,7 +27,7 @@ async function page(w = 1440, h = 810, lang = "ko") {
   return p;
 }
 const layout = (p) =>
-  p.evaluate(() => JSON.parse(localStorage.getItem("wb-widgets") || "[]"));
+  p.evaluate(() => __mock.widgets());
 async function invariants(p, label) {
   const r = await p.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
@@ -453,9 +453,10 @@ const BASE = [
   for (const k of ["flashAlert", "notifyAlert", "soundCaptions"])
     await setUi(p, k, true);
   await p.evaluate(() => {
-    const w = JSON.parse(localStorage.getItem("wb-widgets"));
+    const w = __mock.widgets();
     w[0].settings = { duration: 60000, remaining: 1200, endAt: null };
     localStorage.setItem("wb-widgets", JSON.stringify(w));
+    localStorage.removeItem("wb-content"); // the seeded settings are the timer's state again
   });
   await p.reload();
   await ready(p);
@@ -1047,7 +1048,7 @@ const BASE = [
   };
   const saveLayout = (name) =>
     p.evaluate((name) => {
-      const all = JSON.parse(localStorage.getItem("wb-widgets") || "[]");
+      const all = __mock.widgets();
       const prev =
         JSON.parse(localStorage.getItem("wb-store-layouts") || "null") || [];
       localStorage.setItem(

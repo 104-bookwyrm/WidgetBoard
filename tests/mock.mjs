@@ -63,7 +63,7 @@ try {
   await settings.evaluate(() => __mock.invoke("flush_boards"));
   assert.equal(
     await settings.evaluate(
-      async () => (await __mock.invoke("get_all_widgets"))[0].settings.text,
+      async () => (await __mock.invoke("content_list"))[0].data.text,
     ),
     "saved across pages",
   );

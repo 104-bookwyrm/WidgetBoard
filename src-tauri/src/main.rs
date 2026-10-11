@@ -16,8 +16,10 @@ use std::{
 };
 
 mod backup_policy;
+mod content;
 mod flush;
 mod media;
+mod migrate;
 mod updater;
 
 use serde::{Deserialize, Serialize};
@@ -96,6 +98,9 @@ struct TrayItems {
 struct AppState {
     dir: PathBuf,
     widgets: Mutex<Vec<Value>>,
+    content: Mutex<serde_json::Map<String, Value>>, // Library items (content.rs)
+    revs: Mutex<HashMap<String, u64>>, // per-session revision of each shared store / diary page
+    migrate_error: Option<String>, // shown once on the primary board
     settings: Mutex<Settings>,
     boards: Mutex<Vec<Board>>,
     hits: Mutex<HashMap<String, Vec<Rect>>>,
@@ -115,7 +120,7 @@ struct AppState {
 
 impl AppState {
     fn persist_widgets(&self) -> Result<(), String> {
-        let data = json!({ "version": 2, "widgets": *self.widgets.lock().unwrap() });
+        let data = json!({ "version": migrate::LAYOUT_SCHEMA, "widgets": *self.widgets.lock().unwrap() });
         write_atomic(&self.dir.join("layout.json"), serde_json::to_string_pretty(&data).unwrap().as_bytes())
     }
     fn persist_settings(&self) {
@@ -304,6 +309,7 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
         "config": read_config(&state.dir),
         "autostart": autostart_get(),
         "configBroken": i_am_primary && config_broken(&state.dir),
+        "migrateError": if i_am_primary { state.migrate_error.clone() } else { None },
         "assetsDir": state.dir.join("assets"),
         "version": updater::CURRENT,
         "justUpdated": if i_am_primary { state.just_updated.lock().unwrap().take() } else { None },
@@ -360,16 +366,37 @@ fn store_get(state: State<AppState>, key: String) -> Result<Value, String> {
     Ok(read_json(&state.dir.join("data").join(format!("{key}.json"))).unwrap_or(Value::Null))
 }
 
-/// `src` identifies the writing widget so it can ignore its own change notification.
+/// A shared store's value with its revision, for a later `store_set` with `rev`.
 #[tauri::command]
-fn store_set(app: AppHandle, state: State<AppState>, key: String, value: Value, src: String) -> Result<(), String> {
+fn store_read(state: State<AppState>, key: String) -> Result<Value, String> {
+    let rev = state.revs.lock().unwrap().get(&format!("store:{key}")).copied().unwrap_or(0);
+    Ok(json!({ "value": store_get(state, key)?, "rev": rev }))
+}
+
+/// Compare `rev` (when given) and bump the revision under one lock; `write` runs inside it. Err("conflict") if stale.
+fn with_rev(state: &AppState, slot: String, rev: Option<u64>, write: impl FnOnce() -> Result<(), String>) -> Result<u64, String> {
+    let mut revs = state.revs.lock().unwrap();
+    let current = revs.get(&slot).copied().unwrap_or(0);
+    if rev.is_some_and(|r| r != current) {
+        return Err("conflict".into());
+    }
+    write()?;
+    revs.insert(slot, current + 1);
+    Ok(current + 1)
+}
+
+/// `src` identifies the writing widget so it can ignore its own change notification. `rev` (optional) is the
+/// revision the writer last read; a stale one is refused. Returns the new revision.
+#[tauri::command]
+fn store_set(app: AppHandle, state: State<AppState>, key: String, value: Value, src: String, rev: Option<u64>) -> Result<u64, String> {
     if !valid_key(&key) {
         return Err("bad key".into());
     }
     let s = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
-    write_atomic(&state.dir.join("data").join(format!("{key}.json")), s.as_bytes())?;
-    let _ = app.emit("store-changed", json!({ "key": key, "src": src }));
-    Ok(())
+    let path = state.dir.join("data").join(format!("{key}.json"));
+    let rev = with_rev(&state, format!("store:{key}"), rev, || write_atomic(&path, s.as_bytes()))?;
+    let _ = app.emit("store-changed", json!({ "key": key, "src": src, "rev": rev }));
+    Ok(rev)
 }
 
 /// Diary: one Markdown file per day in diary/YYYY-MM-DD.md.
@@ -381,20 +408,30 @@ fn diary_get(state: State<AppState>, date: String) -> Result<String, String> {
     Ok(fs::read_to_string(state.dir.join("diary").join(format!("{date}.md"))).unwrap_or_default())
 }
 
+/// A diary page with its revision, for a later `diary_set` with `rev`.
 #[tauri::command]
-fn diary_set(app: AppHandle, state: State<AppState>, date: String, text: String, src: String) -> Result<(), String> {
+fn diary_read(state: State<AppState>, date: String) -> Result<Value, String> {
+    let rev = state.revs.lock().unwrap().get(&format!("diary:{date}")).copied().unwrap_or(0);
+    Ok(json!({ "text": diary_get(state, date)?, "rev": rev }))
+}
+
+#[tauri::command]
+fn diary_set(app: AppHandle, state: State<AppState>, date: String, text: String, src: String, rev: Option<u64>) -> Result<u64, String> {
     if !valid_date(&date) {
         return Err("bad date".into());
     }
     writable()?;
     let path = state.dir.join("diary").join(format!("{date}.md"));
-    if text.trim().is_empty() {
-        let _ = fs::remove_file(&path);
-    } else {
-        write_atomic(&path, text.as_bytes())?;
-    }
-    let _ = app.emit("store-changed", json!({ "key": "diary", "date": date, "src": src }));
-    Ok(())
+    let rev = with_rev(&state, format!("diary:{date}"), rev, || {
+        if text.trim().is_empty() {
+            let _ = fs::remove_file(&path);
+            Ok(())
+        } else {
+            write_atomic(&path, text.as_bytes())
+        }
+    })?;
+    let _ = app.emit("store-changed", json!({ "key": "diary", "date": date, "src": src, "rev": rev }));
+    Ok(rev)
 }
 
 /// Dates that have a diary page, sorted ascending.
@@ -678,9 +715,11 @@ fn purge_assets(dir: &Path, gone: &[Value]) {
 static MEMO_LAST: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
 
 #[tauri::command]
-fn memo_archive(state: State<AppState>, id: String, name: String, text: String) -> Result<(), String> {
+/// `force`: kept even with automatic history off (a stale draft the newer version replaced).
+fn memo_archive(state: State<AppState>, id: String, name: String, text: String, force: Option<bool>) -> Result<(), String> {
     writable()?;
-    let on = read_config(&state.dir).pointer("/archive/memos").and_then(Value::as_bool).unwrap_or(false);
+    let on = force == Some(true)
+        || read_config(&state.dir).pointer("/archive/memos").and_then(Value::as_bool).unwrap_or(false);
     if !on || text.trim().is_empty() {
         return Ok(());
     }
@@ -1759,14 +1798,20 @@ fn main() {
                     fs::write(dir.join(file), default)?;
                 }
             }
+            // before anything reads layout.json: content moves out of widget settings (schema 3)
+            let migrate_error = migrate::run(&dir, &backups_root(app.handle(), &dir)).err();
             let widgets = read_json::<Value>(&dir.join("layout.json"))
                 .and_then(|v| v.get("widgets").and_then(Value::as_array).cloned())
                 .unwrap_or_default();
             migrate_config(&dir); // v0.12: fold settings.json + checklist.weekStart into config.json
             let settings = load_settings(&dir);
+            let content = content::load(&dir);
             app.manage(AppState {
                 dir,
                 widgets: Mutex::new(widgets),
+                content: Mutex::new(content),
+                revs: Mutex::new(HashMap::new()),
+                migrate_error,
                 settings: Mutex::new(settings),
                 boards: Mutex::new(vec![]),
                 hits: Mutex::new(HashMap::new()),
@@ -1800,8 +1845,12 @@ fn main() {
             save_theme,
             save_asset,
             store_get,
+            store_read,
             store_set,
+            content::content_list,
+            content::content_put,
             diary_get,
+            diary_read,
             diary_set,
             diary_dates,
             list_assets,

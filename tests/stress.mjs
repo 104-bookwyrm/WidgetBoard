@@ -29,7 +29,7 @@ async function page(w = 1440, h = 810, lang = "ko") {
   return p;
 }
 const layout = (p) =>
-  p.evaluate(() => JSON.parse(localStorage.getItem("wb-widgets") || "[]"));
+  p.evaluate(() => __mock.widgets());
 async function invariants(p, label) {
   const r = await p.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
@@ -1847,7 +1847,10 @@ async function dragResize(p, sel, dw, dh) {
     "W: Shift+F10 opens the menu with “change type”",
     JSON.stringify(menu),
   );
-  // change type timer -> stopwatch -> timer (settings restored)
+  // change type = close + a new widget in its place; the old content stays in the Library
+  const library = (id) =>
+    p.evaluate(async (id) => (await __mock.invoke("content_list")).find((c) => c.id === id), id);
+  const ofType = (l, type, not = "") => Object.values(l).find((w) => w.type === type && w.id !== not);
   await p.evaluate(() =>
     __mock.menus
       .at(-1)
@@ -1857,16 +1860,18 @@ async function dragResize(p, sel, dw, dh) {
   );
   await settled(p);
   l = await L();
+  const sw = ofType(l, "stopwatch");
   ok(
-    l.t.type === "stopwatch" && l.t.x === 1 && l.t.h === 3,
-    "W: type changed in place (same id, spot and size)",
-    JSON.stringify(l.t).slice(0, 120),
+    sw && !l.t && sw.x === 1 && sw.h === 3,
+    "W: type changed in place (new widget, same spot and size)",
+    JSON.stringify(sw).slice(0, 120),
   );
+  ok((await library("t"))?.data.duration === 1500000, "W: the timer's state stays in the Library");
   ok(
-    (await p.$(".widget[data-id=t] .sw-main")) !== null,
+    (await p.$(".widget[data-widget=stopwatch] .sw-main")) !== null,
     "W: now shows a stopwatch",
   );
-  await p.click(".widget[data-id=t]", {
+  await p.click(".widget[data-widget=stopwatch]", {
     button: "right",
     position: { x: 40, y: 8 },
   });
@@ -1879,11 +1884,11 @@ async function dragResize(p, sel, dw, dh) {
   );
   await settled(p);
   ok(
-    (await p.textContent(".widget[data-id=t] .t-display")) === "25:00",
-    "W: switching back restores the timer’s own settings",
-    await p.textContent(".widget[data-id=t] .t-display"),
+    (await p.textContent(".widget[data-widget=timer] .t-display")) === "05:00",
+    "W: switching back makes a new timer",
+    await p.textContent(".widget[data-widget=timer] .t-display"),
   );
-  // memo -> image -> memo keeps the text
+  // memo -> image -> memo: a new memo; the old text stays in the Library
   await p.click(".widget[data-id=m]", {
     button: "right",
     position: { x: 40, y: 8 },
@@ -1895,7 +1900,7 @@ async function dragResize(p, sel, dw, dh) {
       .items.find((x) => x.text === "이미지")
       .action(),
   );
-  await p.click(".widget[data-id=m]", {
+  await p.click(".widget[data-widget=image] >> nth=-1", { // the new one is mounted last
     button: "right",
     position: { x: 40, y: 8 },
   });
@@ -1906,10 +1911,11 @@ async function dragResize(p, sel, dw, dh) {
       .items.find((x) => x.text === "메모")
       .action(),
   );
+  await settled(p);
   ok(
-    (await p.inputValue(".widget[data-id=m] textarea")) ===
-      "지우면 안 되는 메모",
-    "W: memo text survives a round trip through another type",
+    (await library("m"))?.data.text === "지우면 안 되는 메모" &&
+      (await p.inputValue(".widget[data-widget=memo] textarea")) === "",
+    "W: memo text survives in the Library; the new memo starts empty",
   );
   // growing to a bigger minimum pushes neighbours
   await p.click(".widget[data-id=k]", {
@@ -1925,10 +1931,11 @@ async function dragResize(p, sel, dw, dh) {
   );
   await settled(p);
   l = await L();
+  const cal = ofType(l, "calendar", "c");
   ok(
-    l.k.w >= 3 && l.k.h >= 3,
+    cal?.w >= 3 && cal?.h >= 3,
     "W: grows to the new type’s minimum size",
-    JSON.stringify([l.k.w, l.k.h]),
+    JSON.stringify([cal?.w, cal?.h]),
   );
   await invariants(p, "W after type changes");
   await p.evaluate(() => __mock.emit("edit-mode", false));
@@ -2129,7 +2136,7 @@ async function dragResize(p, sel, dw, dh) {
 // ===== RT. red-team regressions: settings close/move, layout undo, bin vs saved layout, drag release =====
 {
   const p = await page();
-  const memo = (id) => p.evaluate((id) => JSON.parse(localStorage.getItem("wb-widgets")).find((w) => w.id === id), id);
+  const memo = (id) => p.evaluate((id) => __mock.widgets().find((w) => w.id === id), id);
   // 1. closing another widget from settings keeps unsaved memo typing; moving flushes first
   await seed(p, [
     { id: "m1", type: "memo", x: 0, y: 0, w: 3, h: 3, settings: { text: "old" } },
@@ -2142,7 +2149,8 @@ async function dragResize(p, sel, dw, dh) {
   await p.waitForTimeout(500);
   ok(!(await memo("c1")) && (await memo("m1"))?.settings.text === "typed just now",
     "RT1: closing a widget from settings keeps unsaved memo text", JSON.stringify(await memo("m1")));
-  ok(/c1/.test(await p.evaluate(() => localStorage.getItem("wb-bin") || "")), "RT1: the closed widget is in the bin");
+  ok(!(await p.evaluate(async () => (await __mock.invoke("content_list")).some((c) => c.id === "c1"))),
+    "RT1: a closed clock is a tool, not Library content");
   await p.fill(".memo textarea", "typed before moving");
   await p.evaluate(() => __mock.emit("widget-move", { id: "m1", display: "D2" }));
   await p.waitForTimeout(300);
@@ -2161,15 +2169,15 @@ async function dragResize(p, sel, dw, dh) {
   ok(m2?.x === 0 && m2.settings.text === "v2 typed after the preset",
     "RT2: undo restores positions, keeps newer text", JSON.stringify(m2));
 
-  // 3. a saved layout takes the newer copy from the bin, and takes it out of the bin
+  // 3. a saved layout shows the content's current text (closed since), not the copy saved with the layout
   await seed(p, [{ id: "x1", type: "clock", x: 6, y: 0, w: 3, h: 2 }], {
-    "wb-store-layouts": [{ name: "A", widgets: [{ id: "m3", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: { text: "old" } }] }],
-    "wb-bin": [{ at: Math.floor(Date.now() / 1000), w: { id: "m3", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: { text: "newest, then closed" } } }],
+    "wb-store-layouts": [{ name: "A", widgets: [{ id: "m3", type: "memo", display: "D1", x: 0, y: 0, w: 3, h: 3, settings: {} }] }],
+    "wb-content": { m3: { id: "m3", type: "memo", name: "", tags: [], rev: 3, created: 1, updated: 2, deletedAt: null,
+      data: { text: "newest, then closed", color: "yellow" } } },
   });
   await reloadsAfter(p, () => p.evaluate(() => __mock.emit("apply-layout", "A")));
-  ok((await memo("m3"))?.settings.text === "newest, then closed", "RT3: layout brings back the bin's newer text",
+  ok((await memo("m3"))?.settings.text === "newest, then closed", "RT3: layout shows the Library's newer text",
     JSON.stringify(await memo("m3")));
-  ok(!/m3/.test(await p.evaluate(() => localStorage.getItem("wb-bin") || "")), "RT3: and it leaves the bin");
 
   // 4. a re-render mid-drag must not strand drag mode (board would swallow every click)
   const items = ["a", "b", "c"].map((x) => ({ img: x + ".png", label: x }));
@@ -2189,7 +2197,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.close();
 }
 
-// ===== RT5. closing a memo right after typing: it stays closed, and the bin has the latest text =====
+// ===== RT5. closing a memo right after typing: it stays closed, and the Library has the latest text =====
 {
   const p = await page();
   await seed(p, [{ id: "m5", type: "memo", x: 0, y: 0, w: 3, h: 3, settings: { text: "old" } }]);
@@ -2197,10 +2205,10 @@ async function dragResize(p, sel, dw, dh) {
   await p.evaluate(() => __mock.emit("widget-close", "m5")); // within the memo's 500 ms save delay
   await p.waitForTimeout(900);
   const st = await p.evaluate(() => ({
-    onBoard: JSON.parse(localStorage.getItem("wb-widgets")).some((w) => w.id === "m5"),
-    bin: JSON.parse(localStorage.getItem("wb-bin") || "[]").find((e) => e.w.id === "m5")?.w.settings.text,
+    onBoard: __mock.widgets().some((w) => w.id === "m5"),
   }));
-  ok(!st.onBoard && st.bin === "last words", "RT5: closed memo stays closed and keeps its last text", JSON.stringify(st));
+  st.text = (await p.evaluate(async (id) => (await __mock.invoke("content_list")).find((c) => c.id === id), "m5"))?.data.text;
+  ok(!st.onBoard && st.text === "last words", "RT5: closed memo stays closed and keeps its last text", JSON.stringify(st));
   await p.close();
 }
 
@@ -2291,7 +2299,7 @@ async function dragResize(p, sel, dw, dh) {
   await p.click('.widget[data-id=ap] [data-del="0"]', { force: true });
   await p.waitForTimeout(400);
   const cur = () => p.evaluate(() => {
-    const s = JSON.parse(localStorage.getItem("wb-widgets")).find((w) => w.id === "ap").settings;
+    const s = __mock.widgets().find((w) => w.id === "ap").settings;
     return s.tracks[s.current]?.label + "|" + document.querySelector(".widget[data-id=ap] .ap-track.playing .name")?.textContent;
   });
   const afterDel = await cur();

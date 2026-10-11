@@ -60,6 +60,16 @@ export function createMockTauri() {
     return () => handlers.get(event).delete(handler);
   };
   const native = (...call) => (window.__native ||= []).push(call);
+  // per-store revisions, shared by every mock window through localStorage (Rust keeps them per session)
+  const revOf = (slot) => get("wb-revs", {})[slot] ?? 0;
+  const bumpRev = (slot, expected) => {
+    const revs = get("wb-revs", {});
+    const current = revs[slot] ?? 0;
+    if (expected != null && expected !== current) throw "conflict";
+    revs[slot] = current + 1;
+    set("wb-revs", revs);
+    return current + 1;
+  };
   const calls = (...call) => (window.__calls ||= []).push(call);
   const merge = (base, patch) => {
     if (!patch || typeof patch !== "object" || Array.isArray(patch))
@@ -221,18 +231,51 @@ export function createMockTauri() {
         return;
       case "store_get":
         return get("wb-store-" + args.key);
-      case "store_set":
+      case "store_read":
+        return { value: get("wb-store-" + args.key), rev: revOf("store:" + args.key) };
+      case "store_set": {
+        const rev = bumpRev("store:" + args.key, args.rev);
         set("wb-store-" + args.key, args.value);
-        emit("store-changed", { key: args.key, src: args.src });
-        return;
+        emit("store-changed", { key: args.key, src: args.src, rev });
+        return rev;
+      }
       case "diary_get":
         return localStorage.getItem("wb-diary-" + args.date) || "";
-      case "diary_set":
+      case "diary_read":
+        return {
+          text: localStorage.getItem("wb-diary-" + args.date) || "",
+          rev: revOf("diary:" + args.date),
+        };
+      case "diary_set": {
+        const rev = bumpRev("diary:" + args.date, args.rev);
         if (args.text.trim())
           localStorage.setItem("wb-diary-" + args.date, args.text);
         else localStorage.removeItem("wb-diary-" + args.date);
-        emit("store-changed", { key: "diary", date: args.date, src: args.src });
-        return;
+        emit("store-changed", { key: "diary", date: args.date, src: args.src, rev });
+        return rev;
+      }
+      // Library content (content.rs): compare the revision, then write
+      case "content_list":
+        return Object.values(get("wb-content", {}));
+      case "content_put": {
+        const item = args.item || {};
+        if (!item.id || !item.type) throw { error: "content needs an id and a type" };
+        const items = get("wb-content", {});
+        const current = items[item.id];
+        if ((current?.rev ?? null) !== (args.rev ?? null)) throw { conflict: current ?? null };
+        const now = Math.floor(Date.now() / 1000);
+        const stored = {
+          name: "", tags: [], deletedAt: null, data: {},
+          ...item,
+          rev: (current?.rev ?? 0) + 1,
+          created: current?.created ?? now,
+          updated: now,
+        };
+        items[item.id] = stored;
+        set("wb-content", items);
+        emit("content-changed", { item: stored, src: args.src });
+        return stored;
+      }
       case "diary_dates":
         return Object.keys(localStorage)
           .filter((k) => k.startsWith("wb-diary-"))
@@ -356,7 +399,7 @@ export function createMockTauri() {
           ...get("wb-backups", []),
         ]);
         set("wb-backup-snapshot", {
-          widgets: all(),
+          widgets: widgets(),
           diary: Object.fromEntries(
             Object.keys(localStorage)
               .filter((k) => k.startsWith("wb-diary-"))
@@ -386,7 +429,15 @@ export function createMockTauri() {
         throw new Error("Unimplemented mock command: " + cmd);
     }
   }
-  window.__mock = { emit, invoke, menus: [] };
+  /** Tests: saved widgets with their Library content merged back into settings (what the widget sees). */
+  const widgets = () => {
+    const items = get("wb-content", {});
+    return all().map((w) => {
+      const c = items[w.id];
+      return c ? { ...w, name: c.name || w.name, settings: { ...w.settings, ...c.data } } : w;
+    });
+  };
+  window.__mock = { emit, invoke, widgets, menus: [] };
   return {
     core: { invoke, convertFileSrc: (p) => p },
     event: {

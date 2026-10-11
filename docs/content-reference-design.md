@@ -39,9 +39,9 @@ Take a pre-migration snapshot. Stage and validate the converted data before acti
 
 ```
 data/content.json   { version, items: { <id>: ContentItem } }
-ContentItem         { id, type, name, tags: [], rev, created, updated, deletedAt: null, data: {...} }
+ContentItem         { id, type, name, tags: [], rev, created, updated, deletedAt: null, data: {...}, placement? }
 layout.json         { version: 3, widgets: [ Placement ] }
-Placement           { id, type, display, x, y, w, h, contentId | null, view: {...} }
+Placement           { id, type, display, x, y, w, h, name?, settings: {...} }
 ```
 
 - Library types: memo, image, showcase, collection, audioplayer, timer, stopwatch. Shared stores (events, checklist, diary) stay as they are.
@@ -51,6 +51,10 @@ Placement           { id, type, display, x, y, w, h, contentId | null, view: {..
 - Migration duplicates and rejected stale drafts always go to the memo archive, even with automatic memo history off.
 - Every item has a `tags` field from the start.
 - The Library is its own window, opened from the tray and the board menu.
+- A Library placement's id is its content id (one placement per item), so there is no separate `contentId`. Migration keeps existing widget ids; a stashed type, or an older copy of an id that has since changed type, becomes `<id>-<type>`.
+- Placement-only options keep the field name `settings` (13 widgets read it). Which settings keys are content is listed once in `ui/widgets/content-keys.json`, read by the board and compiled into the Rust migration. The board merges content into `settings` for widgets and splits it on save.
+- `placement` on a content item is where it was when it left the board, for reopening. The placement's `name` is a display copy for the settings window; the item's `name` is the real one.
+- No release before the Library window (step 3) ships: between migration and step 3, closed content is safe in content.json but has no recovery UI.
 - The schema version lives in `layout.json` (2 to 3) and `content.json`. Migration runs in Rust at startup before any board loads. `content.json` joins the backup set.
 
 ## Persistence and recovery requirements

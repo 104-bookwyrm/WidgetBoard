@@ -39,31 +39,24 @@ async function test(name, fn) {
     console.error("FAIL", name, e.message);
   }
 }
-await test("saved layout restores latest stashed content and preserves other types", async () => {
-  const w = widget("m", "memo");
+const item = (id, type, data) => ({ id, type, name: "", tags: [], rev: 1, created: 1, updated: 1, deletedAt: null, data });
+await test("saved layout resolves content by reference and keeps what it takes off the board", async () => {
   const p = await page(
-    [
-      {
-        ...w,
-        type: "timer",
-        settings: { duration: 420000, remaining: 420000, endAt: null },
-        stash: {
-          memo: { text: "newest", color: "pink" },
-          image: { imgs: ["kept.png"] },
-        },
+    [{ ...widget("t", "timer"), settings: {} }],
+    {
+      "wb-store-layouts": [{ name: "saved", widgets: [{ ...widget("m", "memo"), settings: {} }] }],
+      "wb-content": {
+        m: item("m", "memo", { text: "newest", color: "pink" }),
+        t: item("t", "timer", { duration: 420000, remaining: 420000, endAt: null }),
       },
-    ],
-    { "wb-store-layouts": [{ name: "saved", widgets: [w] }] },
+    },
   );
   await p.evaluate(() => __mock.emit("apply-layout", "saved"));
   await p.waitForFunction(() => !!document.querySelector(".memo textarea"));
   assert.equal(await p.locator(".memo textarea").inputValue(), "newest");
-  const saved = await p.evaluate(
-    () => JSON.parse(localStorage.getItem("wb-widgets"))[0],
-  );
-  assert.equal(saved.stash.timer.duration, 420000);
-  assert.deepEqual(saved.stash.image.imgs, ["kept.png"]);
-  assert.equal(saved.stash.memo, undefined);
+  const t = await p.evaluate(async () => (await __mock.invoke("content_list")).find((c) => c.id === "t"));
+  assert.equal(t.data.duration, 420000); // the timer left the board, its state stayed
+  assert.equal(t.placement.id, "t"); // and it remembers where it was
   await p.close();
 });
 await test("layout flush captures memo text before the widget debounce", async () => {
@@ -191,9 +184,10 @@ await test("failed flush aborts layout replacement and retries the retained memo
     "wb-store-layouts": [
       {
         name: "saved",
-        widgets: [{ ...w, type: "timer", settings: { duration: 1000 } }],
+        widgets: [{ ...w, id: "t", type: "timer", settings: {} }],
       },
     ],
+    "wb-content": { t: item("t", "timer", { duration: 1000, remaining: 1000, endAt: null }) },
   });
   await p.evaluate(() => {
     window.__mockFail = new Set(["put_widget"]);
@@ -206,7 +200,7 @@ await test("failed flush aborts layout replacement and retries the retained memo
   assert.equal(await p.locator(".memo textarea").inputValue(), "keep this");
   assert.equal(
     await p.evaluate(
-      () => JSON.parse(localStorage.getItem("wb-widgets"))[0].type,
+      () => __mock.widgets()[0].type,
     ),
     "memo",
   );
@@ -215,9 +209,10 @@ await test("failed flush aborts layout replacement and retries the retained memo
     __mock.emit("apply-layout", "saved");
   });
   await p.waitForFunction(() => !!document.querySelector(".timer"));
+  // the memo left the board; its content stays in the Library
   assert.equal(
     await p.evaluate(
-      () => JSON.parse(localStorage.getItem("wb-widgets"))[0].stash.memo.text,
+      async () => (await __mock.invoke("content_list")).find((c) => c.id === "m").data.text,
     ),
     "keep this",
   );

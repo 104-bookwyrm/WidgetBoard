@@ -211,6 +211,7 @@
   "toast.undo": "Undo",
   "toast.deleted": "Deleted.",
   "toast.config_bad": "config.json has a syntax error, so default settings are in use. Settings won't save until the file is fixed.",
+  "toast.migrate_failed": "Converting your data to the new version failed. Your data from before is in the backups folder.",
   "a11y.grip": "{name} - arrows: move · Shift+arrows: resize · Delete: close · Menu key: menu",
   "a11y.moved": "Moved to column {x}, row {y}",
   "a11y.resized": "Size {w}×{h}",

@@ -13,8 +13,8 @@ import {
 } from "./util.js";
 import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
 import { icon } from "./icons.js";
-import { contentForType } from "./widget-state.js";
 import REGISTRY from "./widgets/index.js";
+import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import { createMockTauri } from "./mock-tauri.js";
 
 const T = window.__TAURI__ ?? createMockTauri();
@@ -208,12 +208,77 @@ function place(el, r) {
   for (const k of ["x", "y", "w", "h"]) el.style.setProperty("--" + k, r[k]);
 }
 
-// ---------------- persistence (per widget; Rust owns layout.json) ----------------
+// ---------------- persistence (per widget; Rust owns layout.json and content.json) ----------------
 const pending = new Map();
 const unsaved = new Map();
+/**
+ * Library content (memo text, photo lists, timers...) lives in content.json, keyed by the placement id
+ * (one placement per item). Widgets still see one merged `settings`; saving splits it again.
+ */
+const contents = new Map(); // id -> stored content item (with rev)
+const isLibrary = (type) => !!CONTENT_KEYS[type];
+const CONTENT_SRC = crypto.randomUUID(); // this window, so it can skip its own content-changed echo
+/** [placement without content keys, content data or null for tools] */
+function splitContent(w) {
+  const keys = CONTENT_KEYS[w.type];
+  if (!keys) return [w, null];
+  const settings = { ...w.settings };
+  const data = {};
+  for (const k of keys)
+    if (k in settings) {
+      data[k] = settings[k];
+      delete settings[k];
+    }
+  return [{ ...w, settings }, data];
+}
+/** Compare-and-write one content item. A stale revision adopts the newer item (a memo draft is archived first). */
+async function persistContent(w, data, extra = {}) {
+  const cur = contents.get(w.id);
+  const name = w.name || "";
+  const same =
+    cur &&
+    JSON.stringify(cur.data) === JSON.stringify(data) &&
+    (cur.name || "") === name &&
+    !Object.keys(extra).length;
+  if (same) return;
+  const item = { ...cur, id: w.id, type: w.type, name, data, ...extra };
+  delete item.rev;
+  const promise = invoke("content_put", { item, rev: cur?.rev ?? null, src: CONTENT_SRC }).then(
+    (stored) => contents.set(w.id, stored),
+    (e) => {
+      if (e && "conflict" in e && e.conflict) return adoptNewer(w, e.conflict, data);
+      return saveFailed(e?.error ?? e);
+    },
+  );
+  activeWrites.add(promise);
+  promise.finally(() => activeWrites.delete(promise));
+  return promise;
+}
+function adoptNewer(w, item, draft) {
+  if (w.type === "memo" && draft.text && draft.text !== item.data?.text)
+    invoke("memo_archive", { id: w.id, name: w.name || "", text: draft.text, force: true }).catch(() => {});
+  if (mounted.has(w.id)) remountWith(w, item);
+  else contents.set(item.id, item);
+}
+/** Show a newer version of a widget's content: drop its unsaved edit, then mount again. */
+function remountWith(w, item) {
+  const m = mounted.get(w.id);
+  m?.inst.destroy?.();
+  m?.inst.unsub?.();
+  clearTimeout(pending.get(w.id)); // the destroy's flushed edit is the stale one
+  pending.delete(w.id);
+  unsaved.delete(w.id);
+  m?.el.remove();
+  mounted.delete(w.id);
+  contents.set(item.id, item);
+  mount(w);
+  syncHits();
+}
 async function persistWidget(w) {
   const revision = unsaved.get(w.id);
-  await write("put_widget", { widget: w });
+  const [placement, data] = splitContent(w);
+  if (data) await persistContent(w, data);
+  await write("put_widget", { widget: placement });
   if (unsaved.get(w.id) === revision) unsaved.delete(w.id);
 }
 function save(w) {
@@ -362,7 +427,16 @@ function sanitizeWidget(w, def) {
 
 function mount(w) {
   const def = REGISTRY[w.type] ?? UNKNOWN;
+  // the id already names another type's content (hand-edited data): new content, never overwrite that one
+  if (isLibrary(w.type) && contents.has(w.id) && contents.get(w.id).type !== w.type) w.id = crypto.randomUUID();
+  const item = isLibrary(w.type) ? contents.get(w.id) : null;
+  if (item) {
+    w.settings = { ...w.settings, ...item.data };
+    if (item.name) w.name = item.name;
+    else delete w.name;
+  }
   sanitizeWidget(w, def);
+  if (isLibrary(w.type) && !item) save(w); // new (or pre-Library) content gets its item now
   if (w.type === "memo") memoPrev.set(w.id, String(w.settings?.text ?? ""));
   if (def.css && !injectedCss.has(w.type)) {
     const st = document.createElement("style");
@@ -667,13 +741,18 @@ function unmount(w) {
   syncHits();
 }
 
+/** Off the board. Library content stays, remembering where it was so reopening puts it back. */
+function closeContent(w) {
+  if (w.type === "memo") archiveMemo(w, true);
+  const [placement, data] = splitContent(w);
+  if (data) persistContent(w, data, { placement }).catch(() => {});
+  write("remove_widget", { id: w.id }).catch(() => {});
+}
 let lastClosed = null;
 function removeWidget(w) {
   unmount(w); // first: the widget's destroy flushes its latest edit into w
-  if (w.type === "memo") archiveMemo(w, true);
   lastClosed = structuredClone(w);
-  write("remove_widget", { id: w.id }).catch(() => {});
-  write("bin_put", { widget: lastClosed }).catch(() => {});
+  closeContent(w);
   toast(t("toast.closed", { name: widgetName(w) }), {
     label: t("toast.undo"),
     fn: restoreClosed,
@@ -683,7 +762,6 @@ function restoreClosed() {
   const w = lastClosed;
   lastClosed = null;
   if (!w || mounted.has(w.id)) return;
-  invoke("bin_take", { id: w.id }).catch(() => {});
   if (!fits(w, w.id)) {
     const room = findRoom(REGISTRY[w.type] ?? UNKNOWN, { w: w.w, h: w.h });
     if (room) Object.assign(w, room);
@@ -726,19 +804,26 @@ function locate(id) {
 }
 
 /**
- * Change a widget's type in place (timer → stopwatch …). Position, monitor, background and font stay;
- * each type's own settings are kept in w.stash, so switching back restores them (memo text, photo list…).
+ * Change a widget's type (timer → stopwatch …): the old widget closes (its content stays in the Library) and a
+ * new one takes its place. Position, monitor, background and font stay.
  */
 function changeType(w, type) {
   const def = REGISTRY[type];
   if (!def || type === w.type) return;
   const m = mounted.get(w.id);
-  m?.inst.destroy?.();
+  m?.inst.destroy?.(); // flushes the last edit into w
   m?.inst.unsub?.();
+  clearTimeout(pending.get(w.id));
+  pending.delete(w.id);
+  unsaved.delete(w.id);
   m?.el.remove();
   mounted.delete(w.id);
-  Object.assign(w, contentForType(w, type, { settings: def.defaults ?? {} }));
+  closeContent(structuredClone(w));
+  w.id = crypto.randomUUID();
   w.type = type;
+  w.settings = structuredClone(def.defaults ?? {});
+  delete w.name;
+  delete w.stash;
   const min = def.min ?? { w: 1, h: 1 };
   if (w.w < min.w || w.h < min.h) {
     const g = metrics();
@@ -768,7 +853,7 @@ async function setBg(w, el) {
 
 async function moveTo(w, display) {
   unmount(w); // destroy flushes the latest edit into w; its queued save is dropped
-  await write("put_widget", { widget: w }).catch(() => {});
+  await persistWidget(w).catch(() => {});
   await invoke("move_widget", { id: w.id, display });
 }
 
@@ -1652,32 +1737,13 @@ async function flushSaves() {
 }
 const flushBoards = () => invoke("flush_boards");
 
-/**
- * Widgets a layout puts away go on a shelf (latest copy per id, max 60), so switching layouts back and forth
- * never loses a memo or a photo list: presets reuse shelved widgets of the same type, saved layouts their own ids.
- */
-async function getShelf() {
-  const s = await invoke("store_get", { key: "layouts_shelf" }).catch(
-    () => null,
-  );
-  return s && typeof s === "object" && !Array.isArray(s) ? s : {};
-}
+/** Replace every board's widgets. Library content taken off the board remembers where it was. */
 async function replaceAll(next, label, { undo = true } = {}) {
   await flushBoards();
   const before = await invoke("get_all_widgets");
-  const shelf = await getShelf();
-  const now = Date.now();
   for (const w of before)
-    if (!next.some((n) => n.id === w.id)) shelf[w.id] = { at: now, w };
-  for (const n of next) delete shelf[n.id];
-  const keep = Object.entries(shelf)
-    .sort((a, b) => b[1].at - a[1].at)
-    .slice(0, 60);
-  await write("store_set", {
-    key: "layouts_shelf",
-    value: Object.fromEntries(keep),
-    src: "layouts",
-  });
+    if (isLibrary(w.type) && !next.some((n) => n.id === w.id) && contents.has(w.id))
+      await persistContent({ ...w, name: contents.get(w.id).name }, contents.get(w.id).data, { placement: w });
   await write("store_set", {
     key: "layouts_undo",
     value: undo ? before : null,
@@ -1686,42 +1752,63 @@ async function replaceAll(next, label, { undo = true } = {}) {
   try {
     if (label) sessionStorage.setItem("wb-layout-applied", label);
   } catch {}
-  await write("replace_widgets", { widgets: next }); // every board reloads
+  // placements only: in-memory widgets carry their merged content
+  await write("replace_widgets", { widgets: next.map((w) => splitContent(w)[0]) }); // every board reloads
 }
+/** Library content a preset slot may show: not deleted, not on another monitor, not already used. */
+const usable = (id, type, skip) => {
+  const c = contents.get(id);
+  return !!c && c.type === type && !c.deletedAt && !skip.has(id);
+};
+/**
+ * A built-in preset on this monitor. A Library slot shows the content it showed last time in this preset,
+ * else the most recently used content of that type, else new content. Tools reuse this board's widgets.
+ */
 async function applyPreset(name) {
   const slots = PRESETS[name];
   if (!slots) return;
   await flushBoards();
   const all = await invoke("get_all_widgets");
   const others = all.filter((w) => !widgets.some((m) => m.id === w.id)); // other monitors stay as they are
-  // reuse same-type widgets (this board first, then the shelf): notes, photos, settings survive
-  const shelved = Object.values(await getShelf())
-    .sort((a, b) => b.at - a.at)
-    .map((e) => e.w)
-    .filter((w) => w && w.id && !all.some((a) => a.id === w.id));
-  const pool = [...widgets, ...shelved].map((w) => structuredClone(w));
+  const skip = new Set(others.map((w) => w.id));
+  const bindings = (await invoke("store_get", { key: "preset_bindings" }).catch(() => null)) || {};
+  const bound = (bindings[name] ||= {});
+  const tools = widgets.filter((w) => !isLibrary(w.type)).map((w) => structuredClone(w));
   const m = metrics();
   const packed = packSlots(slots, m.cols, m.rows);
   const mine = packed.map(({ slot, x, y, w, h }) => {
-    const i = pool.findIndex((p) => p.type === slot[0]);
-    const base =
-      i >= 0
-        ? pool.splice(i, 1)[0]
-        : {
-            id: crypto.randomUUID(),
-            type: slot[0],
-            settings: structuredClone(REGISTRY[slot[0]].defaults ?? {}),
-          };
-    if (slot[3]) base.settings = { ...base.settings, ...slot[3] };
+    const [type, , , preset] = slot;
+    const i = slots.indexOf(slot);
+    let base;
+    if (isLibrary(type)) {
+      const recent = [...contents.values()]
+        .filter((c) => usable(c.id, type, skip))
+        .sort((a, b) => b.updated - a.updated)[0];
+      const id = usable(bound[i], type, skip) ? bound[i] : recent?.id;
+      const here = widgets.find((o) => o.id === id);
+      base = id
+        ? structuredClone(here ?? { ...contents.get(id).placement, id, type })
+        : { id: crypto.randomUUID(), type, settings: { ...structuredClone(REGISTRY[type].defaults ?? {}), ...preset } };
+      base.settings ??= {};
+      skip.add(base.id);
+      bound[i] = base.id;
+    } else {
+      const j = tools.findIndex((o) => o.type === type);
+      base =
+        j >= 0
+          ? tools.splice(j, 1)[0]
+          : { id: crypto.randomUUID(), type, settings: structuredClone(REGISTRY[type].defaults ?? {}) };
+      if (preset) base.settings = { ...base.settings, ...preset };
+    }
     delete base.hidden; // a reused widget shows in its preset slot
     return { ...base, display: myDisplay, x, y, w, h };
   });
   if (packed.length < slots.length) toast(t("lay.partial"));
+  await write("store_set", { key: "preset_bindings", value: bindings, src: "layouts" });
   await replaceAll([...others, ...mine], t("lay." + name));
 }
 /**
- * Apply a saved layout (sent by the settings window): positions come from the layout,
- * contents (memo text...) from the newest copy, on a board or else the shelf.
+ * Apply a saved layout (sent by the settings window): positions come from the layout, content by reference.
  */
 async function applySavedLayout(name) {
   const list = await invoke("store_get", { key: "layouts" }).catch(() => null);
@@ -1740,34 +1827,22 @@ async function undoLayout() {
   await replaceAll(await withLatestContents(prev), null, { undo: false });
 }
 /**
- * Positions from `layout`, contents (memo text, photo lists...) from the newest copy: on a board,
- * else whichever of the bin or the shelf got it last. Widgets brought back from the bin leave it,
- * so a later "restore" there can't swap in an older copy.
+ * Placements from `layout`. Library content resolves by id (deleted content is skipped: deleted is deleted);
+ * tools take their current settings when they are still on a board.
  */
 async function withLatestContents(layout) {
   await flushBoards();
   const current = await invoke("get_all_widgets");
-  const shelf = await getShelf();
-  const list = await invoke("bin_list").catch(() => null);
-  const bin = Array.isArray(list) ? list : [];
-  const fromBin = [];
-  const next = layout
+  return layout
     .filter((w) => w && w.id)
+    .filter((w) => {
+      const c = isLibrary(w.type) && contents.get(w.id);
+      return !c || (!c.deletedAt && c.type === w.type); // deleted is deleted; missing content is made on mount
+    })
     .map((w) => {
-      let c = current.find((x) => x.id === w.id);
-      if (!c) {
-        const b = bin.find((e) => e?.w?.id === w.id);
-        const sh = shelf[w.id];
-        const useBin = b?.w && (!sh || b.at * 1000 >= sh.at); // bin `at` is seconds, shelf ms
-        c = useBin ? b.w : sh?.w;
-        if (useBin) fromBin.push(w.id);
-      }
-      return c
-        ? { ...structuredClone(w), ...contentForType(c, w.type, w) }
-        : structuredClone(w);
+      const c = !isLibrary(w.type) && current.find((x) => x.id === w.id);
+      return c ? { ...structuredClone(w), settings: structuredClone(c.settings) } : structuredClone(w);
     });
-  for (const id of fromBin) await invoke("bin_take", { id }).catch(() => {});
-  return next;
 }
 
 // first-run card: a preset, or an empty board. Leaving it any way is remembered, so it doesn't come back.
@@ -1830,6 +1905,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   displays = st.displays || [];
   assetsDir = st.assetsDir || "";
   applyTheme(st.theme);
+  for (const item of await invoke("content_list").catch(() => [])) contents.set(item.id, item);
   const seen = new Set();
   widgets = (Array.isArray(st.widgets) ? st.widgets : []).filter(
     (w) => w && typeof w === "object",
@@ -1910,6 +1986,15 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   );
   await listen("kbd-mode", (e) => setKbd(!!e.payload));
   await listen("layout-replaced", () => location.reload());
+  // content saved by another window (the settings window, another monitor): show the newer version
+  await listen("content-changed", (e) => {
+    const { item, src } = e.payload || {};
+    if (!item?.id || src === CONTENT_SRC) return;
+    if ((contents.get(item.id)?.rev ?? 0) >= item.rev) return;
+    const w = widgets.find((x) => x.id === item.id);
+    if (w && mounted.has(w.id)) remountWith(w, item);
+    else contents.set(item.id, item);
+  });
   // backup restore: nothing typed now could be saved, so the widgets stop taking input until the relaunch
   await listen("restoring", () => {
     $("#board").inert = true;
@@ -1935,6 +2020,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       label: t("toast.undo"),
       fn: () => undoLayout().catch(reportError),
     });
+  else if (st.migrateError) toast(t("toast.migrate_failed"));
   else if (st.configBroken) toast(t("toast.config_bad"));
   else if (st.justUpdated) toast(t("upd.done", { v: st.justUpdated }));
   else if (st.primary && !widgets.length && !(await invoke("get_all_widgets").catch(() => [])).length) {

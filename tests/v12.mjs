@@ -446,12 +446,12 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     "close asks the board to close the widget",
   );
   ok(
-    (await p.evaluate(() => JSON.parse(localStorage.getItem("wb-widgets")).length)) === 2,
+    (await p.evaluate(() => __mock.widgets().length)) === 2,
     "the settings window itself rewrites nothing",
   );
   // what the board then does (bin + layout), so the rest of the page can be checked
   await p.evaluate(() => {
-    const ws = JSON.parse(localStorage.getItem("wb-widgets"));
+    const ws = __mock.widgets();
     localStorage.setItem("wb-bin", JSON.stringify([{ at: 1790000000, w: ws.find((w) => w.id === "a") }]));
     localStorage.setItem("wb-widgets", JSON.stringify(ws.filter((w) => w.id !== "a")));
   });
@@ -889,8 +889,10 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   await p.$eval(el + " [data-act=remove]", (e) => e.click());
   await p.waitForTimeout(50);
   ok(
-    (await calls()).some(([c, a]) => c === "bin_put" && a.widget.id === "m"),
-    "closing puts the widget in the bin",
+    (await calls()).some(
+      ([c, a]) => c === "content_put" && a.item.id === "m" && a.item.placement?.id === "m",
+    ),
+    "closing keeps the content in the Library with where it was",
   );
   ok(
     (await calls()).some(
@@ -903,10 +905,6 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   );
   await p.click("#toast button");
   await p.waitForTimeout(50);
-  ok(
-    (await calls()).some(([c, a]) => c === "bin_take" && a.id === "m"),
-    "undo takes it back out of the bin",
-  );
   ok(!!(await p.$(el)), "undo restores the widget");
   await p.close();
 }
