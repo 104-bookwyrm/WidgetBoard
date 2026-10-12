@@ -44,8 +44,9 @@ export default {
     .coll-empty { flex: 1; display: grid; place-items: center; text-align: center; color: var(--text-faint); font-size: var(--fs-small); cursor: pointer; }
     .coll-empty small { display: block; margin-top: 2px; }
 
-    .coll-count { flex: none; text-align: center; font-size: var(--fs-meta); color: var(--text-faint);
-      padding-top: 3px; }
+    .coll-count { flex: none; display: flex; justify-content: center; align-items: center; gap: var(--space-2);
+      font-size: var(--fs-meta); color: var(--text-faint); padding-top: 3px; }
+    .coll-count button { padding: 0 7px; min-width: 0; line-height: 1.6; font-size: var(--fs-small); }
 
     /* lightbox overlay */
     .coll-lb { position: absolute; inset: 0; z-index: 20; background: rgb(0 0 0 / .82);
@@ -116,7 +117,7 @@ export default {
               <button class="coll-del" data-del="${i}" aria-label="${esc(t('cl.delete', { name: it.label || i + 1 }))}">${icon('x')}</button>
             </div>`).join('')}
         </div>
-        <div class="coll-count">${s.items.length} ${t('cl.items')}</div>`;
+        <div class="coll-count"><span>${s.items.length} ${t('cl.items')}</span><button data-a="add" title="${esc(t('cl.add'))}" aria-label="${esc(t('cl.add'))}">${icon('plus')}</button></div>`;
 
             // mark broken images
             box.querySelectorAll('.coll-item img').forEach((img) => {
@@ -126,6 +127,7 @@ export default {
 
         // -- events --
         box.addEventListener('click', (e) => {
+            if (e.target.closest('[data-a=add]')) return chooser();
             // delete
             const del = e.target.closest('[data-del]');
             if (del) {

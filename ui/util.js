@@ -136,7 +136,7 @@ export function zonedToInstant(ymdStr, hm, tz = "UTC") {
 export function occursOn(e, d) {
   if (!e || typeof e.date !== "string") return false;
   if (e.date === d) return true;
-  if (e.repeat === "yearly") return e.date.slice(5) === d.slice(5);
+  if (e.repeat === "yearly") return yearlyIn(e.date, d.slice(0, 4)) === d;
   if (d < e.date) return false; // daily / weekly / monthly start at their first date
   if (e.repeat === "daily") return true;
   if (e.repeat === "weekly") return parseYmd(d).getDay() === parseYmd(e.date).getDay();
@@ -149,6 +149,23 @@ export function occursOn(e, d) {
   return false;
 }
 export const REPEATS = ["daily", "weekly", "monthly", "yearly"];
+
+/**
+ * A yearly date's day in `year`, or null when that year has none. The one place for the Feb 29 rule:
+ * for now a Feb 29 date exists only in leap years (same as occursOn).
+ */
+export function yearlyIn(date, year) {
+  const d = `${year}-${date.slice(5)}`;
+  return ymd(parseYmd(d)) === d ? d : null;
+}
+/** Next day on or after `from` that a yearly `date` (birthday, anniversary) falls on. */
+export function nextYearly(date, from = ymd()) {
+  for (let y = +from.slice(0, 4); y <= +from.slice(0, 4) + 8; y++) {
+    const d = yearlyIn(date, y);
+    if (d && d >= from) return d;
+  }
+  return from; // unreachable for a valid date (a leap year comes within 8 years)
+}
 
 /** A repeating entry is done per occurrence (its `doneDates`); a one-off by `done`. */
 export const eventDone = (e, d) => (e.repeat ? (e.doneDates || []).includes(d) : !!e.done);

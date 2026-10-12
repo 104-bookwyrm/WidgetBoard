@@ -96,11 +96,14 @@ function fits(r, ignoreId) {
     return false;
   return !widgets.some((o) => o.id !== ignoreId && overlaps(r, o));
 }
-function findSpot(w, h, ignoreId) {
+/** First free w×h spot, row by row. `fromRight` scans each row right to left (new widgets: desktop icons live top-left). */
+function findSpot(w, h, ignoreId, fromRight = false) {
   const m = metrics();
   for (let y = 0; y + h <= m.rows; y++)
-    for (let x = 0; x + w <= m.cols; x++)
+    for (let i = 0; i + w <= m.cols; i++) {
+      const x = fromRight ? m.cols - w - i : i;
       if (fits({ x, y, w, h }, ignoreId)) return { x, y };
+    }
   return null;
 }
 
@@ -1160,10 +1163,10 @@ function wireFrame(el, w, def, inst) {
   drag(el.querySelector(".w-resize"), "resize");
 }
 
-/** Find room for a widget on this board: preferred size, then minimum size. */
+/** Find room for a widget on this board: preferred size, then minimum size, from the top-right like the presets. */
 function findRoom(def, pref) {
   for (const size of [pref, def.min].filter(Boolean)) {
-    const spot = findSpot(size.w, size.h);
+    const spot = findSpot(size.w, size.h, undefined, true);
     if (spot) return { ...spot, w: size.w, h: size.h };
   }
   return null;
@@ -1955,6 +1958,11 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   assetsDir = st.assetsDir || "";
   applyTheme(st.theme);
   for (const item of await invoke("content_list").catch(() => [])) contents.set(item.id, item);
+  // before mounting: a widget's first write (a Showcase birthday, a D-day migration) must reach its siblings
+  await listen("store-changed", (e) => {
+    const p = e.payload || {};
+    for (const s of storeSubs) if (s.key === p.key && s.src !== p.src) s.cb(p);
+  });
   const seen = new Set();
   widgets = (Array.isArray(st.widgets) ? st.widgets : []).filter(
     (w) => w && typeof w === "object",
@@ -2061,10 +2069,6 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     $("#board").inert = false;
     $("#toast").hidden = true;
     syncHits();
-  });
-  await listen("store-changed", (e) => {
-    const p = e.payload || {};
-    for (const s of storeSubs) if (s.key === p.key && s.src !== p.src) s.cb(p);
   });
   let applied = null;
   try {

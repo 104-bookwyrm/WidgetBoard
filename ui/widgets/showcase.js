@@ -3,7 +3,7 @@
 // Birthday auto-syncs as a recurring calendar entry via shared data/events.json.
 // Frameless mode hides widget chrome so transparent PNGs sit on the desktop.
 // Data is inspectable: right-click → Export data (JSON to clipboard) / Import data.
-import { esc, ymd, daysBetween, uid, dropZone } from '../util.js';
+import { esc, ymd, daysBetween, uid, dropZone, nextYearly, yearlyIn } from '../util.js';
 import { icon } from '../icons.js';
 
 const QUOTE_INTERVAL = 8000; // ms between quote rotations
@@ -34,7 +34,7 @@ export default {
       text-align: center; padding: 8px; cursor: pointer; }
     .sc .hero .empty .ico { font-size: 2.2em; line-height: 1; }
     .sc .band { flex: none; padding: 6px 10px; display: flex; align-items: baseline; gap: var(--space-3);
-      background: color-mix(in srgb, var(--sc-color, var(--c2)) 15%, transparent); min-height: 1.6em; }
+      background: color-mix(in srgb, var(--sc-color, var(--c2)) 15%, transparent); min-height: 1.6em; cursor: pointer; }
     .sc .band .nm { font-weight: 700; font-size: var(--fs-title); white-space: nowrap; overflow: hidden;
       text-overflow: ellipsis; flex: 1; min-width: 0; }
     .sc .band .bd { font-size: var(--fs-meta); font-weight: 600; font-family: var(--font-num, var(--font)); white-space: nowrap; flex: none;
@@ -109,6 +109,7 @@ export default {
       if (s.imgs.length) s.index = s.imgs.length - 1;
       api.save();
       buildHero();
+      syncBirthday(); // the birthday D-day takes the first picture as its icon
     }
     const chooseImg = async () => addImages(await api.pickImages());
 
@@ -166,6 +167,8 @@ export default {
       }
     });
     dropZone(hero, t('w.drop'), addImages);
+    // the name band is where people look to set the name and birthday
+    box.querySelector('.band').addEventListener('click', () => openEditor());
 
     // ---- name & birthday band ----
     function renderBand() {
@@ -173,11 +176,7 @@ export default {
       bandBd.textContent = '';
       bandBd.className = 'bd';
       if (!s.birthday) return;
-      const md = s.birthday.slice(5); // MM-DD
-      const thisYear = new Date().getFullYear();
-      let next = `${thisYear}-${md}`;
-      if (daysBetween(ymd(), next) < 0) next = `${thisYear + 1}-${md}`;
-      const diff = daysBetween(ymd(), next);
+      const diff = daysBetween(ymd(), nextYearly(s.birthday)); // same next birthday as the calendar and D-day
       if (diff === 0) {
         bandBd.innerHTML = `${icon('cake')} ${esc(t('sc.birthday_today'))}`;
         bandBd.classList.add('today');
@@ -219,10 +218,13 @@ export default {
       if (existing) {
         // a changed birthday moves the entry too (yearly: only month-day matters)
         const moved = String(existing.date || '').slice(5) !== md;
-        if (existing.title !== title || existing.repeat !== 'yearly' || moved) {
+        // older entries gain the D-day marker; a missing icon takes the first picture
+        const marker = !existing.dday || (!existing.dday.icon && s.imgs[0]);
+        if (existing.title !== title || existing.repeat !== 'yearly' || moved || marker) {
           existing.title = title;
           existing.repeat = 'yearly';
-          if (moved) existing.date = `${new Date().getFullYear()}-${md}`;
+          if (moved) existing.date = entryDate();
+          if (marker) existing.dday = { ...ddayMarker(), ...existing.dday, icon: existing.dday?.icon || s.imgs[0] || null };
           await api.store.set('events', events).catch(() => {});
         }
         return;
@@ -231,17 +233,21 @@ export default {
       const id = uid();
       events.push({
         id,
-        date: `${new Date().getFullYear()}-${md}`,
+        date: entryDate(),
         title,
         done: false,
         repeat: 'yearly',
         _src: 'showcase', // marks origin, for cleanup
+        dday: ddayMarker(), // also listed by the D-day widget
       });
       await api.store.set('events', events).catch(() => {});
       s._calId = id;
       api.save();
     }
 
+    // this year's birthday; a Feb 29 birthday keeps its own (valid) date in other years
+    const entryDate = () => yearlyIn(s.birthday, new Date().getFullYear()) || s.birthday;
+    const ddayMarker = () => ({ mode: 'until', icon: s.imgs[0] || null, mstep: 0, munit: 'days', countFrom: 'one' });
     async function removeBirthdayEntry() {
       if (!s._calId) return;
       const events = (
@@ -351,11 +357,7 @@ export default {
         const parts = [];
         if (s.name) parts.push(s.name);
         if (s.birthday) {
-          const md = s.birthday.slice(5);
-          const thisYear = new Date().getFullYear();
-          let next = `${thisYear}-${md}`;
-          if (daysBetween(ymd(), next) < 0) next = `${thisYear + 1}-${md}`;
-          const diff = daysBetween(ymd(), next);
+          const diff = daysBetween(ymd(), nextYearly(s.birthday));
           parts.push(diff === 0 ? t('sc.birthday_today') : `🎂 D-${diff}`);
         }
         if (s.imgs.length) parts.push(t('sum.image', { i: s.index + 1, n: s.imgs.length }));
@@ -376,7 +378,7 @@ export default {
         },
         { text: t('sc.export'), action: exportData },
         { text: t('sc.import'), action: importData },
-        ...(s.imgs.length > 1 ? [{
+        ...(s.imgs.length ? [{
           text: t(s.fit === 'cover' ? 'image.fit' : 'image.fill'),
           action: () => { s.fit = s.fit === 'cover' ? 'contain' : 'cover'; api.save(); buildHero(); },
         }] : []),

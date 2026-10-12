@@ -11,6 +11,7 @@ import {
   uid,
   wheelScrollX,
   occursOn,
+  nextYearly,
 } from "../util.js";
 import { icon } from "../icons.js";
 
@@ -128,6 +129,8 @@ export default {
       mstep: normStep(e.dday.mstep),
       munit: normUnit(e.dday.munit),
       countFrom: normCF(e.dday.countFrom),
+      yearly: e.repeat === "yearly", // birthdays, anniversaries: counts down to the next one
+      fromShowcase: e._src === "showcase", // a Showcase birthday: the Showcase owns its name and date
     });
     // item -> event, keeping any extra fields the same event picked up in the calendar (time/url/…)
     const toEvent = (it, prev) => ({
@@ -136,6 +139,7 @@ export default {
       date: it.date,
       title: String(it.name ?? ""),
       tags: it.tag ? [it.tag] : [],
+      repeat: it.yearly && it.mode !== "since" ? "yearly" : null,
       done: prev?.done ?? false,
       dday: {
         mode: normMode(it.mode),
@@ -197,7 +201,10 @@ export default {
     });
 
     const today = () => ymd();
-    const diffOf = (it) => daysBetween(today(), it.date);
+    // the day it counts to: a yearly item's next occurrence, else its own date
+    const dateOf = (it) =>
+      it.yearly && it.mode !== "since" ? nextYearly(it.date, today()) : it.date;
+    const diffOf = (it) => daysBetween(today(), dateOf(it));
 
     // Running "days elapsed" label for a since-item, honouring its counting convention.
     function sinceCount(it) {
@@ -252,8 +259,11 @@ export default {
         return true;
       });
     }
+    // first user-perceived character: a whole emoji (🎂, ❤️‍🔥), never half a surrogate pair
+    const initial = (name) =>
+      [...new Intl.Segmenter().segment(String(name ?? "").trim() || "?")][0].segment;
     const avatar = (it, cls = "") =>
-      `<div class="dd-av ${cls}">${it.icon ? `<img src="${esc(api.assetUrl(it.icon))}" alt="">` : esc((it.name || "?").trim().charAt(0))}</div>`;
+      `<div class="dd-av ${cls}">${it.icon ? `<img src="${esc(api.assetUrl(it.icon))}" alt="">` : esc(initial(it.name))}</div>`;
 
     function render() {
       viewBtn.innerHTML = icon(s.view === "list" ? "calendar" : "list");
@@ -332,7 +342,11 @@ export default {
                   ]
                     .filter(Boolean)
                     .join(" · ")
-                : [it.date.replaceAll("-", "."), it.tag ? "#" + it.tag : ""]
+                : [
+                    dateOf(it).replaceAll("-", "."),
+                    it.yearly && it.mode !== "since" ? t("dday.yearly") : "",
+                    it.tag ? "#" + it.tag : "",
+                  ]
                     .filter(Boolean)
                     .join(" · ");
               return `<div class="dd-row" data-id="${esc(it.id)}" role="button" tabindex="0" aria-label="${esc(it.name + ", " + dLabel(it) + ", " + sub)}" title="${esc(it.name)}\n${esc(sub)}">${avatar(it)}
@@ -493,6 +507,7 @@ export default {
             icon: null,
             tag: "",
             mode: "until",
+            yearly: false,
             mstep: 0,
             munit: "days",
             countFrom: "one",
@@ -515,6 +530,8 @@ export default {
           <option value="until">${t("dday.mode_until")}</option>
           <option value="since">${t("dday.mode_since")}</option>
         </select>
+        <label class="dd-ms-cf dd-yearly"><input data-f="yearly" type="checkbox"> ${t("dday.yearly")}</label>
+        ${it.fromShowcase ? `<div class="dd-ms-cf">${t("dday.from_showcase")}</div>` : ""}
         <div class="dd-ms" hidden>
           <div class="dd-ms-row">
             <span>${t("dday.milestone")}</span>
@@ -527,7 +544,7 @@ export default {
           <label class="dd-ms-cf" hidden><input data-f="countFrom" type="checkbox"> ${t("dday.count_from_zero")}</label>
         </div>
         <div class="dd-ed-btns">
-          ${existing ? `<button data-a="del">${t("dday.delete")}</button>` : ""}
+          ${existing && !it.fromShowcase ? `<button data-a="del">${t("dday.delete")}</button>` : ""}
           <span class="sp"></span>
           <button data-a="cancel">${t("dday.cancel")}</button>
           <button class="primary" data-a="ok">${t("dday.save")}</button>
@@ -537,11 +554,17 @@ export default {
       f("mode").value = it.mode || "until";
       f("munit").value = it.munit === "months" ? "months" : "days";
       f("countFrom").checked = it.countFrom === "zero";
+      f("yearly").checked = !!it.yearly;
+      // a Showcase birthday keeps the Showcase's name and date (its sync would undo edits made here)
+      if (it.fromShowcase)
+        for (const n of ["name", "date", "mode", "yearly"]) f(n).disabled = true;
       // milestone options only for 'since'; the count-from-0 escape hatch only for day-milestones
       const msBlock = editor.querySelector(".dd-ms");
-      const cfLabel = editor.querySelector(".dd-ms-cf");
+      const cfLabel = editor.querySelector(".dd-ms .dd-ms-cf");
+      const yearlyLabel = editor.querySelector(".dd-yearly");
       const syncMs = () => {
         msBlock.hidden = f("mode").value !== "since";
+        yearlyLabel.hidden = f("mode").value === "since";
         cfLabel.hidden = !(
           f("mode").value === "since" &&
           +f("mstep").value > 0 &&
@@ -598,6 +621,7 @@ export default {
         it.date = f("date").value;
         it.tag = f("tag").value.trim().replace(/^#/, "");
         it.mode = f("mode").value;
+        it.yearly = it.mode !== "since" && f("yearly").checked;
         it.mstep =
           it.mode === "since" ? Math.max(0, Math.floor(+f("mstep").value || 0)) : 0;
         it.munit = f("munit").value === "months" ? "months" : "days";

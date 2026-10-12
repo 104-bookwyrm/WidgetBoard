@@ -2391,6 +2391,99 @@ async function dragResize(p, sel, dw, dh) {
   await p.close();
 }
 
+// ===== RT15-18. fourth pass (UX, otaku usage): placement, showcase, d-day initial, collection add =====
+{
+  // RT15: tray "add widget" fills from the top-right like the presets, away from desktop icons
+  const p = await page();
+  await seed(p, [{ id: "o", type: "memo", x: 0, y: 0, w: 3, h: 3 }]);
+  await p.evaluate(() => __mock.emit("add-widget", "memo"));
+  await p.waitForTimeout(300);
+  const r = await p.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const cell = parseFloat(cs.getPropertyValue("--cell")), gap = parseFloat(cs.getPropertyValue("--gap"));
+    const cols = Math.floor((document.getElementById("board").clientWidth - gap) / (cell + gap));
+    const w = __mock.widgets().find((x) => x.id !== "o");
+    return { cols, x: w?.x, y: w?.y, w: w?.w };
+  });
+  ok(r.y === 0 && r.x + r.w === r.cols, "RT15: a new widget lands top-right", JSON.stringify(r));
+  await p.close();
+}
+{
+  // RT16: the showcase name band opens the editor; a single picture can still switch fit
+  const p = await page();
+  await seed(p, [{ id: "sc", type: "showcase", x: 0, y: 0, w: 4, h: 4, settings: { imgs: ["a.png"], calSync: false } }]);
+  await p.click(".widget[data-id=sc] .sc .band");
+  const open = await p.$eval(".widget[data-id=sc] .sc-edit", (e) => !e.hidden);
+  await p.keyboard.press("Escape");
+  await p.click(".widget[data-id=sc] .sc .band", { button: "right" });
+  await p.waitForTimeout(200);
+  const menu = await p.evaluate(() => __mock.menus.at(-1).map((m) => m.text || ""));
+  ok(open && menu.includes("맞춤"), "RT16: band click edits, fit offered with one picture", JSON.stringify({ open, menu }));
+  await p.close();
+}
+{
+  // RT17: a d-day name starting with an emoji shows the whole emoji as its initial
+  const p = await page();
+  const dday = { mode: "until", icon: null, mstep: 0, munit: "days", countFrom: "one" };
+  await seed(p, [{ id: "dd", type: "dday", x: 0, y: 0, w: 3, h: 4 }], {
+    "wb-store-events": [{ id: "e1", title: "🎂 생일", date: "2026-11-01", done: false, tags: [], dday }],
+  });
+  await p.waitForSelector(".widget[data-id=dd] .dd-av");
+  const av = await p.textContent(".widget[data-id=dd] .dd-row .dd-av");
+  ok(av === "🎂", "RT17: emoji initial is not split", JSON.stringify(av));
+  await p.close();
+}
+{
+  // RT18: a collection with items still has a visible add button
+  const p = await page();
+  await seed(p, [{ id: "co", type: "collection", x: 0, y: 0, w: 3, h: 4, settings: { items: [{ img: "x.png", label: "" }] } }]);
+  const chooser = p.waitForEvent("filechooser", { timeout: 2000 }).then(() => true, () => false);
+  await p.click(".widget[data-id=co] .coll-count [data-a=add]");
+  ok(await chooser, "RT18: collection add button opens the file picker");
+  await p.close();
+}
+
+// ===== RT19-20. yearly D-days and Showcase birthdays in the D-day list (owner request 2026-10-12) =====
+{
+  // RT19: "매년 반복" counts down to the next occurrence and is stored as a yearly repeat
+  const p = await page(); // pinned to 2026-09-26
+  await seed(p, [{ id: "dd", type: "dday", x: 0, y: 0, w: 3, h: 5 }]);
+  await p.click(".widget[data-id=dd] .dd-add");
+  await p.fill(".dd-editor [data-f=name]", "데뷔 기념일");
+  await p.fill(".dd-editor [data-f=date]", "2020-09-01");
+  await p.check(".dd-editor [data-f=yearly]");
+  await p.click(".dd-editor [data-a=ok]");
+  await p.waitForTimeout(200);
+  const ev = (await p.evaluate(() => JSON.parse(localStorage.getItem("wb-store-events")))).find((e) => e.title === "데뷔 기념일");
+  const row = await p.evaluate(() => {
+    const r = document.querySelector(".widget[data-id=dd] .dd-row");
+    return [r.querySelector(".dd-d").textContent, r.querySelector(".dd-sub").textContent];
+  });
+  ok(ev?.repeat === "yearly" && row[0] === "D-340" && row[1].startsWith("2027.09.01") && row[1].includes("매년 반복"),
+    "RT19: yearly D-day counts to next year's date", JSON.stringify({ repeat: ev?.repeat, row }));
+  await p.close();
+}
+{
+  // RT20: a Showcase birthday shows in the D-day list with its picture; its name and date stay the Showcase's
+  const p = await page();
+  await seed(p, [
+    { id: "sc", type: "showcase", x: 0, y: 0, w: 4, h: 4, settings: { name: "하루", birthday: "2001-10-03", imgs: ["h.png"], calSync: true, _calId: "bd" } },
+    { id: "dd", type: "dday", x: 5, y: 0, w: 3, h: 4 },
+  ], { "wb-store-events": [{ id: "bd", date: "2026-10-03", title: "하루 생일 🎂", repeat: "yearly", done: false, _src: "showcase" }] });
+  await p.waitForSelector(".widget[data-id=dd] .dd-row");
+  const r = await p.evaluate(() => {
+    const row = document.querySelector(".widget[data-id=dd] .dd-row");
+    return { d: row.querySelector(".dd-d").textContent, img: !!row.querySelector(".dd-av img") };
+  });
+  await p.click(".widget[data-id=dd] .dd-row");
+  const ed = await p.evaluate(() => ({
+    locked: document.querySelector(".dd-editor [data-f=date]").disabled,
+    del: !!document.querySelector(".dd-editor [data-a=del]"),
+  }));
+  ok(r.d === "D-7" && r.img && ed.locked && !ed.del, "RT20: Showcase birthday listed as a locked yearly D-day", JSON.stringify({ ...r, ...ed }));
+  await p.close();
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", errs);
 await b.close();
