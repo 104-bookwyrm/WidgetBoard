@@ -532,6 +532,8 @@ export default {
         const a = e.target.closest("[data-a]")?.dataset.a;
         if (a === "ed-close") return closeDetails();
         if (a === "tag-del") {
+          // the chips sit inside a <label>: without this, a re-rendered chip passes the click on to the next ✕
+          e.preventDefault();
           tags.splice(+e.target.closest("[data-i]").dataset.i, 1);
           return drawTags();
         }

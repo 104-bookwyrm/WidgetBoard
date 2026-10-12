@@ -325,14 +325,14 @@ function renderPresets() {
     time.placeholder = "25";
     time.setAttribute("aria-label", t("set.timer.time"));
     let tmr;
-    const commit = () => {
-      presets[i] = { label: label.value, time: time.value };
-      savePresets(); // no re-render here — keep focus/caret while typing
+    // the row's own object takes every keystroke at once; only the save waits, so a quick ↑/↓/✕ can't
+    // land a pending edit in another row. No re-render here: keep focus/caret while typing.
+    label.oninput = time.oninput = () => {
+      p.label = label.value;
+      p.time = time.value;
+      clearTimeout(tmr);
+      tmr = setTimeout(savePresets, 300);
     };
-    label.oninput = time.oninput = () => (
-      clearTimeout(tmr),
-      (tmr = setTimeout(commit, 300))
-    );
     const move = (d) => {
       const j = i + d;
       if (j < 0 || j >= presets.length) return;
@@ -781,7 +781,11 @@ async function init() {
   await listen("backup-status", showBackupStatus);
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") win.close();
+    if (e.key === "Escape" && !$("#th-paste").hidden && e.target.closest?.("#th-paste")) {
+      // Esc in the AI-theme paste box closes the box, not the window (a pasted theme isn't lost)
+      $("#th-paste").hidden = true;
+      $("#th-ai-paste").focus();
+    } else if (e.key === "Escape") win.close();
     else if (e.ctrlKey && (e.key === "Tab" || e.key === "PageDown"))
       (e.preventDefault(), cyclePage(e.shiftKey ? -1 : 1));
     else if (e.ctrlKey && e.key === "PageUp")

@@ -800,6 +800,7 @@ fn set_app(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(), S
     if lang_changed {
         refresh_tray(&app);
         let lang = state.settings.lock().unwrap().lang.clone();
+        retitle_windows(&app, &lang);
         let _ = app.emit("lang-changed", lang);
     }
     if let Some(on) = motion {
@@ -807,6 +808,15 @@ fn set_app(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(), S
         let _ = app.emit("motion-changed", on);
     }
     Ok(())
+}
+
+/// Native window titles are set at creation; a language switch renames the open Settings and Library windows.
+fn retitle_windows(app: &AppHandle, lang: &str) {
+    for (label, key) in [("settings", "set.title"), ("library", "lib.title")] {
+        if let Some(w) = app.get_webview_window(label) {
+            let _ = w.set_title(&tr(lang, key));
+        }
+    }
 }
 
 /// Open (or focus) the standalone settings window on the given page.
@@ -1792,6 +1802,7 @@ fn on_menu(app: &AppHandle, id: &str) {
         if let (Some(tray), Ok(menu)) = (app.tray_by_id(TRAY_ID), build_menu(app)) {
             let _ = tray.set_menu(Some(menu));
         }
+        retitle_windows(app, code);
         let _ = app.emit("lang-changed", code);
         return;
     }

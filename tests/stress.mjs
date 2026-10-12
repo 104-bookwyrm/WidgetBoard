@@ -2554,6 +2554,56 @@ async function dragResize(p, sel, dw, dh) {
   await p.close();
 }
 
+// ===== RT24-26. plan.md open problems (2026-10-12): move + undo, paused timer, edited reminder =====
+{
+  // RT24: delete a collection item, move the widget to display 2, then Undo: no stale copy is written back
+  const p = await page();
+  const items = [{ img: "a.png", label: "A" }, { img: "b.png", label: "B" }];
+  await seed(p, [{ id: "co", type: "collection", x: 0, y: 0, w: 3, h: 4, settings: { items } }]);
+  await p.click('.widget[data-id=co] [data-del="0"]', { force: true });
+  await p.waitForTimeout(100);
+  const toastUp = await p.isVisible("#toast button");
+  await p.evaluate(() => __mock.emit("widget-move", { id: "co", display: "D2" }));
+  await p.waitForTimeout(500);
+  const after = await p.evaluate(() => ({
+    toast: !document.querySelector("#toast").hidden,
+    w: __mock.widgets().find((w) => w.id === "co"),
+  }));
+  ok(toastUp && !after.toast && after.w?.display === "D2",
+    "RT24: moving a widget away takes its undo toast with it", JSON.stringify({ toastUp, toast: after.toast, display: after.w?.display }));
+  await p.close();
+}
+{
+  // RT25: clicking a paused timer's display and clicking away keeps its duration
+  const p = await page();
+  await seed(p, [{ id: "t", type: "timer", x: 0, y: 0, w: 3, h: 2, settings: { duration: 600000, remaining: 300000, endAt: null } }]);
+  await p.click(".widget[data-id=t] .t-display");
+  const editing = await p.$(".widget[data-id=t] input");
+  await p.mouse.click(1300, 700); // away (empty board)
+  await p.waitForTimeout(400);
+  const st = await p.evaluate(() => __mock.widgets().find((w) => w.id === "t").settings);
+  ok(!!editing && st.duration === 600000 && st.remaining === 300000, "RT25: a paused timer keeps its duration", JSON.stringify({ editing: !!editing, d: st.duration, r: st.remaining }));
+  await p.close();
+}
+{
+  // RT26: a reminder that already fired fires again when its time is moved later the same day
+  const p = await b.newPage({ viewport: { width: 1440, height: 810 }, timezoneId: "Asia/Seoul" });
+  p.on("pageerror", (e) => errs.push(e.message));
+  await p.clock.install({ time: new Date("2026-10-12T09:00:00+09:00") });
+  await p.goto("http://localhost:8765/index.html");
+  const ev = (time) => [{ id: "r", date: "2026-10-12", time, tz: "Asia/Seoul", notify: true, title: "방송", done: false }];
+  await seed(p, [{ id: "ck", type: "checklist", x: 0, y: 0, w: 3, h: 4 }], { "wb-store-events": ev("09:01") });
+  const fired = () => p.evaluate(() => JSON.parse(localStorage.getItem("wb-reminder-fired") || "[]").filter((k) => k.startsWith("r|")).length);
+  await p.clock.runFor(120000); // 09:02
+  const first = await fired();
+  await p.evaluate((v) => __mock.invoke("store_set", { key: "events", value: v, src: "calendar" }), ev("09:05"));
+  await p.clock.runFor(300000); // 09:07
+  const keys = await p.evaluate(() => JSON.parse(localStorage.getItem("wb-reminder-fired") || "[]").filter((k) => k.startsWith("r|")));
+  const notifies = await p.evaluate(() => (window.__native || []).filter(([c]) => c === "notify").length);
+  ok(first === 1 && keys.length === 1 && notifies === 2, "RT26: an edited reminder fires at its new time", JSON.stringify({ first, keys, notifies }));
+  await p.close();
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", errs);
 await b.close();

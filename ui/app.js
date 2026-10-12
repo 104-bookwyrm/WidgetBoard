@@ -50,6 +50,7 @@ const listen = (ev, h) => win.listen(ev, h); // only events for this board (or b
 const $ = (s) => document.querySelector(s);
 const board = $("#board");
 const mounted = new Map(); // id -> { el, inst }
+const retired = new WeakSet(); // widget elements unmounted from this board (closed, moved, type changed)
 let widgets = []; // widgets on this monitor
 let myDisplay = "";
 let displays = []; // [{ label, display, index, primary }]
@@ -273,6 +274,13 @@ function adoptNewer(w, item, draft) {
   if (mounted.has(w.id)) remountWith(w, item);
   else contents.set(item.id, item);
 }
+/** A widget instance leaves this board: its element goes, and its late saves and pending undo with it. */
+function retire(m) {
+  if (!m) return;
+  m.el.remove();
+  retired.add(m.el);
+  if (toastOwner === m.el) hideToast();
+}
 /** Show a newer version of a widget's content: drop its unsaved edit, then mount again. */
 function remountWith(w, item) {
   const m = mounted.get(w.id);
@@ -281,7 +289,7 @@ function remountWith(w, item) {
   clearTimeout(pending.get(w.id)); // the destroy's flushed edit is the stale one
   pending.delete(w.id);
   unsaved.delete(w.id);
-  m?.el.remove();
+  retire(m);
   mounted.delete(w.id);
   contents.set(item.id, item);
   mount(w);
@@ -510,7 +518,7 @@ function mount(w) {
     saveFailed("conflict");
   }
   const api = {
-    save: () => save(w),
+    save: () => !retired.has(el) && save(w), // a late callback from a closed or moved widget never writes
     pickImage,
     pickImages,
     uploadImage,
@@ -518,7 +526,7 @@ function mount(w) {
     toast,
     /** "Deleted" toast with an undo button; restore() puts the item back. */
     deleted: (restore) =>
-      toast(t("toast.deleted"), { label: t("toast.undo"), fn: restore }),
+      toast(t("toast.deleted"), { label: t("toast.undo"), fn: restore }, el),
     t,
     lang,
     wheelScrollX,
@@ -785,7 +793,7 @@ function unmount(w) {
   clearTimeout(pending.get(w.id)); // ...which must not land after a remove/move: callers write w themselves
   pending.delete(w.id);
   unsaved.delete(w.id);
-  m?.el.remove();
+  retire(m);
   mounted.delete(w.id);
   widgets = widgets.filter((o) => o.id !== w.id);
   if (fontTarget?.w.id === w.id) closeFontPanel();
@@ -867,7 +875,7 @@ function changeType(w, type) {
   clearTimeout(pending.get(w.id));
   pending.delete(w.id);
   unsaved.delete(w.id);
-  m?.el.remove();
+  retire(m);
   mounted.delete(w.id);
   closeContent(structuredClone(w));
   w.id = crypto.randomUUID();
@@ -1302,8 +1310,15 @@ addEventListener("keydown", (e) => {
 
 // ---------------- misc ----------------
 let toastTimer;
-/** toast('text') or toast('text', { label: '되돌리기', fn }) — an action keeps it up longer. */
-function toast(msg, action) {
+let toastOwner = null; // the widget element an undo toast belongs to
+function hideToast() {
+  $("#toast").hidden = true;
+  toastOwner = null;
+  syncHits();
+}
+/** toast('text') or toast('text', { label: '되돌리기', fn }, widgetEl) - an action keeps it up longer. */
+function toast(msg, action, owner = null) {
+  toastOwner = owner;
   const el = $("#toast");
   el.textContent = msg;
   if (action) {
@@ -1527,7 +1542,8 @@ async function checkReminder() {
 
 // Per-event reminders: an event with `notify` fires at its wall-time (in its own zone) minus
 // `lead` minutes — a desktop notification plus a clickable toast that opens the event's link.
-// De-dupe per occurrence (id + date) so each fires once; primary board only.
+// De-dupe per occurrence and fire time (id + date + instant) so each fires once, and an edited time fires
+// again; primary board only.
 const FIRED_KEY = "wb-reminder-fired";
 let firedSet = (() => {
   try {
@@ -1588,8 +1604,9 @@ async function checkEventReminders() {
       const fireAt =
         zonedToInstant(d, e.time || "09:00", tz) - (+e.lead || 0) * 60000;
       if (now < fireAt) continue;
-      const key = e.id + "|" + d;
-      if (firedSet.has(key)) continue;
+      const key = e.id + "|" + d + "|" + fireAt;
+      if (firedSet.has(key) || firedSet.has(e.id + "|" + d)) continue; // id|date: fired before this rule
+      for (const k of firedSet) if (k.startsWith(e.id + "|" + d + "|")) firedSet.delete(k); // the old time's
       firedSet.add(key);
       saveFired();
       // don't flood with stale reminders after the app was closed a long while

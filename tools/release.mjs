@@ -7,9 +7,10 @@
 //       Apps built with a different public key will refuse your updates (and vice versa).
 //
 //   node tools/release.mjs sign <WidgetBoard.exe> --version 0.11.0 [--key <file>] [--url <download url>]
-//                                [--notes "what changed"] [--out latest.json]
+//                                [--notes "what changed" | --notes-file notes.md] [--out latest.json]
 //       Writes latest.json for that exe. Upload BOTH files to the release. Without --url the manifest says
 //       "WidgetBoard.exe", i.e. "next to latest.json" — right for GitHub's releases/latest/download/ links.
+//       --notes-file reads UTF-8 (Korean notes survive; cmd.exe arguments don't).
 //
 //   node tools/release.mjs verify <latest.json> <WidgetBoard.exe>
 //       Checks a manifest + exe against src-tauri/updater.pub, the way the app will.
@@ -51,6 +52,8 @@ if (cmd === "keygen") {
   const version =
     opt("version") || die("--version is required, e.g. --version 0.11.0");
   if (!/^\d+\.\d+\.\d+$/.test(version)) die("version must look like 1.2.3");
+  const notesFile = opt("notes-file");
+  const notes = opt("notes", "");
   const key = crypto.createPrivateKey(fs.readFileSync(keyFile()));
   const bytes = fs.readFileSync(exe);
   if (bytes.subarray(0, 2).toString() !== "MZ")
@@ -61,7 +64,7 @@ if (cmd === "keygen") {
     .toString("base64");
   const manifest = {
     version,
-    notes: opt("notes", ""),
+    notes: notesFile ? fs.readFileSync(notesFile, "utf8").replace(/^\uFEFF/, "").trim() : notes,
     pub_date: new Date().toISOString(),
     url: opt("url", "WidgetBoard.exe"),
     size: bytes.length,

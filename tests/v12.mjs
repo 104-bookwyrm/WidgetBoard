@@ -875,6 +875,32 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
   await ctx.close();
 }
 
+// --- plan.md open problems (2026-10-12): preset edit + quick move, Esc in the AI paste box ---
+{
+  const p = await page();
+  await p.click(".set-nav button[data-page=widgets]");
+  const presets = () => p.evaluate(() => JSON.parse(localStorage.getItem("wb-config") || "{}").timer?.presets);
+  const before = await p.$$eval("#timer-presets .set-list-row input:first-child", (i) => i.map((x) => x.value));
+  // type in row 2, then move it up before the 300 ms save fires
+  await p.fill("#timer-presets .set-list-row:nth-child(2) input:first-child", "늦은 편집");
+  await p.click("#timer-presets .set-list-row:nth-child(2) button:nth-of-type(1)");
+  await p.waitForTimeout(500);
+  const after = (await presets()).map((x) => x.label);
+  ok(after[0] === "늦은 편집" && after[1] === before[0], "a preset edited then moved keeps its own row", JSON.stringify({ before, after }));
+
+  await p.click(".set-nav button[data-page=appearance]");
+  await p.click("#th-ai-paste");
+  await p.fill("#th-paste-text", ":root{ --c2:#00ff00; }");
+  await p.press("#th-paste-text", "Escape");
+  const st = await p.evaluate(() => ({
+    closed: !!window.__mock.closed,
+    box: document.querySelector("#th-paste").hidden,
+    text: document.querySelector("#th-paste-text").value,
+  }));
+  ok(!st.closed && st.box && st.text.includes("00ff00"), "Esc in the paste box closes the box, not the window", JSON.stringify(st));
+  await p.close();
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", JSON.stringify(errs));
 await b.close();

@@ -225,7 +225,8 @@ export default {
     disp.addEventListener("click", () => {
       if (s.endAt || editing) return;
       editing = true;
-      disp.innerHTML = `<input value="${fmt(s.remaining || s.duration)}">`;
+      const shown = fmt(s.remaining || s.duration);
+      disp.innerHTML = `<input value="${shown}">`;
       const inp = disp.firstChild;
       inp.focus();
       inp.select();
@@ -236,13 +237,14 @@ export default {
         ms ? setDuration(ms) : render();
       };
       inp.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") done(true);
+        if (e.key === "Enter") done(inp.value.trim() !== shown);
         if (e.key === "Escape") {
           e.stopPropagation();
           done(false);
         }
       });
-      inp.addEventListener("blur", () => done(true));
+      // clicking away keeps an edit, but an untouched display (a paused timer) keeps its duration
+      inp.addEventListener("blur", () => done(inp.value.trim() !== shown));
     });
 
     // Finished while the app was closed/asleep: show it, no sound.

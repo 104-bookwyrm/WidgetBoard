@@ -49,12 +49,18 @@ export function createMockTauri() {
     for (const handler of [...(handlers.get(event) || [])])
       handler({ payload: structuredClone(payload) });
   };
-  const emit = (event, payload, target) => {
+  // `keys`: localStorage entries the event announces. Other pages see localStorage writes a moment later than
+  // the message (Rust has no such gap), so the message carries them and is applied before dispatching.
+  const emit = (event, payload, target, keys = []) => {
     dispatch(event, payload, target);
-    channel.postMessage({ event, payload, target });
+    const writes = Object.fromEntries(keys.map((k) => [k, localStorage.getItem(k)]));
+    channel.postMessage({ event, payload, target, writes });
   };
-  channel.onmessage = ({ data }) =>
+  channel.onmessage = ({ data }) => {
+    for (const [k, v] of Object.entries(data.writes || {}))
+      v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v);
     dispatch(data.event, data.payload, data.target);
+  };
   const listen = async (event, handler) => {
     if (!handlers.has(event)) handlers.set(event, new Set());
     handlers.get(event).add(handler);
@@ -243,7 +249,7 @@ export function createMockTauri() {
       case "store_set": {
         const rev = bumpRev("store:" + args.key, args.rev);
         set("wb-store-" + args.key, args.value);
-        emit("store-changed", { key: args.key, src: args.src, rev });
+        emit("store-changed", { key: args.key, src: args.src, rev }, undefined, ["wb-store-" + args.key, "wb-revs"]);
         return rev;
       }
       case "diary_get":
@@ -258,7 +264,7 @@ export function createMockTauri() {
         if (args.text.trim())
           localStorage.setItem("wb-diary-" + args.date, args.text);
         else localStorage.removeItem("wb-diary-" + args.date);
-        emit("store-changed", { key: "diary", date: args.date, src: args.src, rev });
+        emit("store-changed", { key: "diary", date: args.date, src: args.src, rev }, undefined, ["wb-diary-" + args.date, "wb-revs"]);
         return rev;
       }
       // Library content (content.rs): compare the revision, then write
