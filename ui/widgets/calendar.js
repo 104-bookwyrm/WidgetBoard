@@ -214,7 +214,10 @@ export default {
 
     const allTags = () =>
       [...new Set(events.flatMap((e) => e.tags || []))].sort();
+    // checklist daily routines live in the checklist only (not in every day square)
+    const routine = (ev) => ev.todo && ev.repeat === "daily";
     function shown(ev) {
+      if (routine(ev)) return false;
       const tags = ev.tags || [];
       if (tags.some((x) => s.filter[x] === "hide")) return false;
       const only = Object.keys(s.filter).filter((k) => s.filter[k] === "only");
@@ -497,7 +500,7 @@ export default {
           <button data-a="ed-close" title="${esc(t("theme.close"))}">${icon("x")}</button></div>
         <label>${esc(t("cal.date"))}<input data-f="date" type="date" value="${esc(ev.date)}" required></label>
         <label>${esc(t("cal.time"))}<input data-f="time" type="time" value="${esc(ev.time || "")}"></label>
-        ${ev.dday ? "" : `<label>${esc(t("cal.repeat"))}<select data-f="repeat">${repeatOpts}</select></label>`}
+        ${ev.dday || ev.quota ? "" : `<label>${esc(t("cal.repeat"))}<select data-f="repeat">${repeatOpts}</select></label>`}
         <label>${esc(t("cal.tags"))}<span class="cal-ed-tags"><span class="chips"></span><input data-f="tag" placeholder="${esc(t("cal.tag_add"))}"></span></label>
         <label>${esc(t("cal.url"))}<input data-f="url" type="url" inputmode="url" value="${esc(ev.url || "")}" placeholder="https://"></label>
         <label>${esc(t("clock.zone"))}<select data-f="tz">${tzOptions(tz, { common: t("set.tz_common"), all: t("set.tz_all") })}</select></label>
@@ -542,6 +545,8 @@ export default {
             const r = f("repeat").value || null;
             if (r !== (cur.repeat ?? null)) delete cur.doneDates; // per-occurrence ticks belong to the old rule
             cur.repeat = r;
+            // a to-do given a dated repeat becomes a calendar entry (the checklist then shows it on its days)
+            if (cur.todo && r && r !== "daily") delete cur.todo;
           }
           cur.tags = tags;
           cur.time = f("time").value || null;
@@ -751,11 +756,11 @@ export default {
         const d = ymd();
         const label = (e) =>
           (e.time ? e.time + " " : "") + e.title + (eventDone(e, d) ? " ✓" : "");
-        const today = events.filter((e) => occursOn(e, d));
+        const today = events.filter((e) => occursOn(e, d) && !routine(e));
         let next = null;
         for (let i = 1; i <= 366 && !next; i++) {
           const dd = addDays(d, i);
-          const hit = events.find((e) => occursOn(e, dd));
+          const hit = events.find((e) => occursOn(e, dd) && !routine(e));
           if (hit) next = { date: dd, title: hit.title };
         }
         const h = holName(d);

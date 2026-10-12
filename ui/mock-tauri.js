@@ -1,5 +1,6 @@
 // One browser-only native substitute for boards and settings. Never touches real app data.
 import REGISTRY from "./widgets/index.js";
+import { checklistToEvents } from "./util.js";
 
 export function createMockTauri() {
   const query = new URLSearchParams(location.search);
@@ -132,6 +133,12 @@ export function createMockTauri() {
     switch (cmd) {
       case "load_state":
         register();
+        // Rust merges data/checklist.json into events.json at startup (migrate.rs merge_checklist)
+        if (localStorage.getItem("wb-store-checklist") !== null) {
+          const ws = config().ui?.weekStart === "mon" ? 1 : 0;
+          set("wb-store-events", checklistToEvents(get("wb-store-checklist", []), get("wb-store-events", []) || [], ws));
+          localStorage.removeItem("wb-store-checklist");
+        }
         return {
           display,
           primary: display === "D1",

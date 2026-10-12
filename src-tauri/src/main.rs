@@ -1872,6 +1872,8 @@ fn main() {
                 .and_then(|v| v.get("widgets").and_then(Value::as_array).cloned())
                 .unwrap_or_default();
             migrate_config(&dir); // v0.12: fold settings.json + checklist.weekStart into config.json
+            // 2026-10-12: checklist items join the shared entry store (needs ui.weekStart, so after the fold)
+            let migrate_error = migrate_error.or(migrate::merge_checklist(&dir, &backups_root(app.handle(), &dir)).err());
             let settings = load_settings(&dir);
             let id = app.config().identifier.clone();
             let _ = RUN_NAME.set(if id == PRODUCTION_IDENTIFIER { "WidgetBoard".into() } else { format!("WidgetBoard ({id})") });

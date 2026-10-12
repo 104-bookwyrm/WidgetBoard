@@ -82,28 +82,29 @@ await test("checklist edit commits to refreshed item by id", async () => {
   const p = await page(
     [widget("a", "checklist"), widget("b", "checklist", 5)],
     {
-      "wb-store-checklist": [
-        { id: "item", title: "original", date: "2020-01-01", done: false },
+      "wb-store-events": [
+        { id: "item", title: "original", date: "2020-01-01", done: false, todo: true },
       ],
     },
   );
   await p.locator('[data-id="a"] .ck-title').dblclick();
   await p.locator('[data-id="a"] .ck-title input').fill("edited");
   await p.evaluate(() => {
-    const items = JSON.parse(localStorage.getItem("wb-store-checklist"));
+    const items = JSON.parse(localStorage.getItem("wb-store-events"));
     items.push({
       id: "other",
       title: "added elsewhere",
       date: "2020-01-01",
       done: false,
+      todo: true,
     });
-    localStorage.setItem("wb-store-checklist", JSON.stringify(items));
-    __mock.emit("store-changed", { key: "checklist", src: "b" });
+    localStorage.setItem("wb-store-events", JSON.stringify(items));
+    __mock.emit("store-changed", { key: "events", src: "b" });
   });
   await p.waitForTimeout(50);
   await p.locator('[data-id="a"] .ck-title input').press("Enter");
   const saved = await p.evaluate(() =>
-    JSON.parse(localStorage.getItem("wb-store-checklist")),
+    JSON.parse(localStorage.getItem("wb-store-events")),
   );
   assert.equal(saved.find((x) => x.id === "item").title, "edited");
   assert.equal(saved.find((x) => x.id === "other").title, "added elsewhere");
@@ -111,22 +112,22 @@ await test("checklist edit commits to refreshed item by id", async () => {
 });
 await test("a stale checklist write merges with the newer list instead of replacing it", async () => {
   const p = await page([widget("a", "checklist")], {
-    "wb-store-checklist": [{ id: "x", title: "first", date: "2020-01-01", done: false }],
+    "wb-store-events": [{ id: "x", title: "first", date: "2020-01-01", done: false, todo: true }],
   });
   // another window saved an item this board has not heard about yet
   await p.evaluate(() => {
-    const items = JSON.parse(localStorage.getItem("wb-store-checklist"));
-    items.push({ id: "y", title: "from elsewhere", date: "2020-01-01", done: false });
-    localStorage.setItem("wb-store-checklist", JSON.stringify(items));
+    const items = JSON.parse(localStorage.getItem("wb-store-events"));
+    items.push({ id: "y", title: "from elsewhere", date: "2020-01-01", done: false, todo: true });
+    localStorage.setItem("wb-store-events", JSON.stringify(items));
     const revs = JSON.parse(localStorage.getItem("wb-revs") || "{}");
-    revs["store:checklist"] = (revs["store:checklist"] ?? 0) + 1;
+    revs["store:events"] = (revs["store:events"] ?? 0) + 1;
     localStorage.setItem("wb-revs", JSON.stringify(revs));
   });
   await p.locator('[data-id="a"] .ck-add').fill("added here");
   await p.locator('[data-id="a"] .ck-add').press("Enter");
-  await p.waitForFunction(() => JSON.parse(localStorage.getItem("wb-store-checklist")).length === 3);
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem("wb-store-events")).length === 3);
   const titles = await p.evaluate(() =>
-    JSON.parse(localStorage.getItem("wb-store-checklist")).map((x) => x.title).sort(),
+    JSON.parse(localStorage.getItem("wb-store-events")).map((x) => x.title).sort(),
   );
   assert.deepEqual(titles, ["added here", "first", "from elsewhere"]);
   // and the widget shows the merged list
@@ -272,21 +273,21 @@ await test("diary navigation waits for an already-running save", async () => {
 });
 await test("deleting an edited checklist item elsewhere does not resurrect it", async () => {
   const p = await page([widget("a", "checklist")], {
-    "wb-store-checklist": [
-      { id: "item", title: "original", date: "2020-01-01", done: false },
+    "wb-store-events": [
+      { id: "item", title: "original", date: "2020-01-01", done: false, todo: true },
     ],
   });
   await p.locator(".ck-title").dblclick();
   await p.locator(".ck-title input").fill("edited");
   await p.evaluate(() => {
-    localStorage.setItem("wb-store-checklist", "[]");
-    __mock.emit("store-changed", { key: "checklist", src: "other" });
+    localStorage.setItem("wb-store-events", "[]");
+    __mock.emit("store-changed", { key: "events", src: "other" });
   });
   await p.waitForTimeout(50);
   await p.locator(".ck-title input").press("Enter");
   assert.deepEqual(
     await p.evaluate(() =>
-      JSON.parse(localStorage.getItem("wb-store-checklist")),
+      JSON.parse(localStorage.getItem("wb-store-events")),
     ),
     [],
   );

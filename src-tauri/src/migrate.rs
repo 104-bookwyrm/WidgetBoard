@@ -184,6 +184,118 @@ fn strip(w: &Value, keys: &Map<String, Value>) -> Value {
     w
 }
 
+/// Checklist items join the shared entry store (2026-10-12): data/checklist.json becomes `todo` entries in
+/// data/events.json; weeklies and monthlies become `quota`s ticked on their period's last day. Runs at startup
+/// after the config fold (it needs `ui.weekStart`). Ids already in events.json are skipped and checklist.json is
+/// removed last, so an interrupted run simply runs again. The browser mock mirrors this (util.js checklistToEvents).
+pub fn merge_checklist(dir: &Path, backups: &Path) -> Result<bool, String> {
+    let data = dir.join("data");
+    let source = data.join("checklist.json");
+    if !source.exists() {
+        return Ok(false);
+    }
+    let items: Vec<Value> = read_json::<Value>(&source).and_then(|v| v.as_array().cloned()).unwrap_or_default();
+    let mut events: Vec<Value> = read_json::<Value>(&data.join("events.json")).and_then(|v| v.as_array().cloned()).unwrap_or_default();
+    let ws = if crate::read_config(dir)["ui"]["weekStart"] == "mon" { 1 } else { 0 };
+    let added = checklist_to_events(&items, &mut events, ws, &day_string(now_secs() as i64 / 86400));
+    if added > 0 {
+        backup_to(dir, backups, "pre-migration")?; // the original checklist.json stays in this snapshot
+        write_atomic(&data.join("events.json"), serde_json::to_string_pretty(&events).unwrap().as_bytes())?;
+    }
+    fs::remove_file(&source).map_err(|e| e.to_string())?;
+    Ok(added > 0)
+}
+
+/// Appends converted items to `events`; returns how many were added. Same rules as util.js checklistToEvents.
+fn checklist_to_events(items: &[Value], events: &mut Vec<Value>, ws: i64, today: &str) -> usize {
+    let mut have: std::collections::HashSet<String> =
+        events.iter().filter_map(|e| e["id"].as_str().map(String::from)).collect();
+    let mut added = 0;
+    for (n, i) in items.iter().enumerate() {
+        let Some(title) = i["title"].as_str() else { continue };
+        let id = i["id"].as_str().filter(|s| !s.is_empty()).map(String::from).unwrap_or(format!("ck-{n}"));
+        if !have.insert(id.clone()) {
+            continue;
+        }
+        let repeat = match &i["repeat"] {
+            Value::Bool(true) => Some("daily"),
+            Value::String(r) if ["daily", "weekly", "monthly"].contains(&r.as_str()) => Some(r.as_str()),
+            _ => None,
+        };
+        let keys: Vec<&str> = i.get("doneKeys").or_else(|| i.get("doneDates"))
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default();
+        let date = i["date"].as_str().filter(|d| day_number(d).is_some()).unwrap_or(today);
+        let title: String = title.chars().take(300).collect();
+        let mut e = json!({ "id": id, "title": title, "date": date, "todo": true, "tags": [], "repeat": repeat });
+        match repeat {
+            None => {
+                e["done"] = json!(i["done"].as_bool().unwrap_or(false));
+                if let Some(on) = i["doneOn"].as_str().filter(|d| day_number(d).is_some()) {
+                    e["doneOn"] = json!(on);
+                }
+            }
+            Some(r) => {
+                let mut done: Vec<String> = keys.iter().filter_map(|k| match r {
+                    "daily" => day_number(k).map(|_| k.to_string()),
+                    // "W<first day>" -> the last day of the week (new week start) holding that day
+                    "weekly" => k.strip_prefix('W').and_then(day_number).map(|z| day_string(z + 6 - (z + 4 - ws).rem_euclid(7))),
+                    // "YYYY-MM" -> that month's last day
+                    _ => day_number(&format!("{k}-01")).filter(|_| k.len() == 7).map(|z| {
+                        let (y, m, _) = civil(z);
+                        let (y2, m2) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
+                        day_string(days_from_civil(y2, m2, 1) - 1)
+                    }),
+                }).collect();
+                done.sort();
+                done.dedup();
+                e["doneDates"] = json!(done);
+                if r != "daily" {
+                    e["quota"] = json!(true);
+                }
+            }
+        }
+        events.push(e);
+        added += 1;
+    }
+    added
+}
+
+// ---- civil dates (days since 1970-01-01; 1970-01-01 was a Thursday) ----
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * (m + if m > 2 { -3 } else { 9 }) + 2) / 5 + d - 1;
+    era * 146097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719468
+}
+fn civil(z: i64) -> (i64, i64, i64) {
+    let z = z + 719468;
+    let era = z.div_euclid(146097);
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    (yoe + era * 400 + if m <= 2 { 1 } else { 0 }, m, d)
+}
+fn day_string(z: i64) -> String {
+    let (y, m, d) = civil(z);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+/// "YYYY-MM-DD" -> day number, only for a real calendar day.
+fn day_number(s: &str) -> Option<i64> {
+    let b = s.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return None;
+    }
+    let n = |r: std::ops::Range<usize>| s.get(r)?.parse::<i64>().ok();
+    let z = days_from_civil(n(0..4)?, n(5..7)?, n(8..10)?);
+    (day_string(z) == s).then_some(z)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +334,39 @@ mod tests {
     }
     fn items(dir: &Path) -> Map<String, Value> {
         read_json::<Value>(&dir.join("data").join("content.json")).unwrap()["items"].as_object().unwrap().clone()
+    }
+
+    #[test]
+    fn checklist_joins_the_entry_store() {
+        let (dir, backups) = setup("checklist");
+        let data = dir.join("data");
+        fs::write(dir.join("config.json"), r#"{"ui":{"weekStart":"default"}}"#).unwrap();
+        fs::write(data.join("events.json"), json!([{ "id": "e1", "title": "회의", "date": "2026-10-13", "done": false }]).to_string()).unwrap();
+        fs::write(data.join("checklist.json"), json!([
+            { "id": "a", "title": "운동", "date": "2026-10-01", "repeat": true, "doneDates": ["2026-10-11"] },
+            { "id": "w", "title": "청소", "date": "2026-10-01", "repeat": "weekly", "doneKeys": ["W2026-10-12"] },
+            { "id": "m", "title": "정산", "date": "2026-09-01", "repeat": "monthly", "doneKeys": ["2026-02"] },
+            { "title": "우유", "date": "2026-10-10", "done": true, "doneOn": "2026-10-12" },
+            { "id": "e1", "title": "duplicate id", "date": "2026-10-10" },
+        ]).to_string()).unwrap();
+        assert!(merge_checklist(&dir, &backups).unwrap());
+        assert!(!data.join("checklist.json").exists(), "the source goes once merged");
+        let ev: Vec<Value> = read_json::<Value>(&data.join("events.json")).unwrap().as_array().unwrap().clone();
+        let by = |id: &str| ev.iter().find(|e| e["id"] == id).unwrap().clone();
+        assert_eq!(ev.len(), 5, "4 new + the existing entry; a clashing id is not doubled");
+        assert_eq!(by("e1")["title"], "회의");
+        assert_eq!(by("a")["repeat"], "daily");
+        assert_eq!(by("a")["doneDates"], json!(["2026-10-11"]));
+        assert_eq!(by("w")["quota"], true);
+        assert_eq!(by("w")["doneDates"], json!(["2026-10-17"]), "Monday Oct 12's week ends Saturday Oct 17 (Sunday start)");
+        assert_eq!(by("m")["doneDates"], json!(["2026-02-28"]));
+        assert_eq!(by("ck-3")["done"], true);
+        assert_eq!(by("ck-3")["doneOn"], "2026-10-12");
+        assert_eq!(by("ck-3")["todo"], true);
+        assert!(fs::read_dir(&backups).unwrap().count() > 0, "a snapshot before the change");
+        assert!(!merge_checklist(&dir, &backups).unwrap(), "nothing left to merge");
+        assert_eq!(day_number("2027-02-29"), None);
+        assert_eq!(day_string(day_number("2028-02-29").unwrap()), "2028-02-29");
     }
 
     #[test]

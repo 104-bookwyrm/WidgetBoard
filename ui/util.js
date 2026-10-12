@@ -135,6 +135,8 @@ export function zonedToInstant(ymdStr, hm, tz = "UTC") {
  */
 export function occursOn(e, d) {
   if (!e || typeof e.date !== "string") return false;
+  // a period quota ("once this week / month", from the checklist) falls on its period's last day
+  if (e.quota) return d >= e.date && periodEnd(e.repeat, d) === d;
   if (e.date === d) return true;
   if (e.repeat === "yearly") return yearlyIn(e.date, d.slice(0, 4)) === d;
   if (d < e.date) return false; // daily / weekly / monthly start at their first date
@@ -165,6 +167,63 @@ export function nextYearly(date, from = ymd()) {
     if (d && d >= from) return d;
   }
   return from; // unreachable for a valid date (a leap year comes within 8 years)
+}
+
+// ---- weeks and periods: one week start for every view (Settings → 한 주 시작; 기본 = Sunday) ----
+let weekStartDay = 0;
+/** app.js sets this from config `ui.weekStart`: "mon" → Monday, anything else → Sunday. */
+export const setWeekStart = (v) => (weekStartDay = v === "mon" ? 1 : 0);
+export const weekStart = () => weekStartDay;
+export const weekFirstDay = (d) => addDays(d, -((parseYmd(d).getDay() - weekStartDay + 7) % 7));
+/** Last day of the week or month containing `d` (a quota's due day). */
+export function periodEnd(repeat, d) {
+  if (repeat === "weekly") return addDays(weekFirstDay(d), 6);
+  if (repeat === "monthly") {
+    const x = parseYmd(d);
+    return ymd(new Date(x.getFullYear(), x.getMonth() + 1, 0));
+  }
+  return d;
+}
+/** The day whose tick an entry carries for day `d`: a quota ticks its period's end, others the day itself. */
+export const tickDay = (e, d) => (e.quota ? periodEnd(e.repeat, d) : d);
+
+/**
+ * Old data/checklist.json items as shared entries (`todo`; weeklies and monthlies become `quota`s).
+ * The real conversion is Rust's (migrate.rs merge_checklist, at startup); this mirror serves the browser mock.
+ * `ws`: 1 = weeks start Monday, 0 = Sunday. Ids already in `events` are skipped, so it can run twice.
+ */
+export function checklistToEvents(items, events, ws, today = ymd()) {
+  const have = new Set(events.map((e) => e?.id));
+  const isDay = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const weekEnd = (d) => addDays(d, 6 - ((parseYmd(d).getDay() - ws + 7) % 7));
+  const monthEnd = (m) => ymd(new Date(+m.slice(0, 4), +m.slice(5, 7), 0));
+  const out = [];
+  (Array.isArray(items) ? items : []).forEach((i, n) => {
+    if (!i || typeof i !== "object" || typeof i.title !== "string") return;
+    const id = typeof i.id === "string" && i.id ? i.id : `ck-${n}`;
+    if (have.has(id)) return;
+    have.add(id);
+    const repeat = i.repeat === true ? "daily" : ["daily", "weekly", "monthly"].includes(i.repeat) ? i.repeat : null;
+    const keys = (Array.isArray(i.doneKeys) ? i.doneKeys : Array.isArray(i.doneDates) ? i.doneDates : []).filter(
+      (k) => typeof k === "string",
+    );
+    const e = { id, title: [...i.title].slice(0, 300).join(""), date: isDay(i.date) ? i.date : today, todo: true, tags: [], repeat };
+    if (!repeat) {
+      e.done = !!i.done;
+      if (isDay(i.doneOn)) e.doneOn = i.doneOn;
+    } else {
+      const done =
+        repeat === "daily"
+          ? keys.filter(isDay)
+          : repeat === "weekly"
+            ? keys.filter((k) => isDay(k.slice(1)) && k[0] === "W").map((k) => weekEnd(k.slice(1)))
+            : keys.filter((k) => /^\d{4}-\d{2}$/.test(k)).map(monthEnd);
+      e.doneDates = [...new Set(done)].sort();
+      if (repeat !== "daily") e.quota = true;
+    }
+    out.push(e);
+  });
+  return [...events, ...out];
 }
 
 /** A repeating entry is done per occurrence (its `doneDates`); a one-off by `done`. */

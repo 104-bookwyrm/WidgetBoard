@@ -64,6 +64,19 @@ Placement           { id, type, display, x, y, w, h, name?, settings: {...} }
 - Calendar Details gets Date, Repeat (none, daily, weekly, monthly, yearly) and Tags. Monthly on the 29th-31st falls on a shorter month's last day. Typed shortcuts keep working; `@매일` `@매주` `@매월` `@매년` are added.
 - A repeating entry has a checkbox per occurrence (completed dates stored on the entry). Skip-one is deferred; change-one and "this and following" are out of scope.
 
+## One entry store (decided 2026-10-12)
+
+- Calendar, checklist and D-day are views of one store, `data/events.json`. The calendar places entries on days, the
+  checklist is what to do today, this week and this month, and D-day counts down to what is next.
+- Checklist entries carry `todo`; only they carry over (↪) when left unticked. Weekly and monthly checklist tasks are
+  `quota`s due on the period's last day. One week start for every view: Settings → 한 주 시작, 기본 = Sunday.
+- Checklist daily routines stay in the checklist (not drawn on the calendar or in D-day).
+- D-day keeps its picked countdown list (icons, 1일째, order, 매년 반복). Its schedule view lists every entry except
+  dailies, soonest first; a ticked occurrence leaves it until the next one.
+- A Showcase birthday is one yearly entry with the D-day marker; the Showcase owns its name and date.
+- `data/checklist.json` merges into `events.json` once at startup (Rust `migrate::merge_checklist`, after a
+  pre-migration snapshot). The Feb 29 rule lives in `util.js` `yearlyIn` (leap years only for now).
+
 ## Persistence and recovery requirements
 
 - Revision comparison and the write occur under the same backend synchronization boundary.

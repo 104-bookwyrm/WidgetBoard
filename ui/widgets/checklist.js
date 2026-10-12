@@ -1,10 +1,10 @@
-// Checklist with three tabs:
-//  • 오늘 (today)  — one-off to-dos (unfinished ones carry over, ↪), daily routines (🔁),
+// Checklist with three tabs, all over the shared entry store (data/events.json, the calendar's and D-day's too):
+//  • 오늘 (today)  - one-off to-dos (unfinished ones carry over, ↪), daily routines (🔁),
 //                    and optionally today's calendar entries (📅, ticked in both places)
-//  • 이번 주 (week) — weekly recurring tasks: tick once per week, unticked again when a new week starts
-//  • 이번 달 (month)— monthly recurring tasks: tick once per month, unticked again on the 1st
-// Items are shared by every checklist widget (data/checklist.json); each widget remembers its own tab.
-// Week start: Monday by default, config.json → "ui": { "weekStart": "sun" } for Sunday.
+//  • 이번 주 (week) - weekly quotas: due on the week's last day, ticked once per week
+//  • 이번 달 (month)- monthly quotas: due on the month's last day, ticked once per month
+// Entries added here carry `todo: true` (only they carry over); quotas carry `quota: true`.
+// Week start: Settings → 한 주 시작 (util.js weekFirstDay; 기본 = Sunday). Each widget remembers its own tab.
 import {
   esc,
   ymd,
@@ -16,6 +16,8 @@ import {
   occursOn,
   eventDone,
   setEventDone,
+  weekFirstDay,
+  tickDay,
 } from "../util.js";
 import { icon } from "../icons.js";
 
@@ -87,8 +89,7 @@ export default {
     s.sync = s.sync !== false;
     s.hideDone = !!s.hideDone;
     if (!TABS.includes(s.tab)) s.tab = "today";
-    let items = [];
-    let events = [];
+    let events = []; // the whole shared store; checklist rows are its `todo` entries plus today's entries
 
     root.innerHTML = `
       <div class="ck">
@@ -107,42 +108,9 @@ export default {
     const fmt = (opts, d) =>
       new Intl.DateTimeFormat(lang, opts).format(parseYmd(d));
 
-    // ---- periods ----
-    const weekStart = () => (api.config?.ui?.weekStart === "sun" ? 0 : 1);
-    function weekFirstDay(d) {
-      const back = (parseYmd(d).getDay() - weekStart() + 7) % 7;
-      return addDays(d, -back);
-    }
-    const periodKey = (repeat, d = today()) =>
-      repeat === "daily"
-        ? d
-        : repeat === "weekly"
-          ? "W" + weekFirstDay(d)
-          : repeat === "monthly"
-            ? d.slice(0, 7)
-            : null;
-    const isDone = (i) =>
-      i.repeat ? (i.doneKeys || []).includes(periodKey(i.repeat)) : !!i.done;
-
-    /** Older files: `repeat: true` + `doneDates` meant daily. */
-    function normalize(i) {
-      const it = {
-        ...i,
-        id: i.id || uid(),
-        title: String(i.title).slice(0, 300),
-      };
-      if (it.repeat === true) it.repeat = "daily";
-      if (!["daily", "weekly", "monthly"].includes(it.repeat)) it.repeat = null;
-      if (it.repeat)
-        it.doneKeys = Array.isArray(it.doneKeys)
-          ? it.doneKeys
-          : Array.isArray(it.doneDates)
-            ? it.doneDates
-            : [];
-      delete it.doneDates;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(it.date || "")) it.date = today();
-      return it;
-    }
+    // ---- periods: a daily ticks today, a quota ticks its week's or month's last day ----
+    const isDone = (i) => eventDone(i, tickDay(i, today()));
+    const todos = () => events.filter((e) => e.todo && typeof e.title === "string");
 
     // ---- rows per tab ----
     function rowsFor(tab) {
@@ -150,7 +118,7 @@ export default {
       if (tab === "today") {
         const cal = s.sync
           ? events
-              .filter((e) => occursOn(e, d) && !e.dday) // d-day items are countdowns, not to-dos
+              .filter((e) => !e.todo && occursOn(e, d) && !e.dday) // d-day items are countdowns, not to-dos
               .sort(
                 (a, b) =>
                   (a.time ? 0 : 1) - (b.time ? 0 : 1) ||
@@ -158,7 +126,7 @@ export default {
               )
               .map((e) => ({ kind: "cal", item: e, done: eventDone(e, d) }))
           : [];
-        const own = items
+        const own = todos()
           .filter(
             (i) =>
               i.repeat === "daily" ||
@@ -168,8 +136,8 @@ export default {
           .map((i) => ({ kind: "own", item: i, done: isDone(i) }));
         return [...cal, ...own];
       }
-      return items
-        .filter((i) => i.repeat === REPEAT_OF_TAB[tab])
+      return todos()
+        .filter((i) => i.quota && i.repeat === REPEAT_OF_TAB[tab])
         .map((i) => ({ kind: "own", item: i, done: isDone(i) }));
     }
     function periodLabel(tab) {
@@ -254,10 +222,9 @@ export default {
     }
 
     // ---- saving / interaction ----
-    const saveItems = () => api.store.set("checklist", items).catch(() => {});
     const saveEvents = () => api.store.set("events", events).catch(() => {});
     const own = (el) =>
-      items.find((i) => i.id === el.closest("[data-id]")?.dataset.id);
+      todos().find((i) => i.id === el.closest("[data-id]")?.dataset.id);
     const cal = (el) =>
       events.find((e) => e.id === el.closest("[data-cal]")?.dataset.cal);
 
@@ -273,15 +240,13 @@ export default {
       const it = own(e.target);
       if (!it) return;
       if (it.repeat) {
-        const key = periodKey(it.repeat);
-        const set = new Set(it.doneKeys || []);
-        on ? set.add(key) : set.delete(key);
-        it.doneKeys = [...set].sort().slice(-60);
+        setEventDone(it, tickDay(it, today()), on);
+        it.doneDates = it.doneDates.slice(-60);
       } else {
         it.done = on;
         it.doneOn = on ? today() : undefined;
       }
-      saveItems();
+      saveEvents();
       render();
     });
     box.addEventListener("click", (e) => {
@@ -300,13 +265,13 @@ export default {
       const it = own(e.target);
       if (!it) return;
       if (a === "del") {
-        const i = items.indexOf(it);
-        items = items.filter((x) => x !== it);
-        saveItems();
+        const i = events.indexOf(it);
+        events = events.filter((x) => x !== it);
+        saveEvents();
         render();
         api.deleted(() => {
-          items.splice(Math.min(i, items.length), 0, it);
-          saveItems();
+          events.splice(Math.min(i, events.length), 0, it);
+          saveEvents();
           render();
         });
       }
@@ -317,14 +282,14 @@ export default {
           it.doneOn = it.done ? today() : undefined;
           it.date = today();
           it.repeat = null;
-          delete it.doneKeys;
+          delete it.doneDates;
         } else {
-          it.doneKeys = it.done ? [today()] : [];
+          it.doneDates = it.done ? [today()] : [];
           it.repeat = "daily";
           delete it.done;
           delete it.doneOn;
         }
-        saveItems();
+        saveEvents();
         render();
       }
     });
@@ -342,11 +307,11 @@ export default {
       if (!it || span.querySelector("input")) return;
       const id = it.id;
       editInlineText(span, it.title, (title) => {
-        const current = items.find((item) => item.id === id);
+        const current = events.find((item) => item.id === id);
         if (!current) return; // deleted by another widget while editing
         if (title) current.title = title.slice(0, 300);
-        else items = items.filter((item) => item.id !== id);
-        saveItems();
+        else events = events.filter((item) => item.id !== id);
+        saveEvents();
       }, render);
     });
     q(".ck-add").addEventListener("keydown", (e) => {
@@ -354,29 +319,19 @@ export default {
       const title = e.target.value.trim().slice(0, 300);
       if (!title) return;
       const repeat = REPEAT_OF_TAB[s.tab] ?? null;
-      items.push(
+      const base = { id: uid(), title, date: today(), todo: true, tags: [] };
+      events.push(
         repeat
-          ? { id: uid(), title, date: today(), repeat, doneKeys: [] }
-          : { id: uid(), title, date: today(), done: false, repeat: null },
+          ? { ...base, repeat, quota: true, doneDates: [] }
+          : { ...base, done: false, repeat: null },
       );
       e.target.value = "";
-      saveItems();
+      saveEvents();
       render();
     });
 
     // ---- data ----
     const renderLater = deferWhileEditing(box, render);
-    async function loadItems() {
-      const d = await api.store.get("checklist").catch(() => null);
-      items = Array.isArray(d)
-        ? d
-            .filter(
-              (i) => i && typeof i === "object" && typeof i.title === "string",
-            )
-            .map(normalize)
-        : [];
-      renderLater();
-    }
     async function loadEvents() {
       const d = await api.store.get("events").catch(() => null);
       events = Array.isArray(d)
@@ -384,13 +339,11 @@ export default {
         : [];
       renderLater();
     }
-    api.onStore("checklist", loadItems);
     api.onStore("events", loadEvents);
     api.onConfig(renderLater); // week start may change
 
     api.onDayChange(renderLater); // new day / week / month: recurring items untick
     render();
-    loadItems();
     loadEvents();
 
     const menuToggle = (k, on, off) => ({
@@ -460,8 +413,8 @@ export default {
         {
           text: t("ck.menu_clear_done"),
           action: () => {
-            items = items.filter((i) => i.repeat || !i.done);
-            saveItems();
+            events = events.filter((i) => !(i.todo && !i.repeat && i.done));
+            saveEvents();
             render();
           },
         },

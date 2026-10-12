@@ -1062,8 +1062,8 @@ async function dragResize(p, sel, dw, dh) {
   await add("분리수거");
   await add("빨래");
   ok(
-    (await p.textContent(".ck-date")).includes("9. 21."),
-    "Q: week label starts Monday 9/21",
+    (await p.textContent(".ck-date")).includes("9. 20."),
+    "Q: week label starts Sunday 9/20 (기본: the calendar's week)",
     await p.textContent(".ck-date"),
   );
   await p.click('.ck-row:has-text("분리수거") input');
@@ -1086,17 +1086,18 @@ async function dragResize(p, sel, dw, dh) {
     await p.reload();
     await ready(p);
   };
-  await next(24 * 3600 * 1000); // Sun 9/27 — same Monday-start week
+  await next(24 * 3600 * 1000); // Sun 9/27: a new Sunday-start week
   await tab("week");
   ok(
-    JSON.stringify(await state()) === JSON.stringify(["분리수거✓", "빨래"]),
-    "Q: Sunday — still the same week",
+    JSON.stringify(await state()) === JSON.stringify(["분리수거", "빨래"]),
+    "Q: Sunday - weekly tasks unticked for the new week",
     JSON.stringify(await state()),
   );
-  await next(24 * 3600 * 1000); // Mon 9/28 — new week
+  await p.click('.ck-row:has-text("분리수거") input');
+  await next(24 * 3600 * 1000); // Mon 9/28: same week
   ok(
-    JSON.stringify(await state()) === JSON.stringify(["분리수거", "빨래"]),
-    "Q: Monday — weekly tasks unticked for the new week",
+    JSON.stringify(await state()) === JSON.stringify(["분리수거✓", "빨래"]),
+    "Q: Monday - still the same week",
     JSON.stringify(await state()),
   );
   await tab("month");
@@ -1114,15 +1115,15 @@ async function dragResize(p, sel, dw, dh) {
     (await p.textContent(".ck-date")).includes("10월"),
     "Q: month label follows",
   );
-  // Sunday week start via config
+  // Monday week start via config
   await tab("week");
   await p.evaluate(() =>
-    __mock.emit("config-changed", { ui: { weekStart: "sun" } }),
+    __mock.emit("config-changed", { ui: { weekStart: "mon" } }),
   );
   await p.waitForTimeout(100);
   ok(
-    (await p.textContent(".ck-date")).includes("9. 27."),
-    'Q: weekStart "sun" moves the week to Sun 9/27',
+    (await p.textContent(".ck-date")).includes("9. 28."),
+    'Q: weekStart "mon" moves the week to Mon 9/28',
     await p.textContent(".ck-date"),
   );
   await p.screenshot({ path: artifact("Q.png") });
@@ -2481,6 +2482,56 @@ async function dragResize(p, sel, dw, dh) {
     del: !!document.querySelector(".dd-editor [data-a=del]"),
   }));
   ok(r.d === "D-7" && r.img && ed.locked && !ed.del, "RT20: Showcase birthday listed as a locked yearly D-day", JSON.stringify({ ...r, ...ed }));
+  await p.close();
+}
+
+// ===== RT21-22. one shared entry store: checklist, calendar and D-day (owner decision 2026-10-12) =====
+{
+  // RT21: an old checklist.json becomes shared entries; a weekly quota lands on the week's last day, dailies stay
+  // checklist-only, and the D-day schedule skips dailies and ticked entries
+  const p = await page(); // Sat 2026-09-26, week start 기본 = Sunday
+  await seed(p, [
+    { id: "ck", type: "checklist", x: 0, y: 0, w: 3, h: 5, settings: { tab: "week" } },
+    { id: "ca", type: "calendar", x: 3, y: 0, w: 5, h: 5, settings: { view: "mini" } },
+    { id: "dd", type: "dday", x: 8, y: 0, w: 3, h: 5, settings: { view: "schedule" } },
+  ], {
+    "wb-store-checklist": [
+      { id: "r", title: "스트레칭", date: "2026-09-01", repeat: "daily", doneKeys: [] },
+      { id: "w", title: "주간 업로드", date: "2026-09-01", repeat: "weekly", doneKeys: [] },
+      { id: "o", title: "원고 마감", date: "2026-09-29", done: false },
+      { id: "x", title: "끝난 일", date: "2026-09-30", done: true },
+    ],
+  });
+  await p.waitForTimeout(300);
+  const st = await p.evaluate(() => ({
+    left: localStorage.getItem("wb-store-checklist"),
+    events: JSON.parse(localStorage.getItem("wb-store-events")).map((e) => e.id + (e.todo ? "t" : "") + (e.quota ? "q" : "")),
+    week: [...document.querySelectorAll(".widget[data-id=ck] .ck-title")].map((x) => x.textContent),
+    sched: [...document.querySelectorAll(".widget[data-id=dd] .dd-row")].map((r) => r.querySelector(".dd-name").textContent + "|" + r.querySelector(".dd-d").textContent),
+    sat: document.querySelector('.widget[data-id=ca] .cal-grid [data-d="2026-09-26"]').classList.contains("has"),
+    fri: document.querySelector('.widget[data-id=ca] .cal-grid [data-d="2026-09-25"]').classList.contains("has"),
+  }));
+  ok(
+    st.left === null && st.events.join() === "rt,wtq,ot,xt" && st.week.join() === "주간 업로드" &&
+      st.sat && !st.fri && st.sched.join() === "주간 업로드|D-Day,원고 마감|D-3",
+    "RT21: checklist joins the shared store (quota on Saturday, no dailies, ticked hidden)", JSON.stringify(st),
+  );
+  await p.close();
+}
+{
+  // RT22: ticking a weekly quota in the checklist hides it from the D-day schedule until next week's
+  const p = await page();
+  await seed(p, [
+    { id: "ck", type: "checklist", x: 0, y: 0, w: 3, h: 5, settings: { tab: "week" } },
+    { id: "dd", type: "dday", x: 4, y: 0, w: 3, h: 5, settings: { view: "schedule" } },
+  ], { "wb-store-events": [{ id: "w", title: "주간 업로드", date: "2026-09-01", todo: true, tags: [], repeat: "weekly", quota: true, doneDates: [] }] });
+  await p.click('.widget[data-id=ck] .ck-row:has-text("주간 업로드") input');
+  await p.waitForTimeout(300);
+  const r = await p.evaluate(() => ({
+    done: JSON.parse(localStorage.getItem("wb-store-events"))[0].doneDates,
+    sched: [...document.querySelectorAll(".widget[data-id=dd] .dd-row .dd-d")].map((x) => x.textContent),
+  }));
+  ok(JSON.stringify(r.done) === '["2026-09-26"]' && r.sched.join() === "D-7", "RT22: a ticked quota waits for next week", JSON.stringify(r));
   await p.close();
 }
 

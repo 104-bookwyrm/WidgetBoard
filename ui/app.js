@@ -12,6 +12,7 @@ import {
   syncScheme,
   isLight,
   mergeById,
+  setWeekStart,
   assetUrl as assetUrlOf,
 } from "./util.js";
 import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
@@ -1388,6 +1389,7 @@ const ui = () => ({
 });
 function applyUi() {
   const u = ui();
+  setWeekStart(u.weekStart); // one week for the calendar, checklist quotas and D-day
   const c = document.body.classList;
   c.toggle("header-always", u.header === "always");
   c.toggle("header-hidden", u.header === "hidden");
@@ -1507,21 +1509,14 @@ async function checkReminder() {
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   if (!isPrimary || !at || hm !== at || remindedOn === today) return;
   remindedOn = today;
-  const items =
-    (await invoke("store_get", { key: "checklist" }).catch(() => null)) || [];
   const events =
     (await invoke("store_get", { key: "events" }).catch(() => null)) || [];
-  const left =
-    (Array.isArray(items) ? items : []).filter(
-      (i) =>
-        i &&
-        (i.repeat === "daily" || i.repeat === true
-          ? !(i.doneKeys || i.doneDates || []).includes(today)
-          : !i.repeat && !i.done && (i.date || today) <= today),
-    ).length +
-    (Array.isArray(events) ? events : []).filter(
-      (e) => e && occursOn(e, today) && !eventDone(e, today),
-    ).length;
+  // what the checklist's 오늘 tab shows unticked: to-dos due or carried over, dailies, today's entries
+  const left = (Array.isArray(events) ? events : []).filter((e) => {
+    if (!e || typeof e.date !== "string" || e.dday || e.quota) return false;
+    if (e.todo && !e.repeat) return !e.done && e.date <= today;
+    return occursOn(e, today) && !eventDone(e, today);
+  }).length;
   if (!left) return;
   const msg = t("remind.left", { n: left });
   toast(msg);

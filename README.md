@@ -119,7 +119,7 @@ contrast, font and motion settings.
 
 | page                    | what's there                                                                                                                                                                                                          |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 일반 · General          | language, start with Windows, week start (default: calendar Sunday, checklist Monday · Sunday · Monday), your timezone (for reminders; defaults to this computer's)                                                   |
+| 일반 · General          | language, start with Windows, week start (default Sunday · Sunday · Monday; one week for the calendar and checklist), your timezone (for reminders; defaults to this computer's) |
 | 모양 · Appearance       | theme colours, font, text size, corner radius, outline, opacity, cell size with live preview; top strip (on hover · always · hidden), spacing, default frame; reset theme; AI theme copy/paste/undo; open `theme.css` |
 | 위젯 · 배치 · Widgets   | every widget on every monitor (name, hide/show, move to another monitor, close); add a widget; lock layout; edit layout; Work/Study presets; saved layouts; the closed widgets bin; the memo archive                  |
 | 타이머 · 달력 · Timer   | timer sound, volume and repeats; timer presets (label + time, reorder); holiday country, your own holidays, days that aren't holidays                                                                                 |
@@ -214,9 +214,13 @@ Your to-dos, in three tabs. Every tab shows progress (`2/5` and a bar) and says 
   - 🔁 turns a to-do into a **daily routine**: it shows every day, and ticking it only counts for that day.
   - 📅 (on by default) also lists **today's calendar entries**. Ticking one here ticks it in the calendar, and the
     other way round.
-- **이번 주 · This week** - tasks you do once a week (recycling, laundry). Tick them any day of the week; they untick
-  themselves when a new week starts (Monday; can be Sunday - Settings → 일반).
-- **이번 달 · This month** - tasks you do once a month (bills, backups); they untick on the 1st.
+- **이번 주 · This week** - tasks you do once a week (recycling, laundry). Each is due on the week's last day, where the
+  calendar and the D-day schedule show it. Tick them any day of the week; they untick themselves when a new week
+  starts (Sunday by default; Monday in Settings → 일반).
+- **이번 달 · This month** - tasks you do once a month (bills, backups), due on the month's last day; they untick on
+  the 1st.
+- To-dos are calendar entries too: they show on their day in the calendar and count down in the D-day schedule.
+  Daily routines stay in the checklist.
 - Double-click a task to edit it (erase the text to delete), ✕ to delete.
 - **Day-well-done stamp**: when every Today item is done, a "참 잘했어요 / Well done!" stamp drops onto the list. Right-click →
   _스탬프_ turns it on/off, sets the tilt (slight / random / straight) and lets you use your own image.
@@ -255,8 +259,10 @@ Countdowns, listed like a Discord member list: round icon, name, date and tag, a
   the next one counted down. Korean day-1 counting is the default; a hidden per-item option counts from zero.
 - **Icons**: click the circle to pick any image you've uploaded before (several D-days can share one; it's stored once),
   upload a new one, or use none (the first letter of the name is shown).
-- **Two views** (🗓 / ≡): the **countdown** list, or a **schedule** of everything coming up - D-days and calendar
-  entries together, soonest first.
+- **Two views** (🗓 / ≡): the **countdown** list, or a **schedule** of everything coming up - D-days, calendar entries
+  and checklist to-dos together, soonest first. Daily routines and ticked entries stay out of it.
+- **매년 반복** (every year): a birthday or anniversary counts down to its next occurrence. A Showcase's birthday is
+  listed here on its own; change its name and date in the Showcase.
 - Click a row to edit or delete it. **Drag a row** to reorder.
 - **Filters**: the first chip cycles 전체 → 다가오는 → 지난 (all / upcoming / past); tag chips show only those tags.
 - D-days and the calendar share one list: a D-day shows on its date in the calendar (📌), and every D-day widget shows
@@ -458,8 +464,7 @@ All in `%APPDATA%\app.widgetboard.desktop\`:
 | `config.json`         | `app` (language, reduce motion), `ui` (appearance & accessibility), timer presets, holidays, `backup`, `archive`, `update`                 |
 | `settings.json`       | legacy app settings (pre-0.12); read once and merged into `config.json`                                                                    |
 | `theme.css`           | the theme                                                                                                                                  |
-| `data/events.json`    | calendar entries, D-days and showcase birthdays (shared by the calendar, checklist and D-day); holds any time, timezone, link and reminder on an entry |
-| `data/checklist.json` | checklist tasks                                                                                                                            |
+| `data/events.json`    | every entry: calendar entries, D-days, showcase birthdays and checklist to-dos (shared by the calendar, checklist and D-day); holds any time, timezone, link and reminder on an entry. An older `checklist.json` is merged in once at startup (a pre-migration backup is taken first) |
 | `data/bin.json`       | closed widgets waiting to be restored or erased                                                                                            |
 | `data/layouts.json`   | saved layouts; `layouts_shelf.json` widgets put away by a layout; `layouts_undo.json` the arrangement before the last switch               |
 | `diary/YYYY-MM-DD.md` | diary pages                                                                                                                                |
@@ -475,7 +480,7 @@ Backups go to `Documents\WidgetBoard\Backups\WidgetBoard-backup-YYYYMMDD-HHMM[-a
 - A widget that can't load, or an unknown widget type, shows a note instead of breaking the board - right-click → 닫기.
 - Closed something by mistake: _되돌리기_ in the message, or Settings → 위젯 · 배치 → closed widgets.
 - Lost more than that: Settings → 백업 · 데이터 → restore a backup (your current state is snapshotted first).
-- Damaged or hand-edited `layout.json` / `events.json` / `checklist.json` values are repaired on load; a broken
+- Damaged or hand-edited `layout.json` / `events.json` values are repaired on load; a broken
   `theme.css` value such as `--cell: abc` falls back to a safe default.
 - A change from another widget or monitor never wipes something you're halfway through typing.
 

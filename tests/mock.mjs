@@ -70,9 +70,9 @@ try {
   console.log("PASS settings command reaches board and shared persisted state");
   await settings.evaluate(() =>
     __mock.invoke("store_set", {
-      key: "checklist",
+      key: "events",
       src: "settings",
-      value: [{ id: "i", title: "shared", date: "2020-01-01", done: false }],
+      value: [{ id: "i", title: "shared", date: "2020-01-01", done: false, todo: true }],
     }),
   );
   await settings.evaluate(() =>
@@ -85,9 +85,9 @@ try {
   assert.equal(await board.locator(".ck-title").textContent(), "shared");
   await settings.evaluate(() =>
     __mock.invoke("store_set", {
-      key: "checklist",
+      key: "events",
       src: "settings",
-      value: [{ id: "i", title: "changed", date: "2020-01-01", done: false }],
+      value: [{ id: "i", title: "changed", date: "2020-01-01", done: false, todo: true }],
     }),
   );
   await board.waitForFunction(

@@ -11,6 +11,7 @@ import {
   uid,
   wheelScrollX,
   occursOn,
+  eventDone,
   nextYearly,
 } from "../util.js";
 import { icon } from "../icons.js";
@@ -275,16 +276,17 @@ export default {
       renderList();
     }
 
-    // Schedule: every upcoming shared event (d-day items + calendar entries), by next occurrence.
+    // Schedule: every upcoming shared entry (d-days, calendar entries, checklist to-dos and quotas) by next
+    // occurrence. Dailies are not countdowns; a ticked occurrence leaves the list until the next one.
     function renderSchedule() {
       const t0 = today();
       const rows = [];
       for (const e of events) {
-        if (!e || typeof e.date !== "string") continue;
+        if (!e || typeof e.date !== "string" || e.repeat === "daily") continue;
         let next = null;
         for (let i = 0; i <= 366 && !next; i++) {
           const d = addDays(t0, i);
-          if (occursOn(e, d)) next = d;
+          if (occursOn(e, d) && !eventDone(e, d)) next = d;
         }
         if (next) rows.push({ e, date: next, days: daysBetween(t0, next) });
       }
