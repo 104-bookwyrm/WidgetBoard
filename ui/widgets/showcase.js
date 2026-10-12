@@ -3,7 +3,7 @@
 // Birthday auto-syncs as a recurring calendar entry via shared data/events.json.
 // Frameless mode hides widget chrome so transparent PNGs sit on the desktop.
 // Data is inspectable: right-click → Export data (JSON to clipboard) / Import data.
-import { esc, ymd, daysBetween, uid, dropZone, nextYearly, yearlyIn } from '../util.js';
+import { esc, ymd, parseYmd, daysBetween, uid, dropZone, nextYearly } from '../util.js';
 import { icon } from '../icons.js';
 
 const QUOTE_INTERVAL = 8000; // ms between quote rotations
@@ -245,8 +245,11 @@ export default {
       api.save();
     }
 
-    // this year's birthday; a Feb 29 birthday keeps its own (valid) date in other years
-    const entryDate = () => yearlyIn(s.birthday, new Date().getFullYear()) || s.birthday;
+    // this year's birthday as the entry's date; a Feb 29 birthday keeps its own date (the entry stays a Feb 29 one)
+    const entryDate = () => {
+      const d = `${new Date().getFullYear()}-${s.birthday.slice(5)}`;
+      return ymd(parseYmd(d)) === d ? d : s.birthday;
+    };
     const ddayMarker = () => ({ mode: 'until', icon: s.imgs[0] || null, mstep: 0, munit: 'days', countFrom: 'one' });
     async function removeBirthdayEntry() {
       if (!s._calId) return;

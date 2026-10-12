@@ -67,6 +67,7 @@
   "dday.count_from_zero": "0일부터 세기",
   "dday.yearly": "매년 반복",
   "dday.from_showcase": "이름과 날짜는 쇼케이스에서 변경합니다.",
+  "dday.leap_note": "평년에는 2월 28일",
   "dday.ms_day": "{n}일",
   "dday.ms_month": "{n}개월",
   "dday.next": "다음 {m}",

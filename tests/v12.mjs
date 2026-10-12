@@ -238,9 +238,10 @@ const RAW = /\bset\.[a-z][a-z_.]+/; // an unresolved i18n key leaked into the DO
     "no raw keys on about page (en)",
     (sec.match(RAW) || [])[0],
   );
-  ok(/0\.12\.0/.test(sec), "version shown", sec);
+  const version = await p.evaluate(() => window.__mockMetadata.version); // from Cargo.toml, never stale
+  ok(sec.includes(version), "version shown", sec);
   ok(
-    /Current version v0\.12\.0/.test(sec),
+    sec.includes("Current version v" + version),
     "update status shows current version",
     sec,
   );

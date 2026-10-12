@@ -13,6 +13,7 @@ import {
   occursOn,
   eventDone,
   nextYearly,
+  leapFallback,
 } from "../util.js";
 import { icon } from "../icons.js";
 
@@ -300,7 +301,9 @@ export default {
             .map(({ e, date, days }) => {
               const label = days === 0 ? "D-Day" : `D-${days}`;
               const when =
-                date.replaceAll("-", ".") + (e.time ? " " + e.time : "");
+                date.replaceAll("-", ".") +
+                (e.time ? " " + e.time : "") +
+                (e.repeat === "yearly" && leapFallback(e.date, date) ? " · " + t("dday.leap_note") : "");
               const name = e.title || "";
               return `<div class="dd-row dd-sched" title="${esc(name)}\n${esc(when)}">
               <div class="dd-text"><div class="dd-name">${esc(name)}${isDday(e) ? `<span class="dd-badge">${esc(t("dday.badge"))}</span>` : ""}</div><div class="dd-sub">${esc(when)}</div></div>
@@ -347,6 +350,7 @@ export default {
                 : [
                     dateOf(it).replaceAll("-", "."),
                     it.yearly && it.mode !== "since" ? t("dday.yearly") : "",
+                    leapFallback(it.date, dateOf(it)) ? t("dday.leap_note") : "",
                     it.tag ? "#" + it.tag : "",
                   ]
                     .filter(Boolean)

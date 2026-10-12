@@ -131,7 +131,7 @@ export function zonedToInstant(ymdStr, hm, tz = "UTC") {
  * Does event `e` occur on day `d` ('YYYY-MM-DD')? Shared by the calendar grid, the
  * checklist "today" view and the reminder engine so recurrence is defined once.
  * ponytail: yearly + weekly only — no monthly/RRULE until a real need shows up.
- * ponytail: Feb-29 yearly entries don't render in non-leap years (no such grid cell); rare, left as-is.
+ * Feb 29 yearly entries fall on Feb 28 in other years (yearlyIn).
  */
 export function occursOn(e, d) {
   if (!e || typeof e.date !== "string") return false;
@@ -153,20 +153,23 @@ export function occursOn(e, d) {
 export const REPEATS = ["daily", "weekly", "monthly", "yearly"];
 
 /**
- * A yearly date's day in `year`, or null when that year has none. The one place for the Feb 29 rule:
- * for now a Feb 29 date exists only in leap years (same as occursOn).
+ * A yearly date's day in `year`. The one place for the Feb 29 rule: a year without Feb 29 uses Feb 28
+ * (birthdays, anniversaries). Null only for a malformed date.
  */
 export function yearlyIn(date, year) {
   const d = `${year}-${date.slice(5)}`;
-  return ymd(parseYmd(d)) === d ? d : null;
+  if (ymd(parseYmd(d)) === d) return d;
+  return date.slice(5) === "02-29" ? `${year}-02-28` : null;
 }
+/** True when `day` is a Feb 29 entry shown on Feb 28 (a year without Feb 29). */
+export const leapFallback = (date, day) => date.slice(5) === "02-29" && day.slice(5) === "02-28";
 /** Next day on or after `from` that a yearly `date` (birthday, anniversary) falls on. */
 export function nextYearly(date, from = ymd()) {
   for (let y = +from.slice(0, 4); y <= +from.slice(0, 4) + 8; y++) {
     const d = yearlyIn(date, y);
     if (d && d >= from) return d;
   }
-  return from; // unreachable for a valid date (a leap year comes within 8 years)
+  return from; // unreachable for a valid date
 }
 
 // ---- weeks and periods: one week start for every view (Settings → 한 주 시작; 기본 = Sunday) ----

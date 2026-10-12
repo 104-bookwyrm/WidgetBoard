@@ -67,6 +67,7 @@
   "dday.count_from_zero": "Count from 0 (exact days)",
   "dday.yearly": "Every year",
   "dday.from_showcase": "Change the name and date in the Showcase.",
+  "dday.leap_note": "Feb 28 in non-leap years",
   "dday.ms_day": "Day {n}",
   "dday.ms_month": "{n} months",
   "dday.next": "Next {m}",

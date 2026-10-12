@@ -75,7 +75,8 @@ Placement           { id, type, display, x, y, w, h, name?, settings: {...} }
   dailies, soonest first; a ticked occurrence leaves it until the next one.
 - A Showcase birthday is one yearly entry with the D-day marker; the Showcase owns its name and date.
 - `data/checklist.json` merges into `events.json` once at startup (Rust `migrate::merge_checklist`, after a
-  pre-migration snapshot). The Feb 29 rule lives in `util.js` `yearlyIn` (leap years only for now).
+  pre-migration snapshot). Feb 29 yearly dates fall on Feb 28 in other years, with a short note in D-day (`util.js`
+  `yearlyIn`, the one place for the rule).
 
 ## Persistence and recovery requirements
 

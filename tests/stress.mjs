@@ -2535,6 +2535,25 @@ async function dragResize(p, sel, dw, dh) {
   await p.close();
 }
 
+{
+  // RT23: a Feb 29 birthday counts down to Feb 28 in a year without Feb 29, with a short note; the Showcase
+  // entry stays a Feb 29 entry (so leap years still use the 29th)
+  const p = await page(); // 2026-09-26
+  await seed(p, [
+    { id: "sc", type: "showcase", x: 0, y: 0, w: 4, h: 4, settings: { name: "윤일", birthday: "2004-02-29", calSync: true } },
+    { id: "dd", type: "dday", x: 5, y: 0, w: 4, h: 4 },
+  ]);
+  await p.waitForSelector(".widget[data-id=dd] .dd-row");
+  const r = await p.evaluate(() => ({
+    sub: document.querySelector(".widget[data-id=dd] .dd-sub").textContent,
+    d: document.querySelector(".widget[data-id=dd] .dd-d").textContent,
+    date: JSON.parse(localStorage.getItem("wb-store-events"))[0].date,
+  }));
+  ok(r.sub.startsWith("2027.02.28") && r.sub.includes("평년에는 2월 28일") && r.d === "D-155" && r.date.endsWith("-02-29"),
+    "RT23: Feb 29 falls on Feb 28 with a note", JSON.stringify(r));
+  await p.close();
+}
+
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", errs);
 await b.close();
