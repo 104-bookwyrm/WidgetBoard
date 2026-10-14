@@ -576,7 +576,7 @@
   "set.backup.kind.pre-migration": "Before the data upgrade",
   "set.backup.kind.manual": "Made by you",
   "widget.pomodoro": "Pomodoro",
-  "hint.pomodoro": "▶ starts · focus time adds to the linked stopwatch's total",
+  "hint.pomodoro": "▶ starts · focus time counts in every focus stopwatch's total",
   "pomo.work": "Focus",
   "pomo.short": "Short break",
   "pomo.long": "Long break",

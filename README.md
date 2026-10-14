@@ -318,7 +318,7 @@ Click the category next to the total to switch it.
 - Quitting the app (or Windows shutting down) stops it at that moment. If the app crashed while it ran, the next
   start asks whether that run counts.
 
-### 뽀모도로 · Pomodoro (3×3 / 2×2)
+### 포모도로 · Pomodoro (3×3 / 2×2)
 
 Focus blocks and breaks: 25 min 집중 (focus), 5 min 짧은 휴식, and a 15 min 긴 휴식 after every 4 focus blocks.
 The dots show where you are in the cycle.
