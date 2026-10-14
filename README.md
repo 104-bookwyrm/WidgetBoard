@@ -54,7 +54,7 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
 
 **Tray icon** (bottom-right, maybe under `^`)
 
-- right-click → **위젯 추가 / Add widget ›** (Checklist, Calendar, D-day, Diary, Memo, Now Playing, Timer, Stopwatch,
+- right-click → **위젯 추가 / Add widget ›** (Checklist, Calendar, D-day, Diary, Memo, Now Playing, Timer, Stopwatch, Pomodoro,
   Image, Clock, Showcase, Audio, Collection), **레이아웃 편집 / Edit layout**, **테마 / Theme…**,
   **설정창 / Settings**, **레이아웃 / Layouts…**, **언어 / Language ›**, show/hide, open data folder,
   **설정 파일 열기 / Open settings file** (config.json), check for updates, quit.
@@ -70,6 +70,24 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
   widgets as faint ghosts and adds ✕ to each. **Right-click an empty cell** to add a widget right there. `Esc` or
   **완료** ends it.
 - Empty space is click-through: the desktop (or the windows behind) keep working.
+
+**Free placement** (Settings → 일반 → 배치 방식 → 자유 배치) is for arranging widgets like furniture or around your
+wallpaper art. The grid and push-aside stay the default (칸에 맞춤).
+
+- Widgets go anywhere, right up to the screen edges, at any size (down to each widget's minimum), and may overlap.
+- While you drag, a widget sticks to the screen edges and margins, the screen centre, other widgets' edges and centres,
+  and the spacing already used between neighbours; dashed guides show what it's sticking to. Hold **Alt** to place it
+  exactly.
+- Widgets stack in layers, as in a drawing program: moving or clicking a widget leaves the order alone. Change it with
+  right-click → **앞으로 / 뒤로 / 맨 앞으로 / 맨 뒤로**, or Ctrl+] / Ctrl+[ (with Shift: to the front / back) on a
+  selected widget.
+- **레이어 (Layers)** (right-click, or the button in the edit bar) lists every widget front first: drag a row to
+  reorder, the eye hides or shows, the lock fixes its position, and clicking a name selects the widget so the arrow
+  keys move it, even when it is covered. Right-click → **아래 위젯 선택** selects a widget under the pointer.
+- A widget with one of its own panels open (a pomodoro's settings, a calendar entry) sits on top while it is open.
+- Keyboard: arrows move 10 px (Alt: 1 px), Shift+arrows resize.
+- Each mode keeps its own arrangement: switching back to 칸에 맞춤 shows the grid layout again (widgets added while
+  free get a free cell, or overlap with a notice when the grid is full), and switching to free again restores it.
 
 **Layer** - widgets behave like any other window. Click a widget and that monitor's widgets come forward; click
 another program and it covers them. Edit layout and keyboard mode bring them to the front while they're on.
@@ -283,16 +301,36 @@ Counts down and rings (sound + blinking) when done.
 
 - Presets underneath (set your own in Settings → 타이머 · 달력), or click the digits and type: `25` = 25 min, `1:30`, `1:00:00`.
 - Scroll over the digits to add/subtract a minute. ▶ start, ❚❚ pause, ↺ reset. Up to 99 hours.
-- Keeps correct time through sleep and restarts.
+- Keeps correct time through sleep. Quitting the app (or Windows shutting down) pauses it with the time it had left.
 
 ### 스톱워치 · Stopwatch (3×3 / 2×2)
 
-Counts up, with a running **총 시간 (total)** of every second you've ever measured.
+Counts up. Every run is kept in one shared time record, under a category: **집중 (focus)** or **그 외 (other)**.
+Click the category next to the total to switch it.
 
 - ▶ start / ❚❚ stop. While running, **랩** records laps (shown when the widget is tall enough); when stopped,
   **초기화** clears this run - the total is kept.
-- The total survives restarts and keeps counting if the app is closed while the stopwatch runs.
-- ↺ next to the total resets it - click twice within 3 s so it can't happen by accident.
+- **총 시간 (total)** is all the time in the stopwatch's category, from every stopwatch and pomodoro. Two focus
+  stopwatches show the same focus total.
+- ↺ next to the total counts it from now on (click twice within 3 s). Nothing is deleted from the record.
+- Keeps counting through sleep. If the PC slept for a while (Settings → 타이머 · 달력 → 자리 비움 확인, 30 min by
+  default) it asks whether that time counts: **포함** keeps it, **빼기** takes it out.
+- Quitting the app (or Windows shutting down) stops it at that moment. If the app crashed while it ran, the next
+  start asks whether that run counts.
+
+### 뽀모도로 · Pomodoro (3×3 / 2×2)
+
+Focus blocks and breaks: 25 min 집중 (focus), 5 min 짧은 휴식, and a 15 min 긴 휴식 after every 4 focus blocks.
+The dots show where you are in the cycle.
+
+- ▶ start, ❚❚ pause, ⏭ skip to the next phase, ↺ start the cycle over. It rings at the end of each phase
+  (same sound settings as the timer); click the widget to stop the ringing.
+- Click the line at the bottom for settings: the lengths, focus blocks per long break, and starting the next phase
+  automatically.
+- All focus time goes to the shared time record as focus, including a block you pause or skip partway, so every
+  focus stopwatch's **총 시간** includes it.
+- Keeps correct time through sleep, and asks about long sleeps during a focus block like the stopwatch does.
+  Quitting the app (or Windows shutting down) pauses it.
 
 ### 메모 · Memo (3×3 / 2×2)
 
@@ -381,7 +419,7 @@ Three ways, from easiest to most flexible:
 ### Theme format (contract v1)
 
 Only CSS custom properties, in `:root { }` and optional `[data-widget="TYPE"] { }` blocks
-(TYPE: checklist, calendar, dday, diary, memo, nowplaying, timer, stopwatch, image, clock, showcase, audioplayer,
+(TYPE: checklist, calendar, dday, diary, memo, nowplaying, timer, stopwatch, pomodoro, image, clock, showcase, audioplayer,
 collection). This set is kept stable across versions.
 
 | variable                                     | controls                                                                     |
@@ -460,10 +498,12 @@ All in `%APPDATA%\app.widgetboard.desktop\`:
 
 | file                  | what                                                                                                                                       |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `layout.json`         | widgets: id, type, name, hidden, monitor, x, y, w, h (grid cells), settings (memo text, slideshow list…), background, font, colours, frame |
+| `layout.json`         | widgets: id, type, name, hidden, monitor, x, y, w, h (grid cells), free (x, y, w, h px) and z (free placement), settings (memo text, slideshow list…), background, font, colours, frame |
 | `config.json`         | `app` (language, reduce motion), `ui` (appearance & accessibility), timer presets, holidays, `backup`, `archive`, `update`                 |
 | `settings.json`       | legacy app settings (pre-0.12); read once and merged into `config.json`                                                                    |
 | `theme.css`           | the theme                                                                                                                                  |
+| `data/time.json`      | the time record: one entry per stopwatch run or pomodoro focus stretch (category, start, end, time taken out) |
+| `data/closed.json`    | when the app last quit properly; timers, stopwatches and pomodoros still running then stop at that moment |
 | `data/events.json`    | every entry: calendar entries, D-days, showcase birthdays and checklist to-dos (shared by the calendar, checklist and D-day); holds any time, timezone, link and reminder on an entry. An older `checklist.json` is merged in once at startup (a pre-migration backup is taken first) |
 | `data/bin.json`       | closed widgets waiting to be restored or erased                                                                                            |
 | `data/layouts.json`   | saved layouts; `layouts_shelf.json` widgets put away by a layout; `layouts_undo.json` the arrangement before the last switch               |
@@ -547,25 +587,13 @@ different public key refuse your updates). For every release:
    Updater logic tests (no Windows needed): `bash tools/updater-test/run.sh` (44 checks: signatures, relabelled or
    foreign-key releases, downgrades, http, tampered downloads, the exe swap and rollback).
 
-**Tests**: `tests/stress.mjs` (Playwright) checks damaged saved data, HTML/CSS injection, push-aside
-layout (incl. 60 random drags/resizes checked for overlaps), screen shrinking, both calendar views and holidays,
-checklist day/week/month rollover and calendar sync, stopwatch totals (simulated clock), reduced motion, D-day /
-diary / timer edge cases, memo persistence, slideshow timing and frameless transparency (pixel check), Now Playing
-with simulated media, the AI theme flow (prompt copy, pasting AI answers, rejection of non-themes, contrast
-warnings, undo), every setting, keyboard move/resize/menu, change type round trips, undo close, accessible names for
-every control, Windows forced-colours mode, large text at minimum sizes and save failures.
+**Tests**: a small set, kept short on purpose (about 30 s). `tests/smoke.mjs` checks the bugs that keep coming
+back: every widget type mounts, a save survives a reload, grid and free moves, the time record, stopping on close,
+the timer ringing, the Settings and Library windows opening, and both languages having the same keys. It never
+checks displayed text, so copy can change freely. Anything else is debugged when it breaks.
 Run `npm install`, `npx playwright install chromium`, then `npm test`. The tests serve UI files through Playwright
-without a background server. Set `PW_CHROMIUM` to use another Chromium executable. Boards in the stress suite run with the date pinned to 26 September 2026, which its calendar checks expect. `tests/v10.mjs` covers v0.10: every accessibility option
-is off on a fresh board and switches on/off cleanly, keyboard mode / overview / summaries / focus mode, click-to-carry,
-timer flash + notification + captions, the reminder (simulated clock), per-widget colours, all frames (pixel check),
-custom SVG frames and hostile values, layout presets, saved layouts, the shelf and undo, English without raw keys,
-weekly/yearly recurrence and event reminders (zoned fire time, notification link open, de-dupe), and the D-day ↔
-calendar unification (lossless migration, shared store, schedule view).
-`tests/v11.mjs` covers the update UI. `tests/v12.mjs` covers the settings window: every page
-in Korean and English without raw keys, each control writing the right config key, keyboard navigation and the
-narrow layout, backup/restore, widget names, hiding, locating, the closed widgets bin and the memo archive on both
-the settings and the board side. Rust unit tests (`cargo test` in `src-tauri`): backup/restore round trip, the
-v0.12 config migration, and image clean-up when erasing from the bin.
+without a background server. Set `PW_CHROMIUM` to use another Chromium executable. Rust unit tests (`cargo test`
+in `src-tauri`): backup/restore round trip, the v0.12 config migration, and image clean-up when erasing from the bin.
 
 `tests/persistence.mjs` covers layout content preservation, editor flushes, shared checklist edits and diary save
 failures. Both pages use `ui/mock-tauri.js` in browser tests. The runner reads the version and default config from
