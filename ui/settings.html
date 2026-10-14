@@ -267,6 +267,14 @@
               ></p>
             </div>
             <div class="set-row">
+              <label for="wg-layout" data-i18n="set.layout_mode"></label>
+              <select id="wg-layout" data-ui="layoutMode">
+                <option value="grid" data-i18n="set.layout_grid"></option>
+                <option value="free" data-i18n="set.layout_free"></option>
+              </select>
+              <p class="hint" data-i18n="set.layout_hint"></p>
+            </div>
+            <div class="set-row">
               <label for="wg-lock" data-i18n="set.lock"></label>
               <input type="checkbox" id="wg-lock" data-ui="lockLayout" />
             </div>
@@ -456,6 +464,17 @@
                 <option value="10">10</option>
                 <option value="30">30</option>
               </select>
+            </div>
+            <div class="set-row">
+              <label for="away-min" data-i18n="set.away"></label>
+              <select id="away-min" data-ui="awayMinutes">
+                <option value="15">15</option>
+                <option value="30" selected>30</option>
+                <option value="60">60</option>
+                <option value="120">120</option>
+                <option value="0" data-i18n="set.away_off"></option>
+              </select>
+              <p class="hint" data-i18n="set.away_hint"></p>
             </div>
           </fieldset>
 

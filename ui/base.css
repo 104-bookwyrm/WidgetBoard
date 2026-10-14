@@ -67,6 +67,7 @@ button.primary {
   position: relative;
   width: 100%;
   height: 100%;
+  isolation: isolate; /* free mode's stacking order stays inside the board, under menus and toasts */
 }
 body.edit #board {
   background-color: rgb(0 0 0 / 0.28);
@@ -117,6 +118,67 @@ body.edit #board {
   transition: none;
   z-index: 10;
   box-shadow: 0 8px 30px rgb(0 0 0 / 0.45);
+}
+/* free mode (Settings → 배치 방식): pixel rects and a stacking order instead of grid cells */
+#board.free .widget {
+  left: var(--fx);
+  top: var(--fy);
+  width: var(--fw);
+  height: var(--fh);
+  z-index: var(--z, 0);
+}
+#board.free .widget.moving {
+  z-index: 100000;
+}
+/* a widget with one of its own panels open sits on top while it is open */
+#board.free
+  .widget:has(.cal-pop:not([hidden]), .cal-ed:not([hidden]), .dd-editor:not([hidden]), .pm-set:not([hidden]), .coll-lb, .coll-edit) {
+  z-index: 99999;
+}
+body.edit #board.free .widget.locked .w-resize {
+  display: none;
+}
+body.edit #board.free {
+  background-image: none; /* no grid to snap to: guides appear while dragging */
+}
+#guides {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  pointer-events: none;
+}
+#guides i {
+  position: absolute;
+  border: 0 dashed var(--c2);
+}
+#guides .g-v {
+  top: 0;
+  bottom: 0;
+  border-left-width: 1px;
+}
+#guides .g-h {
+  left: 0;
+  right: 0;
+  border-top-width: 1px;
+}
+/* stopwatch / pomodoro: keep or take out time away (timelog.js awayHtml) */
+.tl-away {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2) var(--space-3);
+  flex: none;
+  max-width: 100%;
+  font-size: var(--fs-small);
+  color: var(--c3);
+}
+.tl-away[hidden] {
+  display: none;
+}
+.tl-away button {
+  padding: 0 8px;
+  font-size: var(--fs-small);
 }
 .widget.invalid {
   outline: 2px dashed var(--danger, #f55);
@@ -745,7 +807,8 @@ body.cvd-safe .widget.invalid {
 }
 
 /* panels added in v0.10 */
-#overview-panel {
+#overview-panel,
+#layers-panel {
   position: fixed;
   top: 24px;
   right: 24px;
@@ -805,9 +868,51 @@ body.cvd-safe .widget.invalid {
 #wc-blank {
   justify-self: end;
 }
-#overview-panel h3 {
+#overview-panel h3,
+#layers-panel h3 {
   margin: 0;
   font-size: 14px;
+}
+#layers-panel .hint {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+#layers-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+#layers-list li {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+#layers-list li.drop-above {
+  border-top-color: var(--c2);
+}
+#layers-list li.drop-below {
+  border-bottom-color: var(--c2);
+}
+#layers-list button {
+  padding: 2px 5px;
+}
+#layers-list .ly-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: grab;
+}
+#layers-list .ly-name.off {
+  color: var(--text-muted);
 }
 #overview-list {
   list-style: none;
@@ -825,7 +930,8 @@ body.cvd-safe .widget.invalid {
   margin-right: 4px;
   font-weight: 600;
 }
-#overview-panel .row {
+#overview-panel .row,
+#layers-panel .row {
   display: flex;
   gap: 8px;
   justify-content: flex-end;

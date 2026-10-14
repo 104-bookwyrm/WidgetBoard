@@ -456,7 +456,7 @@ const BASE = [
     const w = __mock.widgets();
     w[0].settings = { duration: 60000, remaining: 1200, endAt: null };
     localStorage.setItem("wb-widgets", JSON.stringify(w));
-    localStorage.removeItem("wb-content"); // the seeded settings are the timer's state again
+    for (const k of Object.keys(localStorage)) if (k.startsWith("wb-content")) localStorage.removeItem(k); // the seeded settings are the timer's state again
   });
   await p.reload();
   await ready(p);

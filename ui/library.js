@@ -65,7 +65,9 @@ function preview(c) {
     case "timer":
       return `<div class="lib-preview"><span class="big">${fmtTimer(d.endAt ? Math.max(0, d.endAt - Date.now()) : (d.remaining ?? d.duration ?? 0))}</span></div>`;
     case "stopwatch":
-      return `<div class="lib-preview"><span class="big">${esc(t("lib.laps", { t: fmtTotal(d.total ?? 0) }))}</span></div>`;
+      return `<div class="lib-preview"><span class="big">${fmtTotal(d.elapsed ?? 0)}</span>\n${esc(t("time." + (d.cat || "focus")))}</div>`;
+    case "pomodoro":
+      return `<div class="lib-preview"><span class="big">${fmtTimer(d.endAt ? Math.max(0, d.endAt - Date.now()) : (d.remaining ?? 0))}</span>\n${esc(t("pomo." + (d.phase || "work")))}</div>`;
   }
   return `<div class="lib-preview"></div>`;
 }

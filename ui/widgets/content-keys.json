@@ -4,6 +4,7 @@
   "showcase": ["name", "imgs", "quotes", "birthday", "color", "calSync"],
   "collection": ["items"],
   "audioplayer": ["tracks"],
-  "timer": ["duration", "remaining", "endAt"],
-  "stopwatch": ["startedAt", "elapsed", "total", "laps"]
+  "timer": ["duration", "remaining", "endAt", "startedAt"],
+  "stopwatch": ["startedAt", "elapsed", "total", "laps", "cat", "since", "runId", "cuts", "away"],
+  "pomodoro": ["phase", "remaining", "endAt", "round", "workFrom", "runId", "runStart", "cuts", "away", "work", "short", "long", "every", "auto", "day", "done"]
 }

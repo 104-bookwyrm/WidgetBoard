@@ -21,8 +21,15 @@ const parse = (str) => {
 };
 
 let audio;
+/** Create/resume the shared AudioContext; call it during a click (autoplay rules). */
+export function unlockAudio() {
+  try {
+    audio ??= new AudioContext();
+    audio.resume?.();
+  } catch {}
+}
 /** volume 0–1 (Settings → 타이머 소리). */
-function beep(volume = 0.6) {
+export function beep(volume = 0.6) {
   if (!(volume > 0)) return;
   try {
     audio ??= new AudioContext();
@@ -45,7 +52,7 @@ export default {
   title: "Timer",
   size: { w: 3, h: 2 },
   min: { w: 2, h: 2 },
-  defaults: { duration: 300000, remaining: 300000, endAt: null },
+  defaults: { duration: 300000, remaining: 300000, endAt: null, startedAt: null },
   css: `
     .timer { height: 100%; box-sizing: border-box; padding: calc(var(--head-h) - 6px) var(--pad) var(--pad);
       display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 7cqh; }
@@ -155,8 +162,10 @@ export default {
     function start() {
       audio ??= new AudioContext(); // unlock audio during the click
       audio.resume?.();
+      stopRing(); // Enter/Space on Start while it rings: the old ring loop would cut the next alarm short
       if (s.remaining <= 0) s.remaining = s.duration;
-      s.endAt = Date.now() + s.remaining;
+      s.startedAt = Date.now();
+      s.endAt = s.startedAt + s.remaining;
       api.save();
       run();
       render();
@@ -165,6 +174,7 @@ export default {
       s.remaining = left();
       s.endAt = null;
       clearInterval(tick);
+      if (s.remaining <= 0) return finish(true); // paused in the moment it ran out: it still rings
       api.save();
       render();
     }
@@ -248,7 +258,13 @@ export default {
     });
 
     // Finished while the app was closed/asleep: show it, no sound.
-    if (s.endAt && s.endAt <= Date.now()) finish(false);
+    // Counting down when the app closed (or crashed: then at this launch): paused there with the time it had left.
+    const lo = s.endAt && api.leftover?.(num(s.startedAt, 0));
+    if (lo && s.endAt > lo.at) {
+      s.remaining = s.endAt - lo.at;
+      s.endAt = null;
+      api.save();
+    } else if (s.endAt && s.endAt <= Date.now()) finish(false);
     run();
     render();
     return {

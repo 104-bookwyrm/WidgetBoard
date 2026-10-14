@@ -10,12 +10,14 @@
     "test:v11": "node tests/v11.mjs",
     "test:v12": "node tests/v12.mjs",
     "test:persistence": "node tests/persistence.mjs",
-    "test": "npm run test:persistence && npm run test:mock && npm run test:backups && npm run test:v10 && npm run test:v11 && npm run test:v12 && npm run test:stress",
+    "test": "npm run test:persistence && npm run test:mock && npm run test:backups && npm run test:v10 && npm run test:v11 && npm run test:v12 && npm run test:v13 && npm run test:v14 && npm run test:stress",
     "test:mock": "node tests/mock.mjs",
-    "test:backups": "node tests/backups.mjs"
+    "test:backups": "node tests/backups.mjs",
+    "test:v13": "node tests/v13.mjs",
+    "test:v14": "node tests/v14.mjs"
   },
   "devDependencies": {
-    "pngjs": "^7.0.0",
-    "playwright": "^1.55.0"
+    "playwright": "^1.55.0",
+    "pngjs": "^7.0.0"
   }
 }

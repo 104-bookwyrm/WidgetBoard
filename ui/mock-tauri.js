@@ -18,6 +18,21 @@ export function createMockTauri() {
     JSON.parse(localStorage.getItem(key) ?? JSON.stringify(fallback));
   const set = (key, value) => localStorage.setItem(key, JSON.stringify(value));
   const all = () => get("wb-widgets", []);
+  // Library content: one key per item. A single shared map lost updates: pages see each other's localStorage
+  // writes late, so two windows saving different items at once wrote back each other's stale copy.
+  // Tests may still seed the whole map as "wb-content"; per-item keys override it (null = erased).
+  const CONTENT_KEY = "wb-content:";
+  const contentItems = () => {
+    const items = get("wb-content", {});
+    for (const k of Object.keys(localStorage))
+      if (k.startsWith(CONTENT_KEY)) {
+        const id = k.slice(CONTENT_KEY.length);
+        const v = get(k);
+        if (v) items[id] = v;
+        else delete items[id];
+      }
+    return items;
+  };
   const config = () => get("wb-config", window.__mockConfig);
   const app = () => ({
     lang: config().app?.lang || query.get("lang") || "ko",
@@ -161,6 +176,8 @@ export function createMockTauri() {
           theme: localStorage.getItem("wb-theme") || "",
           assetsDir: "",
           autostart: !!localStorage.getItem("wb-autostart"),
+          // launched 0: every saved run counts as started in this launch, unless a test seeds wb-session
+          session: get("wb-session", { launched: 0, closed: null }),
         };
       case "get_settings":
         return {
@@ -269,12 +286,11 @@ export function createMockTauri() {
       }
       // Library content (content.rs): compare the revision, then write
       case "content_list":
-        return Object.values(get("wb-content", {}));
+        return Object.values(contentItems());
       case "content_put": {
         const item = args.item || {};
         if (!item.id || !item.type) throw { error: "content needs an id and a type" };
-        const items = get("wb-content", {});
-        const current = items[item.id];
+        const current = contentItems()[item.id];
         if ((current?.rev ?? null) !== (args.rev ?? null)) throw { conflict: current ?? null };
         const now = Math.floor(Date.now() / 1000);
         const stored = {
@@ -284,17 +300,15 @@ export function createMockTauri() {
           created: current?.created ?? now,
           updated: now,
         };
-        items[item.id] = stored;
-        set("wb-content", items);
+        set(CONTENT_KEY + item.id, stored);
         emit("content-changed", { item: stored, src: args.src });
         return stored;
       }
       case "content_erase": {
-        const items = get("wb-content", {});
-        if (!items[args.id]) return;
-        if (items[args.id].deletedAt == null) throw "only deleted content can be erased";
-        delete items[args.id];
-        set("wb-content", items);
+        const current = contentItems()[args.id];
+        if (!current) return;
+        if (current.deletedAt == null) throw "only deleted content can be erased";
+        set(CONTENT_KEY + args.id, null); // null also hides a copy seeded in the old "wb-content" map
         emit("content-erased", { id: args.id });
         return;
       }
@@ -435,13 +449,13 @@ export function createMockTauri() {
   }
   /** Tests: saved widgets with their Library content merged back into settings (what the widget sees). */
   const widgets = () => {
-    const items = get("wb-content", {});
+    const items = contentItems();
     return all().map((w) => {
       const c = items[w.id];
       return c ? { ...w, name: c.name || w.name, settings: { ...w.settings, ...c.data } } : w;
     });
   };
-  window.__mock = { emit, invoke, widgets, menus: [] };
+  window.__mock = { emit, invoke, widgets, content: contentItems, menus: [] };
   return {
     core: { invoke, convertFileSrc: (p) => p },
     event: {

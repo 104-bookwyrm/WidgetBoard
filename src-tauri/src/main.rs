@@ -37,7 +37,7 @@ const DEFAULT_CONFIG: &str = include_str!("default-config.json");
 const TRAY_ID: &str = "main";
 
 /// Widget types offered in the tray; ids must match the REGISTRY in ui/app.js.
-const WIDGETS: &[&str] = &["checklist", "calendar", "dday", "diary", "memo", "nowplaying", "timer", "stopwatch", "image", "showcase", "audioplayer", "collection", "clock"];
+const WIDGETS: &[&str] = &["checklist", "calendar", "dday", "diary", "memo", "nowplaying", "timer", "stopwatch", "pomodoro", "image", "showcase", "audioplayer", "collection", "clock"];
 
 /// Embedded translations (same files the UI loads). First entry is the default language.
 const LOCALES: &[(&str, &str)] = &[
@@ -117,6 +117,7 @@ struct AppState {
     // self-update (portable exe): see updater.rs
     update_busy: AtomicBool,
     just_updated: Mutex<Option<String>>, // shown once as a toast after an update installed
+    session: Value, // { launched, closed } in ms: this launch, and the last proper exit before it (closed.json)
 }
 
 impl AppState {
@@ -314,6 +315,7 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
         "assetsDir": state.dir.join("assets"),
         "version": updater::CURRENT,
         "justUpdated": if i_am_primary { state.just_updated.lock().unwrap().take() } else { None },
+        "session": state.session,
     })
 }
 
@@ -1246,6 +1248,9 @@ fn create_boards(app: &AppHandle) -> tauri::Result<()> {
 fn now_secs() -> u64 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
+fn now_ms() -> u64 {
+    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+}
 /// config.json → "update": { "check": "weekly" | "daily" | "off", "url": "https://…/latest.json" }
 fn update_config(dir: &Path) -> (String, String) {
     let c = read_config(dir);
@@ -1890,6 +1895,9 @@ fn main() {
             let _ = RUN_NAME.set(if id == PRODUCTION_IDENTIFIER { "WidgetBoard".into() } else { format!("WidgetBoard ({id})") });
             repair_autostart(&id);
             let content = content::load(&dir);
+            // timers, stopwatches and pomodoros that ran when the app last closed stop at that moment (app.js)
+            let closed = read_json::<Value>(&dir.join("data").join("closed.json")).and_then(|v| v["at"].as_u64());
+            let session = json!({ "launched": now_ms(), "closed": closed });
             app.manage(AppState {
                 dir,
                 widgets: Mutex::new(widgets),
@@ -1909,6 +1917,7 @@ fn main() {
                 zoom: Mutex::new(1.0),
                 update_busy: AtomicBool::new(false),
                 just_updated: Mutex::new(just_updated),
+                session,
             });
 
             let handle = app.handle().clone();
@@ -1975,8 +1984,19 @@ fn main() {
             open_backups_folder,
             emit_primary
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running WidgetBoard");
+        .build(tauri::generate_context!())
+        .expect("error while running WidgetBoard")
+        .run(|app, event| {
+            // Quit from the tray, an update restart, and Windows shutting down (WM_ENDSESSION) all end here; a crash
+            // does not, so the boards can tell the two apart.
+            if let tauri::RunEvent::Exit = event {
+                if let Some(st) = app.try_state::<AppState>() {
+                    let data = st.dir.join("data");
+                    let _ = fs::create_dir_all(&data);
+                    let _ = write_atomic(&data.join("closed.json"), json!({ "at": now_ms() }).to_string().as_bytes());
+                }
+            }
+        });
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@ import image from "./image.js";
 import dday from "./dday.js";
 import checklist from "./checklist.js";
 import stopwatch from "./stopwatch.js";
+import pomodoro from "./pomodoro.js";
 import memo from "./memo.js";
 import nowplaying from "./nowplaying.js";
 import calendar from "./calendar.js";
@@ -21,6 +22,7 @@ export default {
   nowplaying,
   timer,
   stopwatch,
+  pomodoro,
   image,
   showcase,
   audioplayer,

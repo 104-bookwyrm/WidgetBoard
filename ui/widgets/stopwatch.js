@@ -1,8 +1,10 @@
-// Stopwatch that counts up, with a running TOTAL of all time ever measured.
-// Stores start timestamps (not ticks): it stays exact through sleep, and keeps running while the app is closed.
-//   session — this run (reset with ↺ when stopped); laps belong to the session
-//   total   — every second ever counted; only "reset total" (click twice) clears it
+// Stopwatch that counts up. Each finished run goes to the shared time log (timelog.js) in the stopwatch's category
+// (focus / other); the TOTAL line is that category's time from every widget, pomodoros included.
+// Stores start timestamps (not ticks): it stays exact through sleep. Closing the app stops it (app.js leftover).
+//   session: this run (reset with the reset button when stopped); laps belong to the session
+//   total: the category's logged time since "reset total" (click twice), which counts from then on and deletes nothing
 import { icon } from "../icons.js";
+import { CATS, spent, total as logTotal, readLog, addEntry, cutEntry, awayHtml } from "../timelog.js";
 
 const p2 = (n) => String(n).padStart(2, "0");
 function fmtSession(ms) {
@@ -24,7 +26,8 @@ export function fmtTotal(ms) {
 export default {
   size: { w: 3, h: 3 },
   min: { w: 2, h: 2 },
-  defaults: { startedAt: null, elapsed: 0, total: 0, laps: [] },
+  // total: the pre-log total, carried into the log once (see carryId)
+  defaults: { startedAt: null, elapsed: 0, total: 0, laps: [], cat: "focus", since: 0, runId: null, cuts: [], away: null },
   css: `
     .sw { height: 100%; box-sizing: border-box; padding: calc(var(--head-h) - 4px) var(--pad) var(--pad);
       display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 5cqh; }
@@ -35,6 +38,7 @@ export default {
       font-variant-numeric: tabular-nums; }
     .sw-total b { font-weight: 600; color: var(--c3); }
     .sw-total button { padding: 0 6px; font-size: var(--fs-small); }
+    .sw-total .sw-cat { padding: 0 8px; border-radius: 999px; }
     .sw-total button.confirm { background: var(--danger); border-color: var(--danger); color: #fff; }
     .sw-ctrl { display: flex; gap: var(--space-3); flex: none; max-width: 100%; }
     .sw-ctrl button { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -57,12 +61,19 @@ export default {
     s.laps = Array.isArray(s.laps)
       ? s.laps.filter((l) => l && Number.isFinite(l.at)).slice(0, 99)
       : [];
+    if (!CATS.includes(s.cat)) s.cat = "focus";
+    s.since = num(s.since);
+    s.cuts = Array.isArray(s.cuts) ? s.cuts.filter((c) => Array.isArray(c) && c[1] > c[0]) : [];
+    if (s.startedAt && !s.runId) s.runId = crypto.randomUUID();
+    if (!(s.away && s.away.to > s.away.from)) s.away = null;
 
     root.innerHTML = `
       <div class="sw">
         <div class="sw-main"></div>
-        <div class="sw-total" title="${t("sw.total_hint")}">${t("sw.total")} <b></b>
+        <div class="sw-total" title="${t("sw.total_hint")}"><button class="sw-cat" data-a="cat" title="${t("sw.cat_hint")}"></button>
+          ${t("sw.total")} <b></b>
           <button data-a="reset-total" title="${t("sw.reset_total")}">${icon("reset")}</button></div>
+        <div class="tl-away" role="status" hidden></div>
         <div class="sw-ctrl">
           <button class="primary" data-a="go"></button>
           <button data-a="lap"></button>
@@ -71,26 +82,40 @@ export default {
       </div>`;
     const box = root.firstElementChild;
     const q = (c) => box.querySelector(c);
-    const run = () => (s.startedAt ? Date.now() - s.startedAt : 0);
+    let log = []; // the shared time log, re-read when another widget adds to it
+    const running = () => ({ start: s.startedAt, end: Date.now(), cuts: s.cuts });
+    const run = () => (s.startedAt ? spent(running()) : 0);
     const session = () => s.elapsed + run();
-    const total = () => s.total + run();
+    const total = () => logTotal(log, s.cat, s.since) + (s.startedAt ? spent(running(), s.since) : 0);
     let confirmTimer = null;
 
+    // Buttons are rebuilt only when their label changes, never on the 100 ms tick: replacing the element under a
+    // pressed mouse button can cost the click (Stop "ignored").
+    const label = (btn, k, ico) => {
+      if (btn.dataset.k === k) return;
+      btn.dataset.k = k;
+      btn.innerHTML = `<span class="ico">${icon(ico)}</span><span class="lbl">${t(k)}</span>`;
+      btn.title = t(k);
+    };
     function render() {
       const main = q(".sw-main");
       main.textContent = fmtSession(session());
       main.style.setProperty("--len", Math.max(7, main.textContent.length));
       q(".sw-total b").textContent = fmtTotal(total());
+      const cat = t("time." + s.cat);
+      if (q(".sw-cat").textContent !== cat) q(".sw-cat").textContent = cat;
       box.classList.toggle("running", !!s.startedAt);
       const go = q("[data-a=go]");
-      const k = s.startedAt ? "sw.stop" : session() ? "sw.resume" : "sw.start";
-      go.innerHTML = `<span class="ico">${icon(s.startedAt ? "pause" : "play")}</span><span class="lbl">${t(k)}</span>`;
-      go.title = t(k);
+      label(go, s.startedAt ? "sw.stop" : session() ? "sw.resume" : "sw.start", s.startedAt ? "pause" : "play");
       const lap = q("[data-a=lap]");
-      const lk = s.startedAt ? "sw.lap" : "sw.reset";
-      lap.innerHTML = `<span class="ico">${icon(s.startedAt ? "flag" : "reset")}</span><span class="lbl">${t(lk)}</span>`;
-      lap.title = t(lk);
-      lap.disabled = !s.startedAt && !session();
+      label(lap, s.startedAt ? "sw.lap" : "sw.reset", s.startedAt ? "flag" : "reset");
+      const off = !s.startedAt && !session();
+      if (lap.disabled !== off) lap.disabled = off;
+    }
+    function renderAway() {
+      const a = q(".tl-away");
+      a.innerHTML = awayHtml(t, s.away, fmtTotal);
+      a.hidden = !s.away;
     }
     function renderLaps() {
       q(".sw-laps").hidden = !s.laps.length; // keeps the clock centred until there are laps
@@ -102,30 +127,82 @@ export default {
         .join("");
     }
 
-    let tick;
+    let tick,
+      last = Date.now();
     function loop() {
       clearInterval(tick);
-      if (s.startedAt) tick = setInterval(render, 100);
+      last = Date.now();
+      if (s.startedAt)
+        tick = setInterval(() => {
+          const now = Date.now(),
+            gap = api.awayMs?.() ?? 0;
+          // the PC slept with the stopwatch running: it keeps counting (off-screen work), and asks
+          if (gap && now - last >= gap && !s.away) {
+            s.away = { from: last, to: now, id: s.runId };
+            api.save();
+            renderAway();
+          }
+          last = now;
+          render();
+        }, 100);
     }
     function start() {
       s.startedAt = Date.now();
+      s.runId = crypto.randomUUID();
+      s.cuts = [];
       api.save();
       loop();
       render();
     }
-    function stop() {
-      const d = run();
-      s.elapsed += d;
-      s.total += d;
-      s.startedAt = null;
+    /** End this run at `at`: it goes to the session and, as one entry, to the time log. */
+    function stop(at = Date.now()) {
+      const e = { id: s.runId, cat: s.cat, start: s.startedAt, end: Math.max(at, s.startedAt), src: api.id };
+      if (s.cuts.length) e.cuts = s.cuts;
+      s.elapsed += spent(e);
+      Object.assign(s, { startedAt: null, runId: null, cuts: [] });
+      if (e.end > e.start) {
+        log = [...log.filter((x) => x.id !== e.id), e];
+        addEntry(api, e).then(load); // own writes are not announced back: re-read so a read in flight cannot drop it
+      }
       api.save();
       loop();
+      render();
+    }
+    /** Keep the time away, or take it out of the run (still running) or of its log entry (already stopped). */
+    function answerAway(keep) {
+      const a = s.away;
+      s.away = null;
+      if (!keep && a) {
+        const cut = [a.from, a.to];
+        if (s.startedAt && a.id === s.runId) s.cuts.push(cut);
+        else {
+          const e = log.find((x) => x.id === a.id);
+          if (e) {
+            const before = spent(e);
+            e.cuts = [...(e.cuts ?? []), cut];
+            s.elapsed = Math.max(0, s.elapsed - (before - spent(e)));
+          }
+          cutEntry(api, a.id, cut).then(load);
+        }
+      }
+      api.save();
+      renderAway();
       render();
     }
 
     box.addEventListener("click", (e) => {
       const a = e.target.closest("[data-a]")?.dataset.a;
       if (a === "go") s.startedAt ? stop() : start();
+      if (a === "away-keep" || a === "away-cut") answerAway(a === "away-keep");
+      if (a === "cat") {
+        // a running stopwatch splits its run: the time so far stays in the old category
+        const was = !!s.startedAt;
+        if (was) stop();
+        s.cat = CATS[(CATS.indexOf(s.cat) + 1) % CATS.length];
+        if (was) start();
+        api.save();
+        render();
+      }
       if (a === "lap") {
         if (s.startedAt) {
           const at = session();
@@ -144,7 +221,7 @@ export default {
         render();
       }
       if (a === "reset-total") {
-        // two clicks within 3 s: the total can represent months of counting
+        // two clicks within 3 s; the total then counts from now (the log keeps everything)
         const btn = e.target.closest("button");
         if (!confirmTimer) {
           btn.classList.add("confirm");
@@ -160,20 +237,46 @@ export default {
         confirmTimer = null;
         btn.classList.remove("confirm");
         btn.innerHTML = icon("reset");
-        s.total = 0;
-        if (s.startedAt) {
-          // keep the current run going, but count the total from now
-          s.elapsed += run();
-          s.startedAt = Date.now();
-        }
+        s.since = Date.now();
         api.save();
         render();
       }
     });
 
+    // The time log: other widgets (pomodoros, other stopwatches) add to the same totals.
+    const carryId = "carry-" + api.id;
+    async function load() {
+      log = await readLog(api).catch(() => []);
+      if (!Array.isArray(log)) log = [];
+      // the total from before the log: one entry, dated 1970 so "reset total" always leaves it out. Once it is in
+      // the log the old field is cleared (an undo or restore that brings the field back finds the entry, clears again).
+      if (s.total > 0) {
+        if (log.some((x) => x.id === carryId)) (s.total = 0), api.save();
+        else {
+          const e = { id: carryId, cat: s.cat, start: 1, end: 1 + s.total, src: api.id };
+          log = [...log, e];
+          addEntry(api, e).then(load);
+        }
+      }
+      render();
+    }
+    api.onStore?.("time", load);
+
+    // Running from before this launch: the app closed properly then (stop there), or crashed (stop at this launch
+    // and ask whether that run counts).
+    const lo = s.startedAt && api.leftover?.(s.startedAt);
+    if (lo) {
+      const from = s.startedAt,
+        id = s.runId;
+      stop(lo.at);
+      if (lo.crash) s.away = { from, to: lo.at, id, crash: true };
+      api.save();
+    }
     renderLaps();
+    renderAway();
     render();
     loop();
+    load();
     return {
       destroy: () => (clearInterval(tick), clearTimeout(confirmTimer)),
       summary: () =>

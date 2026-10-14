@@ -14,7 +14,18 @@
     <!-- edit-mode bar -->
     <div id="editbar" data-hit hidden>
       <span data-i18n="edit.hint"></span>
+      <button id="edit-layers" data-i18n="layers.open" hidden></button>
       <button id="edit-done" data-i18n="edit.done"></button>
+    </div>
+
+    <!-- free mode: the stacking order, front first (PowerPoint's selection pane, art-program behaviour) -->
+    <div id="layers-panel" data-hit hidden role="dialog" aria-labelledby="ly-title">
+      <h3 id="ly-title" data-i18n="layers.title"></h3>
+      <p class="hint" data-i18n="layers.hint"></p>
+      <ul id="layers-list"></ul>
+      <div class="row">
+        <button id="layers-close" data-i18n="theme.close"></button>
+      </div>
     </div>
 
     <!-- per-widget font panel (right-click → 글꼴) -->

@@ -67,6 +67,7 @@ function setMotion(on) {
   document.body.classList.toggle("reduce-motion", motionReduced());
 }
 const storeSubs = new Set(); // { key, src, cb }
+let session = { launched: 0, closed: null }; // this launch and the last proper exit (ms), from load_state
 const configSubs = new Set(); // cb(config)
 // One date watcher for every widget (api.onDayChange); a minute's lag at midnight is fine.
 const daySubs = new Set(); // cb(ymd)
@@ -182,6 +183,19 @@ function applyLayout(layout, { commit }) {
  */
 function reflow() {
   if (board.clientWidth < 300 || board.clientHeight < 200) return;
+  if (freeMode()) {
+    // free mode: only what ended up outside the board (smaller screen, scaling change) comes back in
+    let moved = 0;
+    for (const w of widgets) {
+      if (!w.free || !ensureFree(w)) continue;
+      const el = mounted.get(w.id)?.el;
+      if (el) place(el, w);
+      save(w);
+      moved++;
+    }
+    if (moved) (toast(t("toast.reflowed")), syncHits());
+    return;
+  }
   const m = metrics();
   let moved = 0;
   for (const w of widgets) {
@@ -220,7 +234,313 @@ const reflowSoon = () => {
 };
 function place(el, r) {
   for (const k of ["x", "y", "w", "h"]) el.style.setProperty("--" + k, r[k]);
+  if (r.free)
+    for (const k of ["x", "y", "w", "h"]) el.style.setProperty("--f" + k, r.free[k] + "px");
+  el.style.setProperty("--z", Number.isFinite(r.z) ? r.z : 0);
 }
+
+// ---------------- free placement (Settings → 배치 방식 → 자유 배치) ----------------
+// Simple mode is the grid with push-aside. In free mode every widget also has `free` = { x, y, w, h } in CSS px
+// on this board, and a stacking order `z`; widgets may overlap. The grid position is kept, so each mode keeps its
+// own arrangement: switching back to simple shows the grid layout again.
+const freeMode = () => ui().layoutMode === "free";
+const SNAP = 8; // px: how close a dragged edge must come to a guide to stick to it
+function cellGap() {
+  const cs = getComputedStyle(document.documentElement);
+  return {
+    cell: parseFloat(cs.getPropertyValue("--cell")) || 80,
+    gap: parseFloat(cs.getPropertyValue("--gap")) || 10,
+  };
+}
+/** Pixel rect of a grid rect (the same maths as the .widget CSS). */
+function gridPx(r) {
+  const { cell, gap } = cellGap();
+  return {
+    x: gap + r.x * (cell + gap),
+    y: gap + r.y * (cell + gap),
+    w: r.w * cell + (r.w - 1) * gap,
+    h: r.h * cell + (r.h - 1) * gap,
+  };
+}
+/** A widget's smallest free size: its grid minimum, in px. */
+function minPx(w) {
+  const min = (REGISTRY[w.type] ?? UNKNOWN).min ?? { w: 1, h: 1 };
+  const p = gridPx({ x: 0, y: 0, ...min });
+  return { w: p.w, h: p.h };
+}
+const boardOk = () => board.clientWidth >= 300 && board.clientHeight >= 200; // not while the window is being placed
+/** Whole pixels, at least the minimum size, inside the board. */
+function clampFree(f, w) {
+  const r = { x: Math.round(f.x), y: Math.round(f.y), w: Math.round(f.w), h: Math.round(f.h) };
+  const mn = minPx(w);
+  if (!boardOk()) return { ...r, w: Math.max(r.w, mn.w), h: Math.max(r.h, mn.h) };
+  const W = board.clientWidth,
+    H = board.clientHeight;
+  r.w = clamp(r.w, Math.min(mn.w, W), W);
+  r.h = clamp(r.h, Math.min(mn.h, H), H);
+  r.x = clamp(r.x, 0, W - r.w);
+  r.y = clamp(r.y, 0, H - r.h);
+  return r;
+}
+const sameRect = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+/** Give `w` a free rect (from its grid spot) if it has none, and keep it legal. True when it changed. */
+function ensureFree(w) {
+  const before = w.free && { ...w.free };
+  const f = clampFree(w.free ?? gridPx(w), w);
+  w.free = f;
+  if (!Number.isFinite(w.z)) w.z = 0;
+  return !sameRect(before, f);
+}
+const topZ = () => Math.max(0, ...widgets.map((o) => (Number.isFinite(o.z) ? o.z : 0)));
+// Layers (free mode), as in art programs: the order changes only on request (menu, Ctrl+[ ], the Layers panel);
+// clicking or moving a widget leaves it where it is. Each widget has its own z, so nothing depends on DOM order.
+/** Widgets, front first (equal z, from before z was kept unique: the later one is in front, as drawn). */
+function layerOrder() {
+  const at = new Map(widgets.map((o, i) => [o, i]));
+  return [...widgets].sort((a, b) => (b.z ?? 0) - (a.z ?? 0) || at.get(b) - at.get(a));
+}
+/** Renumber z from `order` (front first) as n..1; place and save the widgets whose z changed. */
+function setLayers(order) {
+  order.forEach((o, i) => {
+    const z = order.length - i;
+    if (o.z === z) return;
+    o.z = z;
+    const el = mounted.get(o.id)?.el;
+    if (el) place(el, o);
+    save(o);
+  });
+  if (!$("#layers-panel").hidden) renderLayers();
+}
+/** Move `w` one layer "up" / "down", or to the "front" / "back". */
+function restack(w, to) {
+  const order = layerOrder();
+  const i = order.indexOf(w);
+  order.splice(i, 1);
+  const at = { front: 0, back: order.length, up: Math.max(0, i - 1), down: Math.min(order.length, i + 1) }[to];
+  order.splice(at, 0, w);
+  setLayers(order);
+  announce(t("a11y.layer", { n: at + 1, total: order.length }));
+}
+/** Position lock (free mode): the widget can't be dragged, resized or moved with the keys. */
+function setLocked(w, on) {
+  if (on) w.locked = true;
+  else delete w.locked;
+  mounted.get(w.id)?.el.classList.toggle("locked", !!on);
+  save(w);
+  if (!$("#layers-panel").hidden) renderLayers();
+}
+/** Select a widget (the active layer): its grip takes the focus, so the arrow keys move it. */
+function selectWidget(id) {
+  const el = mounted.get(id)?.el;
+  if (!el) return;
+  el.querySelector(".grip")?.focus();
+  locate(id);
+}
+function renderLayers() {
+  const list = $("#layers-list");
+  list.innerHTML = layerOrder()
+    .map(
+      (o) => `<li draggable="true" data-id="${esc(o.id)}">
+        <button data-l="eye" title="${esc(t(o.hidden ? "layers.show" : "layers.hide"))}" aria-pressed="${!o.hidden}">${icon(o.hidden ? "eye-off" : "eye")}</button>
+        <button data-l="lock" title="${esc(t(o.locked ? "layers.unlock" : "layers.lock"))}" aria-pressed="${!!o.locked}">${icon(o.locked ? "lock" : "lock-open")}</button>
+        <button data-l="pick" class="ly-name${o.hidden ? " off" : ""}">${esc(widgetName(o))}</button>
+        <button data-l="up" title="${esc(t("menu.forward"))}">${icon("up")}</button>
+        <button data-l="down" title="${esc(t("menu.backward"))}">${icon("down")}</button>
+      </li>`,
+    )
+    .join("");
+}
+function openLayers() {
+  renderLayers();
+  $("#layers-panel").hidden = false;
+  $("#layers-list button")?.focus();
+  syncHits();
+}
+$("#layers-list").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-l]");
+  const w = widgets.find((o) => o.id === b?.closest("li").dataset.id);
+  if (!w) return;
+  const a = b.dataset.l;
+  if (a === "eye") (setHidden(w, !w.hidden, true), renderLayers());
+  else if (a === "lock") setLocked(w, !w.locked);
+  else if (a === "pick") return selectWidget(w.id); // the widget keeps the focus: arrows move it
+  else restack(w, a);
+  $(`#layers-list li[data-id="${CSS.escape(w.id)}"] [data-l="${a}"]`)?.focus(); // the list was redrawn
+});
+// drag a row to reorder; drop above the row under the pointer (below it on its lower half)
+let layerDrag = null;
+$("#layers-list").addEventListener("dragstart", (e) => {
+  layerDrag = e.target.closest("li")?.dataset.id ?? null;
+  e.dataTransfer.effectAllowed = "move";
+});
+$("#layers-list").addEventListener("dragover", (e) => {
+  if (!layerDrag) return;
+  e.preventDefault();
+  const li = e.target.closest("li");
+  for (const x of $("#layers-list").children) x.classList.remove("drop-above", "drop-below");
+  if (li) li.classList.add(e.offsetY > li.offsetHeight / 2 ? "drop-below" : "drop-above");
+});
+$("#layers-list").addEventListener("drop", (e) => {
+  e.preventDefault();
+  const li = e.target.closest("li");
+  const w = widgets.find((o) => o.id === layerDrag);
+  layerDrag = null;
+  if (!li || !w || li.dataset.id === w.id) return renderLayers();
+  const order = layerOrder().filter((o) => o !== w);
+  const target = order.findIndex((o) => o.id === li.dataset.id);
+  order.splice(target + (li.classList.contains("drop-below") ? 1 : 0), 0, w);
+  setLayers(order);
+  renderLayers();
+});
+$("#layers-list").addEventListener("dragend", () => ((layerDrag = null), renderLayers()));
+$("#layers-close").onclick = () => (($("#layers-panel").hidden = true), syncHits());
+$("#edit-layers").onclick = () => openLayers();
+/** A free spot for a new w×h (px) widget: at `at` if given, else the first gap from the top-right; else on top. */
+function freeSpot(size, at, ignoreId) {
+  const W = board.clientWidth,
+    H = board.clientHeight;
+  const { cell, gap } = cellGap();
+  const others = widgets.filter((o) => o.id !== ignoreId && o.free && !o.hidden).map((o) => o.free);
+  if (at) return { x: at.x, y: at.y, ...size };
+  const step = cell + gap;
+  for (let y = gap; y + size.h <= H; y += step)
+    for (let x = W - gap - size.w; x >= 0; x -= step) {
+      const r = { x, y, ...size };
+      if (!others.some((o) => overlaps(r, o))) return r;
+    }
+  return { x: W - gap - size.w, y: gap, ...size };
+}
+/** Back to simple mode: widgets placed while free may share grid cells; give them free cells where possible. */
+function tidyGrid() {
+  const m = metrics();
+  const placed = [];
+  let crowded = 0;
+  for (const w of widgets) {
+    const inb = (r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= m.cols && r.y + r.h <= m.rows;
+    if (inb(w) && !placed.some((o) => overlaps(w, o))) {
+      placed.push(w);
+      continue;
+    }
+    const min = (REGISTRY[w.type] ?? UNKNOWN).min ?? { w: 1, h: 1 };
+    let spot = null;
+    for (const size of [{ w: w.w, h: w.h }, min]) {
+      for (let y = 0; !spot && y + size.h <= m.rows; y++)
+        for (let x = m.cols - size.w; !spot && x >= 0; x--) {
+          const r = { x, y, ...size };
+          if (!placed.some((o) => overlaps(r, o))) spot = r;
+        }
+      if (spot) break;
+    }
+    if (spot) Object.assign(w, spot);
+    else crowded++;
+    placed.push(w);
+    save(w);
+  }
+  if (crowded) toast(t("toast.overlap"));
+}
+let shownMode = null;
+/** Draw the board in the current mode; on a switch, prepare the other mode's positions. */
+function applyLayoutMode() {
+  const free = freeMode();
+  if (free === shownMode) return;
+  const switching = shownMode !== null;
+  shownMode = free;
+  board.classList.toggle("free", free);
+  $("#edit-layers").hidden = !free;
+  if (!switching) return; // boot: mount() prepares each widget
+  if (free) {
+    for (const w of widgets) if (ensureFree(w)) save(w);
+    setLayers(layerOrder());
+  } else tidyGrid();
+  for (const w of widgets) {
+    const el = mounted.get(w.id)?.el;
+    if (el) place(el, w);
+  }
+  hideGuides();
+  $("#edit-layers").hidden = !free;
+  if (!free) $("#layers-panel").hidden = true;
+  syncHits();
+}
+
+// Snap guides (free mode): screen edges, margins and centre, other widgets' edges and centres, and the spacings
+// already used between neighbours (equal spacing). Alt while dragging places exactly.
+function snapLines(others) {
+  const W = board.clientWidth,
+    H = board.clientHeight;
+  const { gap } = cellGap();
+  const xs = [0, gap, W - gap, W],
+    ys = [0, gap, H - gap, H],
+    cx = [W / 2],
+    cy = [H / 2];
+  const dx = new Set([gap]),
+    dy = new Set([gap]);
+  for (const a of others)
+    for (const b of others) {
+      if (a === b) continue;
+      if (a.y < b.y + b.h && b.y < a.y + a.h && b.x >= a.x + a.w && b.x - (a.x + a.w) <= 240)
+        dx.add(b.x - (a.x + a.w));
+      if (a.x < b.x + b.w && b.x < a.x + a.w && b.y >= a.y + a.h && b.y - (a.y + a.h) <= 240)
+        dy.add(b.y - (a.y + a.h));
+    }
+  for (const o of others) {
+    xs.push(o.x, o.x + o.w);
+    ys.push(o.y, o.y + o.h);
+    for (const d of dx) xs.push(o.x + o.w + d, o.x - d);
+    for (const d of dy) ys.push(o.y + o.h + d, o.y - d);
+    cx.push(o.x + o.w / 2);
+    cy.push(o.y + o.h / 2);
+  }
+  return { xs, ys, cx, cy };
+}
+/** Nearest guide for any of `edges` (and `centres`); { d, at } or null. */
+function nearest(edges, targets, centres = [], ctargets = []) {
+  let best = null;
+  const tryAll = (ls, ts) => {
+    for (const l of ls)
+      for (const tg of ts) {
+        const d = tg - l;
+        if (Math.abs(d) <= SNAP && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, at: tg };
+      }
+  };
+  tryAll(edges, targets);
+  tryAll(centres, ctargets);
+  return best;
+}
+function snapRect(r, mode, others) {
+  const g = snapLines(others);
+  const out = { ...r };
+  const lines = [];
+  if (mode === "move") {
+    const sx = nearest([r.x, r.x + r.w], g.xs, [r.x + r.w / 2], g.cx);
+    const sy = nearest([r.y, r.y + r.h], g.ys, [r.y + r.h / 2], g.cy);
+    if (sx) (out.x += sx.d), lines.push({ v: sx.at });
+    if (sy) (out.y += sy.d), lines.push({ h: sy.at });
+  } else {
+    const sx = nearest([r.x + r.w], g.xs);
+    const sy = nearest([r.y + r.h], g.ys);
+    if (sx) (out.w += sx.d), lines.push({ v: sx.at });
+    if (sy) (out.h += sy.d), lines.push({ h: sy.at });
+  }
+  return { r: out, lines };
+}
+function showGuides(lines) {
+  let g = $("#guides");
+  if (!g) {
+    g = document.createElement("div");
+    g.id = "guides";
+    g.setAttribute("aria-hidden", "true");
+    document.body.append(g);
+  }
+  const b = board.getBoundingClientRect();
+  g.innerHTML = lines
+    .map((l) =>
+      l.v != null
+        ? `<i class="g-v" style="left:${b.left + l.v}px"></i>`
+        : `<i class="g-h" style="top:${b.top + l.h}px"></i>`,
+    )
+    .join("");
+}
+const hideGuides = () => $("#guides")?.replaceChildren();
 
 // ---------------- persistence (per widget; Rust owns layout.json and content.json) ----------------
 const pending = new Map();
@@ -422,9 +742,16 @@ function sanitizeWidget(w, def) {
     w.settings && typeof w.settings === "object" && !Array.isArray(w.settings)
       ? { ...defaults, ...w.settings }
       : defaults;
+  const f = w.free;
+  if (f && typeof f === "object" && ["x", "y", "w", "h"].every((k) => Number.isFinite(+f[k])))
+    w.free = { x: Math.round(+f.x), y: Math.round(+f.y), w: Math.round(+f.w), h: Math.round(+f.h) };
+  else delete w.free;
+  if (Number.isFinite(+w.z) && w.z !== null && w.z !== "") w.z = Math.round(+w.z);
+  else delete w.z;
   if (typeof w.name === "string") w.name = w.name.trim().slice(0, 40);
   if (!w.name || typeof w.name !== "string") delete w.name;
   if (w.hidden !== true) delete w.hidden;
+  if (w.locked !== true) delete w.locked;
   if (typeof w.font !== "string" || !w.font) delete w.font;
   if (!(w.fontSize >= 6 && w.fontSize <= 96)) delete w.fontSize;
   if (!w.colors || typeof w.colors !== "object" || Array.isArray(w.colors))
@@ -453,7 +780,8 @@ function mount(w) {
     else delete w.name;
   }
   sanitizeWidget(w, def);
-  if (isLibrary(w.type) && !item) save(w); // new (or pre-Library) content gets its item now
+  const freed = freeMode() && ensureFree(w);
+  if ((isLibrary(w.type) && !item) || freed) save(w); // new (or pre-Library) content gets its item now
   if (w.type === "memo") memoPrev.set(w.id, String(w.settings?.text ?? ""));
   if (def.css && !injectedCss.has(w.type)) {
     const st = document.createElement("style");
@@ -466,6 +794,7 @@ function mount(w) {
   el.dataset.widget = w.type;
   el.dataset.id = w.id;
   el.classList.toggle("w-hidden", !!w.hidden);
+  el.classList.toggle("locked", !!w.locked);
   const name = widgetName(w);
   el.setAttribute("role", "region");
   el.setAttribute("aria-label", name);
@@ -544,6 +873,21 @@ function mount(w) {
       control: (action, seconds) =>
         invoke("media_control", { action, seconds }).catch(() => {}),
     },
+    get id() {
+      return w.id;
+    },
+    /**
+     * A run that started at `start` (ms) before this launch: { at } = the app was closed properly then, stop it
+     * there; { at, crash: true } = it never closed properly (crash, killed), `at` is this launch. Null otherwise.
+     */
+    leftover: (start) =>
+      !(start < session.launched)
+        ? null
+        : session.closed >= start
+          ? { at: session.closed }
+          : { at: session.launched, crash: true },
+    /** A gap between two ticks this long (ms) means the PC slept: counting widgets ask whether to keep it. 0 = never. */
+    awayMs: () => Math.max(0, Number(ui().awayMinutes) || 0) * 60000,
     get size() {
       return { w: w.w, h: w.h };
     },
@@ -594,6 +938,15 @@ function mount(w) {
     },
     /** Ask for a bigger/smaller size; neighbours are pushed aside if needed. Returns true on success. */
     requestSize: (size) => {
+      if (freeMode() && w.free) {
+        // free mode: the asked cell size in px, grown from the same corner, nothing pushed
+        const p = gridPx({ x: 0, y: 0, ...size });
+        w.free = clampFree({ ...w.free, w: p.w, h: p.h }, w);
+        place(el, w);
+        save(w);
+        syncHits();
+        return true;
+      }
       const m = metrics();
       const r = {
         w: clamp(size.w, def.min?.w ?? 1, m.cols),
@@ -922,10 +1275,31 @@ const displayName = (d) =>
 
 // Right-click menu on a widget. Lean while viewing; arrangement tools appear in edit mode.
 let lastMenu;
-async function openMenu(w, el) {
+async function openMenu(w, el, at) {
   const own = mounted.get(w.id)?.inst.menu?.() ?? [];
   const ownBlock = own.length ? [...own, { item: "Separator" }] : [];
+  // free mode: widgets under the pointer, to select one that is covered (art programs: pick a layer)
+  const under = at
+    ? [...new Set(document.elementsFromPoint(at.x, at.y).map((n) => n.closest?.(".widget")?.dataset.id))]
+        .map((id) => widgets.find((o) => o.id === id))
+        .filter((o) => o && o !== w)
+    : [];
+  const stack = freeMode()
+    ? [
+        { item: "Separator" },
+        { text: t("menu.forward"), action: () => restack(w, "up") },
+        { text: t("menu.backward"), action: () => restack(w, "down") },
+        { text: t("menu.front"), action: () => restack(w, "front") },
+        { text: t("menu.back"), action: () => restack(w, "back") },
+        { text: (w.locked ? "✓ " : "") + t("menu.lock"), action: () => setLocked(w, !w.locked) },
+        ...(under.length
+          ? [{ text: t("menu.pick"), items: under.map((o) => ({ text: widgetName(o), action: () => selectWidget(o.id) })) }]
+          : []),
+        { text: t("layers.open"), action: () => openLayers() },
+      ]
+    : [];
   const manage = [
+    ...stack,
     { item: "Separator" },
     w.hidden
       ? { text: t("menu.show"), action: () => setHidden(w, false) }
@@ -998,11 +1372,11 @@ async function openMenu(w, el) {
 }
 
 // Right-click menu on empty board space (edit mode only): add a widget where clicked.
-async function openAddMenu(cell) {
+async function openAddMenu(cell, at) {
   const items = [
     ...Object.keys(REGISTRY).map((k) => ({
       text: t("widget." + k),
-      action: () => addWidgetAt(k, cell),
+      action: () => addWidgetAt(k, cell, at),
     })),
     { item: "Separator" },
     { text: t("edit.done"), action: () => invoke("set_edit_mode", { on: false }) },
@@ -1019,7 +1393,7 @@ function wireFrame(el, w, def, inst) {
   el.addEventListener("contextmenu", (e) => {
     if (e.target.closest("input, textarea, [contenteditable]")) return;
     e.preventDefault();
-    openMenu(w, el);
+    openMenu(w, el, { x: e.clientX, y: e.clientY });
   });
   // keyboard: Menu key / Shift+F10 opens the widget menu from anywhere inside it
   el.addEventListener("keydown", (e) => {
@@ -1049,9 +1423,35 @@ function wireFrame(el, w, def, inst) {
       e.preventDefault();
       return announceSummary(w);
     }
+    if (freeMode() && e.ctrlKey && (e.code === "BracketRight" || e.code === "BracketLeft")) {
+      // art-program shortcuts: Ctrl+] / Ctrl+[ one layer, with Shift to the front / back
+      e.preventDefault();
+      const up = e.code === "BracketRight";
+      return restack(w, e.shiftKey ? (up ? "front" : "back") : up ? "up" : "down");
+    }
     const d = DIRS[e.key];
     if (!d) return;
     e.preventDefault();
+    if (freeMode() && w.locked) return announce(t("layers.locked"));
+    if (freeMode()) {
+      // free mode: 10 px per press, 1 px with Alt; Shift resizes
+      const n = e.altKey ? 1 : 10;
+      const f = w.free;
+      const next = clampFree(
+        e.shiftKey
+          ? { ...f, w: f.w + d[0] * n, h: f.h + d[1] * n }
+          : { ...f, x: f.x + d[0] * n, y: f.y + d[1] * n },
+        w,
+      );
+      if (sameRect(next, f)) return announce(t("a11y.edge"));
+      w.free = next;
+      place(el, w);
+      save(w);
+      syncHits();
+      return announce(
+        t(e.shiftKey ? "a11y.resized_px" : "a11y.moved_px", { x: next.x, y: next.y, w: next.w, h: next.h }),
+      );
+    }
     const g = metrics();
     const r = e.shiftKey
       ? {
@@ -1081,14 +1481,77 @@ function wireFrame(el, w, def, inst) {
       }),
     );
   });
+  /** Free mode drag/resize: pixels, snap guides (Alt: none), overlap allowed; a moved widget comes to the front. */
+  function freeDrag(e, handle, mode, carry) {
+    const f0 = { ...w.free };
+    let cand = { ...f0 };
+    const others = widgets.filter((o) => o.id !== w.id && !o.hidden && o.free).map((o) => o.free);
+    el.classList.add("moving");
+    board.classList.add("arranging");
+    const move = (ev) => {
+      const dx = ev.clientX - e.clientX,
+        dy = ev.clientY - e.clientY;
+      let r =
+        mode === "move"
+          ? { ...f0, x: f0.x + dx, y: f0.y + dy }
+          : { ...f0, w: f0.w + dx, h: f0.h + dy };
+      const snap = ev.altKey ? null : snapRect(r, mode, others);
+      if (snap) r = snap.r;
+      cand = clampFree(r, w);
+      showGuides(snap?.lines ?? []);
+      place(el, { ...w, free: cand });
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerdown", drop, true);
+      removeEventListener("keydown", cancelCarry, true);
+      el.classList.remove("moving");
+      board.classList.remove("arranging");
+      hideGuides();
+      if (!sameRect(cand, w.free)) {
+        w.free = cand;
+        save(w);
+        mounted.get(w.id)?.inst.resized?.();
+      }
+      place(el, w);
+      invoke("set_interacting", { on: false });
+      syncHits();
+    };
+    const drop = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      up();
+    };
+    const cancelCarry = (ev) => {
+      if (ev.key !== "Escape") return;
+      ev.stopPropagation();
+      cand = { ...w.free };
+      up();
+    };
+    if (carry) {
+      document.addEventListener("pointermove", move);
+      setTimeout(() => document.addEventListener("pointerdown", drop, true));
+      addEventListener("keydown", cancelCarry, true);
+      announce(t("a11y.carrying"));
+      return;
+    }
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  }
   const drag = (handle, mode) =>
     handle.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || e.target.closest("button:not(.grip)")) return;
       if (ui().lockLayout && !editMode) return; // Settings → 레이아웃 잠금
+      if (freeMode() && w.locked) return toast(t("layers.locked"));
       e.preventDefault();
       const carry = !!ui().clickDrag; // motor accessibility: click to pick up, move, click again to drop
       if (!carry) handle.setPointerCapture(e.pointerId);
       invoke("set_interacting", { on: true });
+      if (freeMode() && w.free) return freeDrag(e, handle, mode, carry);
       const m = metrics();
       const s = {
         px: e.clientX,
@@ -1181,10 +1644,13 @@ function findRoom(def, pref) {
   return null;
 }
 
-function placeWidget(type, room) {
+function placeWidget(type, room, at) {
   const def = REGISTRY[type];
   if (!def) return;
-  if (!room) return toast(t("toast.no_space"));
+  const free = freeMode();
+  if (!room && !free) return toast(t("toast.no_space"));
+  // free mode: the grid spot only matters for simple mode, so a full grid is no reason to refuse
+  room ??= { x: 0, y: 0, w: def.size?.w ?? 1, h: def.size?.h ?? 1 };
   const w = {
     id: crypto.randomUUID(),
     type,
@@ -1192,6 +1658,11 @@ function placeWidget(type, room) {
     ...room,
     settings: structuredClone(def.defaults ?? {}),
   };
+  if (free) {
+    const p = gridPx({ x: 0, y: 0, ...(def.size ?? room) });
+    w.free = clampFree(freeSpot({ w: p.w, h: p.h }, at), w);
+    w.z = topZ() + 1;
+  }
   widgets.push(w);
   mount(w);
   save(w);
@@ -1240,9 +1711,10 @@ function nearestSpot(w, h, tx, ty) {
 
 // Add at the cursor: land in the nearest fitting spot to the clicked cell when that cell is
 // open; if the cell is occupied (no room there), fall back to the first free spot.
-function addWidgetAt(type, cell) {
+function addWidgetAt(type, cell, at) {
   const def = REGISTRY[type];
   if (!def) return;
+  if (freeMode()) return placeWidget(type, findRoom(def, def.size), at); // free: right where you clicked
   let room = null;
   if (cell && fits({ x: cell.x, y: cell.y, w: 1, h: 1 })) {
     for (const size of [def.size, def.min].filter(Boolean)) {
@@ -1260,12 +1732,21 @@ function addWidgetAt(type, cell) {
 function receiveWidget(w) {
   const def = REGISTRY[w.type];
   if (!def || mounted.has(w.id)) return;
+  // its free rect belonged to the other monitor's board
+  const size = w.free ? { w: w.free.w, h: w.free.h } : null;
+  delete w.free;
+  delete w.z;
   const room = findRoom(def, { w: w.w, h: w.h });
   if (room) {
     Object.assign(w, room);
   } else {
     Object.assign(w, { x: 0, y: 0 });
-    toast(t("toast.overlap"));
+    if (!freeMode()) toast(t("toast.overlap"));
+  }
+  if (freeMode()) {
+    const p = size ?? gridPx(w);
+    w.free = clampFree(freeSpot({ w: p.w, h: p.h }), w);
+    w.z = topZ() + 1;
   }
   w.display = myDisplay;
   widgets.push(w);
@@ -1371,6 +1852,8 @@ const UI_DEFAULTS = {
   header: "hover",
   density: "normal",
   lockLayout: false,
+  awayMinutes: 30, // a sleep gap this long while a stopwatch or pomodoro counts: ask keep / take out (0 = never)
+  layoutMode: "grid", // "grid": cells + push-aside (simple) · "free": pixel placement, snap guides, overlap
   weekStart: "default",
   timerSound: true,
   timerVolume: 60,
@@ -1411,6 +1894,7 @@ function applyUi() {
   for (const d of ["compact", "normal", "roomy"])
     c.toggle("density-" + d, u.density === d);
   c.toggle("lock-layout", !!u.lockLayout);
+  applyLayoutMode();
   c.toggle("high-contrast", !!u.highContrast);
   c.toggle("big-targets", !!u.bigTargets);
   c.toggle("wide-text", !!u.wideText);
@@ -1934,7 +2418,10 @@ addEventListener("contextmenu", (e) => {
     !e.target.closest(".widget") &&
     e.target.closest("#board")
   )
-    openAddMenu(cellAt(e.clientX, e.clientY));
+    openAddMenu(cellAt(e.clientX, e.clientY), {
+      x: e.clientX - board.getBoundingClientRect().left,
+      y: e.clientY - board.getBoundingClientRect().top,
+    });
 });
 addEventListener("resize", () => {
   syncHits();
@@ -1954,6 +2441,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
 // ---------------- boot ----------------
 (async function boot() {
   const st = await invoke("load_state");
+  session = { launched: 0, closed: null, ...st.session };
   lang = st.lang || "ko";
   config = st.config || {};
   setMotion(st.reduceMotion);
@@ -1988,6 +2476,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       reportError(e);
     }
   }
+  if (freeMode()) setLayers(layerOrder()); // one z per widget (older layouts could share one)
   setTimeout(() => (reflow(), (document.documentElement.dataset.reflowed = "")), 400);
   setEdit(!!st.edit);
   syncHits();
