@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WidgetBoard Architecture</title>
+<!--
+  Architecture map. Edit MAP below; the drawing code needs no changes.
+  Arrows mean influence: A -> B = a change in A can affect B.
+    data   : writer -> store, store -> reader (both: reads and writes)
+    event  : sender -> receiver (Tauri events and commands)
+    signal : the board pushing state into a widget (day change, leftover runs, alerts)
+    import : imported module -> importer
+  Split a node later: give the new nodes `parent: "<id>"`; the old node becomes a box around them.
+  After reviewing code changes, set meta.mappedAt to the newest commit (the banner shows it).
+-->
+<script>
+const MAP = {
+  meta: {
+    repo: "104-bookwyrm/WidgetBoard",
+    branch: "main",
+    mappedAt: "2602225110cee1017d00c87b8ac683a7b9ff6abc", // v0.14.0
+    // files under these count as code; anything else (docs, tests, tools) never makes the map stale
+    watch: ["ui/", "src-tauri/src/", "src-tauri/tauri.conf.json", "src-tauri/capabilities/", "src-tauri/Cargo.toml", "src-tauri/build.rs"],
+    // used everywhere (strings, icons, styles, the browser mock): a change here is a general notice, not a node badge
+    shared: ["ui/i18n.js", "ui/icons.js", "ui/theme.js", "ui/base.css", "ui/default-theme.css", "ui/locales/", "ui/fonts/", "ui/icons/", "ui/mock-tauri.js", "ui/ai-theme-prompt.md"],
+  },
+  layers: [
+    { id: "native", label: "Native (Rust)" },
+    { id: "windows", label: "Windows" },
+    { id: "data", label: "Data" },
+    { id: "widgets", label: "Widgets" },
+    { id: "helpers", label: "Helpers" },
+  ],
+  // widget groups: a widget is drawn in its first group's box; its other groups show as a tag. col = sub-column.
+  groups: [
+    { id: "daily", label: "Daily", col: 0 },
+    { id: "display", label: "Display", col: 0 },
+    { id: "time", label: "Time", col: 1 },
+    { id: "records", label: "Records", col: 1 },
+  ],
+  // committed node positions; View > Layout > Copy layout writes this block. Empty = automatic columns.
+  // A browser's own saved layout wins over this one until Reset.
+  layout: {},
+  // src: files this node comes from ("dir/" = everything under it). Order within a layer = order on screen.
+  // perItem: a store where each widget keeps only its own item; a trace never goes widget -> store -> other widget.
+  nodes: [
+    { id: "native", layer: "native", label: "Native", src: ["src-tauri/src/", "src-tauri/tauri.conf.json", "src-tauri/capabilities/", "src-tauri/Cargo.toml", "src-tauri/build.rs"],
+      desc: "Tauri backend: windows, tray, files under data/, stores, backups, migration, updater, media session, notifications." },
+
+    { id: "settings", layer: "windows", label: "Settings", src: ["ui/settings.js", "ui/settings.html"],
+      desc: "Settings window. Writes config; runs backup and restore; shows update status." },
+    { id: "board", layer: "windows", label: "Board", src: ["ui/app.js", "ui/index.html", "ui/widgets/index.js"],
+      desc: "One per monitor. Hosts every widget (registry in widgets/index.js), saves layout and widget content, relays store changes to widgets." },
+    { id: "reminders", layer: "windows", parent: "board", label: "Reminders", src: ["ui/app.js"],
+      desc: "Per-event reminders and the daily to-do nudge. Reads the events store, fires OS notifications." },
+    { id: "session", layer: "windows", parent: "board", label: "Time session", src: ["ui/app.js"],
+      desc: "Launch and close times, sleep gaps, day change. Tells counting widgets about leftover runs and wakes date-based widgets at midnight." },
+    { id: "alerts", layer: "windows", parent: "board", label: "Alerts", src: ["ui/app.js"],
+      desc: "alertUser(): the opt-in visual and Windows alerts behind timer and pomodoro." },
+    { id: "library", layer: "windows", label: "Library", src: ["ui/library.js", "ui/library.html"],
+      desc: "Library window: edits saved content, searches diary and events, manages layouts, points at widgets on the board." },
+
+    { id: "config", layer: "data", label: "config", src: ["src-tauri/src/default-config.json"],
+      desc: "config.json: settings, theme, language, motion, week start, time zone, holidays, timer presets, away minutes." },
+    { id: "events", layer: "data", label: "events store", src: [],
+      desc: "data/events.json, kept by Native. Calendar entries, to-dos, D-days and showcase birthdays all live here. Widest reach in the app." },
+    { id: "d-diary", layer: "data", label: "diary pages", src: [],
+      desc: "One text page per date, kept by Native. Latest typing wins on a stale write." },
+    { id: "time", layer: "data", label: "time store", src: [],
+      desc: "data/time.json: one entry per finished stretch of counted time (focus or other)." },
+    { id: "content", layer: "data", label: "content", perItem: true, src: ["src-tauri/src/content.rs", "ui/widgets/content-keys.json"],
+      desc: "data/content.json: Library items with a per-item revision. content-keys.json decides which widget fields live here." },
+    { id: "assets", layer: "data", label: "assets", perItem: true, src: [],
+      desc: "Uploaded images and audio (save_asset through the board), kept by Native." },
+    { id: "layouts", layer: "data", label: "layouts", src: [],
+      desc: "Saved layouts, undo slot and preset bindings (stores layouts, layouts_undo, preset_bindings)." },
+    { id: "archive", layer: "data", label: "memo archive", src: [],
+      desc: "Memo text kept when it is replaced, so the Library can bring it back." },
+
+    { id: "calendar", layer: "widgets", groups: ["daily"], label: "Calendar", src: ["ui/widgets/calendar.js"], desc: "Month grid and board view over the events store; holidays; reminders per entry." },
+    { id: "checklist", layer: "widgets", groups: ["daily"], label: "Checklist", src: ["ui/widgets/checklist.js"], desc: "Today, week and month tabs over the events store; routines and quotas." },
+    { id: "dday", layer: "widgets", groups: ["daily"], label: "D-day", src: ["ui/widgets/dday.js"], desc: "Countdown list and schedule; D-days are events with a dday marker." },
+    { id: "showcase", layer: "widgets", groups: ["display"], label: "Showcase", src: ["ui/widgets/showcase.js"], desc: "Oshi card: images, quotes, birthday (synced into the events store)." },
+    { id: "w-diary", layer: "widgets", groups: ["daily", "records"], label: "Diary", src: ["ui/widgets/diary.js"], desc: "One page per day over the diary pages store." },
+    { id: "stopwatch", layer: "widgets", groups: ["time"], label: "Stopwatch", src: ["ui/widgets/stopwatch.js"], desc: "Counts time into the time store; shows totals per category." },
+    { id: "pomodoro", layer: "widgets", groups: ["time"], label: "Pomodoro", src: ["ui/widgets/pomodoro.js"], desc: "Work and break cycles; focus time goes into the time store." },
+    { id: "timer", layer: "widgets", groups: ["time"], label: "Timer", src: ["ui/widgets/timer.js"], desc: "Countdown with presets from config." },
+    { id: "memo", layer: "widgets", groups: ["records"], label: "Memo", src: ["ui/widgets/memo.js"], desc: "Sticky note; text lives in content." },
+    { id: "image", layer: "widgets", groups: ["display"], label: "Image", src: ["ui/widgets/image.js"], desc: "Image slideshow from assets." },
+    { id: "collection", layer: "widgets", groups: ["display", "records"], label: "Collection", src: ["ui/widgets/collection.js"], desc: "Grid of saved items with pictures." },
+    { id: "audioplayer", layer: "widgets", groups: ["display"], label: "Audio player", src: ["ui/widgets/audioplayer.js"], desc: "Plays uploaded tracks." },
+    { id: "nowplaying", layer: "widgets", groups: ["display"], label: "Now playing", src: ["ui/widgets/nowplaying.js"], desc: "Shows and controls the OS media session through Native." },
+    { id: "clock", layer: "widgets", groups: ["time"], label: "Clock", src: ["ui/widgets/clock.js"], desc: "Clock with time zones. Connected to nothing but util." },
+
+    { id: "holidays", layer: "helpers", label: "holidays", src: ["ui/holidays.js", "ui/holidays/"], desc: "Built-in Korean holiday table plus config add/remove." },
+    { id: "timelog", layer: "helpers", label: "timelog", src: ["ui/timelog.js"], desc: "Shared reader and writer for the time store." },
+    { id: "util", layer: "helpers", label: "util", src: ["ui/util.js"], helper: true,
+      desc: "Dates, recurrence (occursOn), time zones, merge, drop zones. Imported almost everywhere; hidden unless 'Show util' is on." },
+  ],
+  // at: "path:line" citations at meta.mappedAt. both: true = influence runs both ways (read + write).
+  edges: [
+    // events store
+    { from: "calendar", to: "events", kind: "data", both: true, note: "reads, writes, listens", at: ["ui/widgets/calendar.js:236", "ui/widgets/calendar.js:733", "ui/widgets/calendar.js:743"] },
+    { from: "checklist", to: "events", kind: "data", both: true, note: "reads, writes, listens", at: ["ui/widgets/checklist.js:225", "ui/widgets/checklist.js:336", "ui/widgets/checklist.js:342"] },
+    { from: "dday", to: "events", kind: "data", both: true, note: "reads, writes, listens", at: ["ui/widgets/dday.js:161", "ui/widgets/dday.js:670", "ui/widgets/dday.js:676"] },
+    { from: "showcase", to: "events", kind: "data", both: true, note: "birthday sync", at: ["ui/widgets/showcase.js:216", "ui/widgets/showcase.js:243", "ui/widgets/showcase.js:259"] },
+    { from: "events", to: "reminders", kind: "data", note: "reads due events and today's to-dos", at: ["ui/app.js:2012", "ui/app.js:2074"] },
+    { from: "events", to: "library", kind: "data", note: "search", at: ["ui/library.js:97", "ui/library.js:407"] },
+    // time store
+    { from: "timelog", to: "time", kind: "data", note: "appends and cuts entries", at: ["ui/timelog.js:31", "ui/timelog.js:42", "ui/timelog.js:51"] },
+    { from: "stopwatch", to: "time", kind: "data", both: true, note: "logs runs (through timelog); re-reads totals when time changes", at: ["ui/widgets/stopwatch.js:165", "ui/widgets/stopwatch.js:249", "ui/widgets/stopwatch.js:263"] },
+    { from: "pomodoro", to: "time", kind: "data", note: "logs focus time (through timelog)", at: ["ui/widgets/pomodoro.js:134", "ui/widgets/pomodoro.js:180"] },
+    // diary pages
+    { from: "w-diary", to: "d-diary", kind: "data", both: true, note: "reads, writes, listens", at: ["ui/widgets/diary.js:83", "ui/widgets/diary.js:103", "ui/widgets/diary.js:168"] },
+    { from: "d-diary", to: "library", kind: "data", note: "search", at: ["ui/library.js:96"] },
+    // content
+    { from: "board", to: "content", kind: "data", both: true, note: "saves and loads widget content", at: ["ui/app.js:557", "ui/app.js:580", "ui/app.js:2460"] },
+    { from: "library", to: "content", kind: "data", both: true, note: "lists, edits, erases", at: ["ui/library.js:263", "ui/library.js:288", "ui/library.js:358"] },
+    { from: "memo", to: "content", kind: "data", both: true, note: "text, color (through the board)", at: ["ui/widgets/content-keys.json:2"] },
+    { from: "image", to: "content", kind: "data", both: true, note: "image list (through the board)", at: ["ui/widgets/content-keys.json:3"] },
+    { from: "showcase", to: "content", kind: "data", both: true, note: "card fields (through the board)", at: ["ui/widgets/content-keys.json:4"] },
+    { from: "collection", to: "content", kind: "data", both: true, note: "items (through the board)", at: ["ui/widgets/content-keys.json:5"] },
+    { from: "audioplayer", to: "content", kind: "data", both: true, note: "tracks (through the board)", at: ["ui/widgets/content-keys.json:6"] },
+    { from: "timer", to: "content", kind: "data", both: true, note: "duration, run state (through the board)", at: ["ui/widgets/content-keys.json:7"] },
+    { from: "stopwatch", to: "content", kind: "data", both: true, note: "run state, laps (through the board)", at: ["ui/widgets/content-keys.json:8"] },
+    { from: "pomodoro", to: "content", kind: "data", both: true, note: "phase, lengths (through the board)", at: ["ui/widgets/content-keys.json:9"] },
+    // assets
+    { from: "image", to: "assets", kind: "data", both: true, note: "uploads, shows", at: ["ui/widgets/image.js:62"] },
+    { from: "collection", to: "assets", kind: "data", both: true, note: "uploads, shows", at: ["ui/widgets/collection.js:78"] },
+    { from: "showcase", to: "assets", kind: "data", both: true, note: "uploads, shows", at: ["ui/widgets/showcase.js:104"] },
+    { from: "audioplayer", to: "assets", kind: "data", both: true, note: "uploads, plays", at: ["ui/widgets/audioplayer.js:105"] },
+    { from: "dday", to: "assets", kind: "data", both: true, note: "icons; lists assets", at: ["ui/widgets/dday.js:268", "ui/widgets/dday.js:596"] },
+    { from: "checklist", to: "assets", kind: "data", both: true, note: "stamp image", at: ["ui/widgets/checklist.js:215"] },
+    // config
+    { from: "settings", to: "config", kind: "data", both: true, note: "save_config; re-reads on config-changed", at: ["ui/settings.js:160", "ui/settings.js:758"] },
+    { from: "config", to: "board", kind: "data", note: "config, theme, language, motion", at: ["ui/app.js:2535", "ui/app.js:2539"] },
+    { from: "config", to: "library", kind: "data", note: "theme, language", at: ["ui/library.js:417", "ui/library.js:418"] },
+    { from: "config", to: "calendar", kind: "data", note: "time zone, week start", at: ["ui/widgets/calendar.js:192", "ui/widgets/calendar.js:266", "ui/widgets/calendar.js:744"] },
+    { from: "config", to: "checklist", kind: "data", note: "week start", at: ["ui/widgets/checklist.js:343"] },
+    { from: "config", to: "timer", kind: "data", note: "presets, alert options", at: ["ui/widgets/timer.js:94", "ui/widgets/timer.js:206", "ui/widgets/timer.js:221"] },
+    { from: "config", to: "pomodoro", kind: "data", note: "alert options", at: ["ui/widgets/pomodoro.js:119"] },
+    { from: "config", to: "reminders", kind: "data", note: "daily reminder time", at: ["ui/app.js:2005"] },
+    { from: "config", to: "session", kind: "data", note: "away minutes", at: ["ui/app.js:890"] },
+    { from: "config", to: "holidays", kind: "data", note: "country, added and removed days", at: ["ui/holidays.js:15"] },
+    // layouts, memo archive
+    { from: "library", to: "layouts", kind: "data", both: true, note: "save, delete, list", at: ["ui/library.js:168", "ui/library.js:190", "ui/library.js:203"] },
+    { from: "board", to: "layouts", kind: "data", both: true, note: "apply, undo, preset bindings", at: ["ui/app.js:2296", "ui/app.js:2355", "ui/app.js:2362"] },
+    { from: "memo", to: "archive", kind: "data", note: "replaced text is archived by the board", at: ["ui/app.js:593", "ui/app.js:648"] },
+    { from: "archive", to: "library", kind: "data", note: "restore old memos", at: ["ui/library.js:136"] },
+
+    // events and commands
+    { from: "library", to: "calendar", kind: "event", note: "goto-date", at: ["ui/library.js:318", "ui/widgets/calendar.js:582"] },
+    { from: "library", to: "w-diary", kind: "event", note: "goto-date", at: ["ui/library.js:318", "ui/widgets/diary.js:165"] },
+    { from: "library", to: "board", kind: "event", note: "locate, restore, apply layout or preset, undo (relayed by Native)", at: ["ui/library.js:317", "ui/library.js:328", "ui/library.js:180", "src-tauri/src/main.rs:966", "ui/app.js:2504", "ui/app.js:2518", "ui/app.js:2544"] },
+    { from: "native", to: "nowplaying", kind: "event", note: "media", at: ["src-tauri/src/main.rs:987", "ui/widgets/nowplaying.js:194"] },
+    { from: "nowplaying", to: "native", kind: "event", note: "media_control", at: ["ui/widgets/nowplaying.js:164", "src-tauri/src/main.rs:993"] },
+    { from: "native", to: "board", kind: "event", note: "tray add-widget, updates, flush-saves, restore, layout-replaced", at: ["src-tauri/src/main.rs:1800", "src-tauri/src/flush.rs:60", "ui/app.js:2484", "ui/app.js:2564", "ui/app.js:2598", "ui/app.js:2609"] },
+    { from: "board", to: "native", kind: "event", note: "load and move widgets, click-through areas, edit mode", at: ["ui/app.js:2443", "ui/app.js:1269", "ui/app.js:680", "ui/app.js:1382"] },
+    { from: "settings", to: "native", kind: "event", note: "backup, restore, autostart", at: ["ui/settings.js:521", "ui/settings.js:505", "ui/settings.js:152"] },
+    { from: "native", to: "settings", kind: "event", note: "update-status, backup-status", at: ["src-tauri/src/main.rs:1290", "src-tauri/src/main.rs:1605", "ui/settings.js:766", "ui/settings.js:781"] },
+
+    // board signals
+    { from: "session", to: "calendar", kind: "signal", note: "day change", at: ["ui/app.js:78", "ui/widgets/calendar.js:749"] },
+    { from: "session", to: "checklist", kind: "signal", note: "day change", at: ["ui/app.js:78", "ui/widgets/checklist.js:345"] },
+    { from: "session", to: "dday", kind: "signal", note: "day change", at: ["ui/app.js:78", "ui/widgets/dday.js:666"] },
+    { from: "session", to: "w-diary", kind: "signal", note: "day change", at: ["ui/app.js:78", "ui/widgets/diary.js:177"] },
+    { from: "session", to: "showcase", kind: "signal", note: "day change", at: ["ui/app.js:78", "ui/widgets/showcase.js:351"] },
+    { from: "session", to: "pomodoro", kind: "signal", note: "day change, leftover run, sleep gap", at: ["ui/widgets/pomodoro.js:353", "ui/app.js:883", "ui/widgets/pomodoro.js:362", "ui/widgets/pomodoro.js:193"] },
+    { from: "session", to: "stopwatch", kind: "signal", note: "leftover run, sleep gap", at: ["ui/app.js:883", "ui/widgets/stopwatch.js:267", "ui/widgets/stopwatch.js:138"] },
+    { from: "session", to: "timer", kind: "signal", note: "leftover run", at: ["ui/app.js:883", "ui/widgets/timer.js:262"] },
+    { from: "timer", to: "alerts", kind: "signal", note: "timer done", at: ["ui/widgets/timer.js:135"] },
+    { from: "pomodoro", to: "alerts", kind: "signal", note: "phase done", at: ["ui/widgets/pomodoro.js:244"] },
+    { from: "alerts", to: "native", kind: "signal", note: "notify", at: ["ui/app.js:1998"] },
+    { from: "reminders", to: "native", kind: "signal", note: "notify", at: ["ui/app.js:2023", "ui/app.js:2048"] },
+
+    // imports
+    { from: "timer", to: "pomodoro", kind: "import", note: "fmt, beep", at: ["ui/widgets/pomodoro.js:6"] },
+    { from: "stopwatch", to: "pomodoro", kind: "import", note: "fmtTotal", at: ["ui/widgets/pomodoro.js:7"] },
+    { from: "timelog", to: "stopwatch", kind: "import", note: "spent, totals, add and cut entries", at: ["ui/widgets/stopwatch.js:7", "ui/widgets/stopwatch.js:165", "ui/widgets/stopwatch.js:249"] },
+    { from: "timelog", to: "pomodoro", kind: "import", note: "add and cut entries", at: ["ui/widgets/pomodoro.js:8", "ui/widgets/pomodoro.js:134"] },
+    { from: "memo", to: "library", kind: "import", note: "COLORS", at: ["ui/library.js:8"] },
+    { from: "timer", to: "library", kind: "import", note: "fmt", at: ["ui/library.js:9"] },
+    { from: "stopwatch", to: "library", kind: "import", note: "fmtTotal", at: ["ui/library.js:10"] },
+    { from: "holidays", to: "calendar", kind: "import", note: "loadHolidays, holidayName", at: ["ui/widgets/calendar.js:25"] },
+    ...[
+      ["board", "ui/app.js:3"], ["settings", "ui/settings.js:5"], ["library", "ui/library.js:6"],
+      ["calendar", "ui/widgets/calendar.js:7"], ["checklist", "ui/widgets/checklist.js:8"], ["dday", "ui/widgets/dday.js:5"],
+      ["showcase", "ui/widgets/showcase.js:6"], ["w-diary", "ui/widgets/diary.js:4"], ["clock", "ui/widgets/clock.js:3"],
+      ["collection", "ui/widgets/collection.js:5"], ["audioplayer", "ui/widgets/audioplayer.js:4"], ["image", "ui/widgets/image.js:6"],
+    ].map(([to, at]) => ({ from: "util", to, kind: "import", note: "util helpers", at: [at], helper: true })),
+  ],
+};
+</script>
+<style>
+:root {
+  --bg: #f6f6f4; --panel: #ffffff; --text: #1f1f22; --muted: #6a6a72; --line: #dedcd8; --node: #ffffff;
+  --k-data: #3b5bdb; --k-event: #2b8a3e; --k-signal: #e67700; --k-import: #868e96;
+  --up: #d6336c; --down: #0c8599; --both: #7048e8; --changed: #ffe3e3; --changed-line: #e03131;
+  --ok: #2b8a3e; --warn: #e67700; --err: #868e96;
+  --L-native: #eef1f7; --L-windows: #f4eff8; --L-data: #eef6f1; --L-widgets: #fbf3ea; --L-helpers: #f1f1f1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17171a; --panel: #212125; --text: #ececf0; --muted: #a0a0aa; --line: #34343a; --node: #2a2a2f;
+    --k-data: #748ffc; --k-event: #51cf66; --k-signal: #fcc419; --k-import: #8f959b;
+    --up: #f06595; --down: #3bc9db; --both: #9775fa; --changed: #4a2023; --changed-line: #ff6b6b;
+    --ok: #51cf66; --warn: #fcc419; --err: #a0a0aa;
+    --L-native: #1f2330; --L-windows: #272030; --L-data: #1d2a23; --L-widgets: #2d251c; --L-helpers: #24242a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17171a; --panel: #212125; --text: #ececf0; --muted: #a0a0aa; --line: #34343a; --node: #2a2a2f;
+  --k-data: #748ffc; --k-event: #51cf66; --k-signal: #fcc419; --k-import: #8f959b;
+  --up: #f06595; --down: #3bc9db; --both: #9775fa; --changed: #4a2023; --changed-line: #ff6b6b;
+  --ok: #51cf66; --warn: #fcc419; --err: #a0a0aa;
+  --L-native: #1f2330; --L-windows: #272030; --L-data: #1d2a23; --L-widgets: #2d251c; --L-helpers: #24242a;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; display: flex; flex-direction: column; }
+header { padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+h1 { font-size: 16px; margin: 0 8px 0 0; }
+.ctl { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.ctl label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.sw { width: 18px; height: 0; border-top: 2px solid; display: inline-block; }
+.sw.event { border-top-style: dashed; } .sw.signal { border-top-style: dashed; } .sw.import { border-top-style: dotted; }
+.dot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; border: 2px solid; }
+select, button { font: inherit; color: var(--text); background: var(--node); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+button { cursor: pointer; }
+#banner { padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); border-left: 4px solid var(--err); }
+#banner.ok { border-left-color: var(--ok); } #banner.stale { border-left-color: var(--warn); } #banner.error { border-left-color: var(--err); }
+#banner details { margin-top: 4px; } #banner ul { margin: 4px 0; padding-left: 20px; }
+code { font: 12px ui-monospace, Consolas, monospace; background: var(--bg); padding: 1px 4px; border-radius: 4px; word-break: break-all; }
+main { flex: 1; display: flex; min-height: 0; }
+#stage { flex: 1; min-width: 0; position: relative; }
+#cy { position: absolute; inset: 0; }
+#tip { position: absolute; z-index: 5; max-width: 360px; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 14px rgb(0 0 0 / .15); }
+#view { position: absolute; top: 10px; left: 10px; z-index: 4; width: 200px; max-height: calc(100% - 60px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px 10px; font-size: 13px; box-shadow: 0 2px 10px rgb(0 0 0 / .08); }
+#view:not([open]) { width: auto; padding-bottom: 6px; }
+#view summary { cursor: pointer; font-weight: 600; }
+#view h4 { margin: 10px 0 3px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+#view label { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 1px 0; }
+#view .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+#view .meta { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+#view textarea { width: 100%; font: 11px ui-monospace, Consolas, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
+#legend { position: absolute; left: 12px; bottom: 10px; z-index: 4; display: flex; flex-wrap: wrap; gap: 4px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; color: var(--muted); font-size: 12px; }
+#legend > span, #legendDir { display: inline-flex; gap: 4px 14px; align-items: center; flex-wrap: wrap; }
+#tip .meta, .sum .meta { color: var(--muted); font-size: 12px; }
+.sum li { border-bottom: 0; padding: 2px 0; }
+#sideHide { display: block; margin: -4px 0 8px auto; font-size: 12px; }
+#sideShow { position: absolute; top: 10px; right: 10px; z-index: 4; }
+.ph { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+aside { width: 340px; border-left: 1px solid var(--line); background: var(--panel); padding: 14px 16px; overflow: auto; }
+aside h2 { font-size: 16px; margin: 0 0 2px; } aside h3 { font-size: 13px; margin: 14px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+aside ul { margin: 0; padding-left: 0; list-style: none; } aside li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+aside .meta { color: var(--muted); font-size: 12px; }
+a { color: var(--k-data); }
+.kind { font-size: 11px; padding: 0 5px; border-radius: 4px; border: 1px solid; margin-right: 4px; }
+.flag { color: var(--changed-line); font-weight: 600; }
+@media (max-width: 800px) {
+  main { flex-direction: column; } #stage { min-height: 60vh; }
+  aside { width: auto; border-left: 0; border-top: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>WidgetBoard architecture</h1>
+</header>
+<div id="banner">Checking for code changes...</div>
+<main>
+  <div id="stage"><div id="cy"></div><div id="tip" hidden></div>
+    <button id="sideShow" hidden title="Show the details panel">&laquo; Details</button>
+    <details id="view" open><summary>View</summary>
+      <h4>Links</h4><div id="kinds"></div>
+      <h4>Layers</h4><div id="layers"></div>
+      <h4>Widget groups</h4><div id="groups"></div>
+      <h4>Display</h4>
+      <label><input type="checkbox" id="showUtil"> Show util</label>
+      <label title="Steps between features; passing through a store does not count">Trace <select id="depth"><option value="1" selected>1 step</option><option value="2">2 steps</option><option value="3">3 steps</option></select></label>
+      <div id="hiddenRow" hidden><h4>Hidden</h4><span class="meta"></span> <button id="showAll">Show all</button></div>
+      <h4>Layout</h4>
+      <div class="btns"><button id="fit">Fit</button><button id="copyLayout" title="Copy positions for MAP.layout in this file">Copy layout</button><button id="resetLayout" title="Forget this browser's layout">Reset</button></div>
+      <p id="layoutSrc" class="meta"></p>
+      <textarea id="layoutText" rows="6" hidden></textarea>
+    </details>
+    <div id="legend" class="meta">
+      <span id="legendDir" hidden>
+        <span><i class="dot" style="border-color:var(--up)"></i> Upstream: can affect it</span>
+        <span><i class="dot" style="border-color:var(--down)"></i> Downstream: it can affect</span>
+        <span><i class="dot" style="border-color:var(--both)"></i> Both</span>
+      </span>
+      <span><i class="dot" style="border-color:var(--changed-line);background:var(--changed)"></i> Code changed</span>
+    </div>
+  </div>
+  <aside id="side">
+    <button id="sideHide" title="Hide the details panel">Hide panel &raquo;</button>
+    <div id="panel"><p class="meta">Hover a node to preview what it touches; click to pin it. Arrows point the way influence flows.</p></div>
+  </aside>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<script>
+const KINDS = { data: "Data", event: "Event / command", signal: "Board signal", import: "Import" };
+const nodeById = Object.fromEntries(MAP.nodes.map((n) => [n.id, n]));
+const changedFiles = {}; // node id -> [file]
+let selected = null; // traced node id
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ghFile = (path, ref = MAP.meta.mappedAt) => `https://github.com/${MAP.meta.repo}/${path.endsWith("/") ? "tree" : "blob"}/${ref}/${path}`;
+const ghLine = (at) => { const [p, l] = at.split(/:(?=\d+$)/); return ghFile(p) + (l ? "#L" + l : ""); };
+const matches = (file, pattern) => (pattern.endsWith("/") ? file.startsWith(pattern) : file === pattern);
+
+// ---- elements: one box per layer, one per widget group; a node with children becomes a box too ----
+const parents = new Set(MAP.nodes.map((n) => n.parent).filter(Boolean));
+const groupLabel = Object.fromEntries(MAP.groups.map((g) => [g.id, g.label]));
+const COL_W = 230, ROW_H = 58, BOX_GAP = 34;
+const colX = {}, colY = {}; // colY by "layer:subcolumn"
+let x = 0;
+for (const l of MAP.layers) {
+  colX[l.id] = x;
+  x += (l.id === "widgets" ? Math.max(...MAP.groups.map((g) => g.col)) + 1 : 1) * COL_W;
+}
+const elements = MAP.layers.map((l) => ({ data: { id: "L-" + l.id, label: l.label }, classes: "layer L-" + l.id }));
+function place(n, parent, sub = 0) {
+  const k = n.layer + ":" + sub;
+  colY[k] ??= 0;
+  const extra = (n.groups || []).slice(1).map((g) => groupLabel[g]);
+  const el = { data: { id: n.id, label: n.label + (extra.length ? "\nalso " + extra.join(", ") : ""), parent }, classes: [n.helper && "helper", extra.length && "multi"].filter(Boolean).join(" ") };
+  if (parents.has(n.id)) colY[k] += BOX_GAP; // room for the box label
+  else { el.position = { x: colX[n.layer] + sub * COL_W, y: colY[k] }; colY[k] += ROW_H; }
+  elements.push(el);
+}
+for (const n of MAP.nodes) if (n.layer !== "widgets") place(n, n.parent || "L-" + n.layer);
+for (const g of MAP.groups) {
+  elements.push({ data: { id: "G-" + g.id, label: g.label, parent: "L-widgets" }, classes: "group" });
+  colY["widgets:" + g.col] = (colY["widgets:" + g.col] ?? 0) + BOX_GAP;
+  for (const n of MAP.nodes) if (n.groups?.[0] === g.id) place(n, "G-" + g.id, g.col);
+  colY["widgets:" + g.col] += 16; // gap between boxes
+}
+for (const n of MAP.nodes) if (n.layer === "widgets" && !n.groups?.length) place(n, "L-widgets"); // not grouped yet
+MAP.edges.forEach((e, i) =>
+  elements.push({ data: { id: "e" + i, source: e.from, target: e.to, idx: i }, classes: [e.kind, e.both && "both", e.helper && "helper"].filter(Boolean).join(" ") }),
+);
+
+function style() {
+  const s = [
+    { selector: "node", style: { label: "data(label)", shape: "round-rectangle", width: 150, height: 34, "font-size": 12, color: css("--text"),
+      "text-valign": "center", "text-halign": "center", "background-color": css("--node"), "border-width": 1.5, "border-color": css("--line") } },
+    { selector: ":parent", style: { "text-valign": "top", "text-halign": "center", "font-weight": 600, padding: 12, "background-color": css("--node"), "background-opacity": 0.6 } },
+    { selector: "node.layer", style: { "font-size": 13, "text-margin-y": -4, padding: 18, "border-width": 0, events: "no", "background-opacity": 1 } },
+    ...MAP.layers.map((l) => ({ selector: ".L-" + l.id, style: { "background-color": css("--L-" + l.id) } })),
+    { selector: "node.group", style: { "font-size": 12, color: css("--muted"), "background-opacity": 0.35, "border-width": 1, "border-style": "dashed", padding: 10 } },
+    { selector: "node.multi", style: { "text-wrap": "wrap", height: 42, "line-height": 1.3 } },
+    { selector: "edge", style: { width: 1.6, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": 0.9, opacity: 0.3 } },
+    ...Object.keys(KINDS).map((k) => ({ selector: "edge." + k, style: { "line-color": css("--k-" + k), "target-arrow-color": css("--k-" + k), "source-arrow-color": css("--k-" + k) } })),
+    { selector: "edge.both", style: { "source-arrow-shape": "triangle" } },
+    { selector: "edge.event", style: { "line-style": "dashed" } },
+    { selector: "edge.signal", style: { "line-style": "dashed", "line-dash-pattern": [2, 4] } },
+    { selector: "edge.import", style: { "line-style": "dotted", width: 1.3 } },
+    { selector: "node.changed", style: { "background-color": css("--changed"), "border-color": css("--changed-line"), "border-style": "dashed" } },
+    { selector: "node.faded", style: { opacity: 0.2 } },
+    { selector: "edge.faded", style: { opacity: 0.06 } },
+    { selector: "edge:selected", style: { opacity: 1, width: 3 } },
+    // in a trace, edges take the direction colour; their kind stays readable as the line style
+    ...[["up", "--up"], ["down", "--down"], ["updown", "--both"]].map(([c, v]) => ({
+      selector: "edge." + c, style: { opacity: 1, width: 2.6, "line-color": css(v), "target-arrow-color": css(v), "source-arrow-color": css(v) } })),
+    { selector: "node.up", style: { "border-color": css("--up"), "border-width": 3, "border-style": "solid" } },
+    { selector: "node.down", style: { "border-color": css("--down"), "border-width": 3, "border-style": "solid" } },
+    { selector: "node.up.down", style: { "border-color": css("--both") } },
+    { selector: "node.focus", style: { "border-color": css("--text"), "border-width": 3.5, "border-style": "solid" } },
+    { selector: ".hidden", style: { display: "none" } },
+  ];
+  return s;
+}
+
+const cy = cytoscape({ container: document.getElementById("cy"), elements, style: style(), layout: { name: "preset", padding: 30 }, minZoom: 0.2, maxZoom: 3 });
+if (innerWidth < 800) document.getElementById("view").open = false; // on a phone the panel would cover the graph
+/** Fit what is visible into the space right of the View panel. */
+function fitView() {
+  const view = document.getElementById("view");
+  const off = view.open ? view.offsetWidth + 20 : 0, pad = 30;
+  const bb = cy.elements(":visible").boundingBox();
+  const w = cy.width() - off - pad * 2, h = cy.height() - pad * 2;
+  const z = Math.max(cy.minZoom(), Math.min(w / bb.w, h / bb.h, 1.5));
+  cy.zoom(z);
+  cy.pan({ x: off + pad + (w - bb.w * z) / 2 - bb.x1 * z, y: pad + (h - bb.h * z) / 2 - bb.y1 * z });
+}
+// ---- saved layout: this browser's (auto-saved on drag) > the file's MAP.layout > automatic columns ----
+const LAYOUT_KEY = "wb-architecture-layout";
+const leaves = () => cy.nodes().filter((n) => !n.isParent() && nodeById[n.id()]);
+const autoPos = Object.fromEntries(elements.filter((e) => e.position).map((e) => [e.data.id, { ...e.position }])); // copies: cytoscape moves the originals
+function readLocal() {
+  try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)) || null; } catch { return null; }
+}
+function applyLayout() {
+  const local = readLocal(), file = Object.keys(MAP.layout || {}).length ? MAP.layout : null;
+  const saved = local || file || {};
+  leaves().forEach((n) => { const p = saved[n.id()]; n.position(p ? { x: p[0], y: p[1] } : autoPos[n.id()]); });
+  document.getElementById("layoutSrc").textContent = local ? "Saved in this browser." : file ? "From the file." : "Automatic.";
+}
+function currentLayout() {
+  const out = {};
+  leaves().forEach((n) => { const p = n.position(); out[n.id()] = [Math.round(p.x), Math.round(p.y)]; });
+  return out;
+}
+cy.on("dragfree", "node", () => {
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(currentLayout())); } catch {} // private window: the layout just isn't kept
+  document.getElementById("layoutSrc").textContent = "Saved in this browser.";
+});
+document.getElementById("resetLayout").addEventListener("click", () => {
+  try { localStorage.removeItem(LAYOUT_KEY); } catch {}
+  applyLayout();
+  fitView();
+});
+document.getElementById("copyLayout").addEventListener("click", async () => {
+  const text = "  layout: {\n" + Object.entries(currentLayout()).map(([id, p]) => `    ${JSON.stringify(id)}: [${p.join(", ")}],`).join("\n") + "\n  },";
+  const box = document.getElementById("layoutText"), msg = document.getElementById("layoutSrc");
+  try {
+    await navigator.clipboard.writeText(text);
+    box.hidden = true;
+    msg.textContent = "Copied. Paste it over the layout: line in MAP and commit.";
+  } catch {
+    box.hidden = false; // no clipboard access: copy by hand
+    box.value = text;
+    box.select();
+    msg.textContent = "Copy this and paste it over the layout: line in MAP.";
+  }
+});
+applyLayout();
+
+// ---- details panel show/hide, remembered per browser; clicking a node never reopens it ----
+const SIDE_KEY = "wb-architecture-side-hidden";
+function setSide(hidden, save = true) {
+  document.getElementById("side").hidden = hidden;
+  document.getElementById("sideShow").hidden = !hidden;
+  if (save) try { localStorage.setItem(SIDE_KEY, hidden ? "1" : ""); } catch {}
+  cy.resize();
+  fitView();
+}
+document.getElementById("sideHide").addEventListener("click", () => setSide(true));
+document.getElementById("sideShow").addEventListener("click", () => setSide(false));
+try { document.getElementById("side").hidden = !!localStorage.getItem(SIDE_KEY); } catch {}
+document.getElementById("sideShow").hidden = !document.getElementById("side").hidden;
+requestAnimationFrame(() => (cy.resize(), fitView())); // the preset layout does not fit on its own
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => cy.style(style()));
+
+// ---- view: link kinds, layers, widget groups, hidden nodes. Hiding is visual only; a trace still walks hidden nodes. ----
+const on = { kind: {}, layer: {}, group: {} };
+const hiddenNodes = new Set();
+const checks = (type, items) =>
+  items.map(([id, label, extra = ""]) => ((on[type][id] = true), `<label><input type="checkbox" data-${type}="${id}" checked>${extra}${esc(label)}</label>`)).join("");
+document.getElementById("kinds").innerHTML = checks("kind", Object.entries(KINDS).map(([k, l]) => [k, l, `<i class="sw ${k}" style="border-color:var(--k-${k})"></i>`]));
+document.getElementById("layers").innerHTML = checks("layer", MAP.layers.map((l) => [l.id, l.label]));
+document.getElementById("groups").innerHTML = checks("group", MAP.groups.map((g) => [g.id, g.label]));
+const showUtil = document.getElementById("showUtil");
+const depthSel = document.getElementById("depth");
+/** Edges a trace may walk: kind switched on, util only when shown. */
+const visibleEdge = (e) => on.kind[e.kind] && (!e.helper || showUtil.checked);
+function nodeShown(n) {
+  if (!on.layer[n.layer] || hiddenNodes.has(n.id) || (n.helper && !showUtil.checked)) return false;
+  if (n.groups?.length && !n.groups.some((g) => on.group[g])) return false; // shown while any of its groups is on
+  return !n.parent || nodeShown(nodeById[n.parent]);
+}
+function applyFilters() {
+  for (const n of MAP.nodes) cy.getElementById(n.id).toggleClass("hidden", !nodeShown(n));
+  for (const l of MAP.layers) cy.getElementById("L-" + l.id).toggleClass("hidden", !on.layer[l.id]);
+  for (const g of MAP.groups) cy.getElementById("G-" + g.id).toggleClass("hidden", !MAP.nodes.some((n) => n.groups?.[0] === g.id && nodeShown(n)));
+  cy.edges().forEach((el) => {
+    const e = MAP.edges[el.data("idx")];
+    el.toggleClass("hidden", !visibleEdge(e) || !nodeShown(nodeById[e.from]) || !nodeShown(nodeById[e.to]));
+  });
+  const row = document.getElementById("hiddenRow");
+  row.hidden = !hiddenNodes.size;
+  row.querySelector("span").textContent = [...hiddenNodes].map((id) => nodeById[id].label).join(", ");
+  if (selected) trace(selected);
+}
+document.getElementById("view").addEventListener("change", (ev) => {
+  const d = ev.target.dataset;
+  const type = Object.keys(on).find((t) => t in d);
+  if (type) on[type][d[type]] = ev.target.checked;
+  if (ev.target === depthSel) return selected && trace(selected);
+  applyFilters();
+});
+document.getElementById("showAll").addEventListener("click", () => (hiddenNodes.clear(), applyFilters()));
+function hideNode(id) {
+  hiddenNodes.add(id);
+  if (selected === id) clearTrace();
+  applyFilters();
+}
+document.getElementById("fit").addEventListener("click", fitView);
+applyFilters();
+
+// ---- trace: walk visible edges up (what affects it) and down (what it affects) ----
+const isWidget = (id) => nodeById[id].layer === "widgets";
+/** Nodes reachable from `start` within `depth` steps. Returns { found, edges (indexes used), via (stores passed), step }. */
+function walk(start, dir, depth) {
+  const found = new Set(), edges = new Set(), via = {}, step = {};
+  let frontier = [[start, false]]; // [node id, entered from a widget]
+  for (let d = 0; d < depth && frontier.length; d++) {
+    const next = [];
+    for (let i = 0; i < frontier.length; i++) {
+      const [id, fromWidget] = frontier[i];
+      const blockWidgets = fromWidget && nodeById[id].perItem; // one widget's item never reaches another widget
+      MAP.edges.forEach((e, idx) => {
+        if (!visibleEdge(e)) return;
+        const [a, b] = dir === "down" ? [e.from, e.to] : [e.to, e.from];
+        const hits = a === id ? [b] : e.both && b === id ? [a] : [];
+        // a data node is a pass-through: going through a store does not use up a step
+        for (const h of hits) {
+          if (h === start || found.has(h) || (blockWidgets && isWidget(h))) continue;
+          found.add(h);
+          edges.add(idx);
+          step[h] = d + 1;
+          via[h] = nodeById[id].layer === "data" ? [...(via[id] || []), id] : [];
+          if (nodeById[h].layer === "data") frontier.push([h, isWidget(id)]);
+          else next.push([h, false]);
+        }
+      });
+    }
+    frontier = next;
+  }
+  return { found, edges, via, step };
+}
+const legendDir = document.getElementById("legendDir");
+const EMPTY_PANEL = '<p class="meta">Hover a node to preview what it touches; click to pin it. Arrows point the way influence flows.</p>';
+let traced = null; // last walk, for the panel summary
+/** Light up what can affect `id` (upstream) and what it can affect (downstream). Boxes are never coloured. */
+function paint(id) {
+  const depth = Number(depthSel.value);
+  const up = walk(id, "up", depth), down = walk(id, "down", depth);
+  const lit = new Set([id, ...up.found, ...down.found]);
+  cy.nodes().not(".layer, .group").forEach((n) => {
+    const nid = n.id();
+    const kids = n.isParent() && n.children().some((c) => lit.has(c.id()));
+    n.toggleClass("faded", !lit.has(nid) && !kids).toggleClass("up", up.found.has(nid)).toggleClass("down", down.found.has(nid)).toggleClass("focus", nid === id);
+  });
+  cy.edges().forEach((el) => {
+    const i = el.data("idx"), u = up.edges.has(i), d = down.edges.has(i);
+    el.toggleClass("faded", !u && !d).toggleClass("up", u && !d).toggleClass("down", d && !u).toggleClass("updown", u && d);
+  });
+  legendDir.hidden = false;
+  return { up, down };
+}
+function unpaint() {
+  cy.elements().removeClass("faded up down updown focus");
+  legendDir.hidden = true;
+}
+function trace(id) {
+  selected = id;
+  traced = paint(id);
+  showPanel(id);
+}
+function clearTrace() {
+  selected = traced = null;
+  unpaint();
+  cy.edges().unselect();
+  document.getElementById("panel").innerHTML = EMPTY_PANEL;
+}
+cy.on("tap", "node", (ev) => !ev.target.hasClass("group") && trace(ev.target.id()));
+cy.on("tap", (ev) => ev.target === cy && clearTrace());
+// hover previews a trace while nothing is pinned
+cy.on("mouseover", "node", (ev) => !selected && !ev.target.hasClass("group") && paint(ev.target.id()));
+cy.on("mouseout", "node", () => !selected && unpaint());
+
+// ---- edge hover: note and citations; click pins them in the panel ----
+const tip = document.getElementById("tip");
+const edgeTitle = (e) => `${esc(nodeById[e.from].label)} ${e.both ? "&harr;" : "&rarr;"} ${esc(nodeById[e.to].label)}`;
+cy.on("mouseover", "edge", (ev) => {
+  const e = MAP.edges[ev.target.data("idx")], p = ev.renderedPosition;
+  tip.innerHTML = `<b>${edgeTitle(e)}</b> <span class="kind" style="color:var(--k-${e.kind})">${esc(KINDS[e.kind])}</span><br>${esc(e.note)}<br><span class="meta">${e.at.map(esc).join("<br>")}</span>`;
+  tip.style.left = p.x + 14 + "px";
+  tip.style.top = p.y + 14 + "px";
+  tip.hidden = false;
+});
+cy.on("mouseout", "edge", () => (tip.hidden = true));
+cy.on("tap", "edge", (ev) => {
+  const e = MAP.edges[ev.target.data("idx")];
+  if (!selected) unpaint();
+  document.getElementById("panel").innerHTML = `<h2>${edgeTitle(e)}</h2><div class="meta">${esc(KINDS[e.kind])}</div><ul>${edgeRow(e, e.from)}</ul>`;
+});
+
+function edgeRow(e, other) {
+  const k = `<span class="kind" style="color:var(--k-${e.kind})">${esc(KINDS[e.kind])}</span>`;
+  const cites = e.at.map((a) => `<a href="${esc(ghLine(a))}" target="_blank" rel="noopener">${esc(a)}</a>`).join(", ");
+  return `<li>${k}<b>${esc(nodeById[other]?.label ?? other)}</b>${e.both ? " (both ways)" : ""}<div class="meta">${esc(e.note)}<br>${cites}</div></li>`;
+}
+function showPanel(id) {
+  const n = nodeById[id];
+  const ins = MAP.edges.filter((e) => e.to === id || (e.both && e.from === id));
+  const outs = MAP.edges.filter((e) => e.from === id || (e.both && e.to === id));
+  const list = (es, side) => (es.length ? `<ul>${es.map((e) => edgeRow(e, e.from === id ? e.to : e.from)).join("")}</ul>` : '<p class="meta">Nothing.</p>');
+  const layer = MAP.layers.find((l) => l.id === n.layer).label + (n.parent ? " / " + nodeById[n.parent].label : "");
+  const kids = MAP.nodes.filter((c) => c.parent === id).map((c) => c.label);
+  const changed = changedFiles[id];
+  // plain-language answer first: features only, stores named as the route
+  const summary = (w) => {
+    const ids = [...w.found].filter((x) => nodeById[x].layer !== "data").sort((a, b) => w.step[a] - w.step[b]);
+    if (!ids.length) return '<p class="meta">Nothing.</p>';
+    return `<ul class="sum">${ids.map((x) => {
+      const route = w.via[x].map((v) => nodeById[v].label).join(", ");
+      return `<li><b>${esc(nodeById[x].label)}</b>${nodeShown(nodeById[x]) ? "" : ' <span class="meta">(hidden)</span>'}${route ? ` <span class="meta">via ${esc(route)}</span>` : ""}${w.step[x] > 1 ? ` <span class="meta">(${w.step[x]} steps)</span>` : ""}</li>`;
+    }).join("")}</ul>`;
+  };
+  document.getElementById("panel").innerHTML = `
+    <div class="ph"><h2>${esc(n.label)}</h2><button onclick="hideNode('${id}')" title="Hide this node; View > Hidden brings it back">Hide node</button></div>
+    <div class="meta">${esc(layer)}${n.groups?.length ? " / " + esc(n.groups.map((g) => groupLabel[g]).join(", ")) : ""}</div>
+    <p>${esc(n.desc)}</p>
+    <h3 style="color:var(--up)">Can affect ${esc(n.label)}</h3>${summary(traced.up)}
+    <h3 style="color:var(--down)">${esc(n.label)} can affect</h3>${summary(traced.down)}
+    ${id === "board" ? '<p class="meta">Every widget runs inside the board; those 14 links are not drawn.</p>' : ""}
+    ${kids.length ? `<p class="meta">Contains: ${esc(kids.join(", "))}</p>` : ""}
+    ${changed ? `<p class="flag">Code changed since the map was checked:</p><ul>${changed.map((f) => `<li><code>${esc(f)}</code></li>`).join("")}</ul>` : ""}
+    <h3>Direct links in</h3>${list(ins)}
+    <h3>Direct links out</h3>${list(outs)}
+    <h3>Source</h3>${n.src.length ? `<ul>${n.src.map((s) => `<li><a href="${esc(ghFile(s))}" target="_blank" rel="noopener">${esc(s)}</a></li>`).join("")}</ul>` : '<p class="meta">Stored by Native (src-tauri/src/main.rs).</p>'}`;
+}
+
+// ---- update check: which code files changed on GitHub since meta.mappedAt ----
+const banner = document.getElementById("banner");
+const setBanner = (cls, html) => ((banner.className = cls), (banner.innerHTML = html));
+async function check() {
+  const { repo, branch, mappedAt, watch, shared } = MAP.meta;
+  const short = mappedAt.slice(0, 7);
+  let r;
+  try {
+    r = await fetch(`https://api.github.com/repos/${repo}/compare/${mappedAt}...${branch}`, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(10000) });
+  } catch {
+    return setBanner("error", `Couldn't check for code changes (GitHub did not answer). The map may be out of date. Mapped at <code>${short}</code>.`);
+  }
+  if (r.status === 404) return setBanner("error", `Couldn't check: commit <code>${short}</code> is not on GitHub's <code>${esc(branch)}</code>. Push it, or fix meta.mappedAt.`);
+  if (r.status === 403 || r.status === 429) {
+    const reset = Number(r.headers.get("x-ratelimit-reset")) * 1000;
+    return setBanner("error", `Couldn't check: GitHub's hourly limit was reached${reset ? ", try again after " + new Date(reset).toLocaleTimeString() : ""}.`);
+  }
+  if (!r.ok) return setBanner("error", `Couldn't check: GitHub answered ${r.status}.`);
+  const j = await r.json();
+  const latest = j.commits?.length ? j.commits[j.commits.length - 1].sha : mappedAt;
+  const byNode = {}, sharedHits = [], unmapped = [];
+  for (const f of j.files || []) {
+    const names = [f.filename, f.previous_filename].filter(Boolean);
+    if (!names.some((nm) => watch.some((w) => matches(nm, w)))) continue;
+    const label = f.filename + (f.status === "removed" ? " (removed)" : f.status === "renamed" ? ` (renamed from ${f.previous_filename})` : "");
+    const owners = MAP.nodes.filter((n) => n.src.some((s) => names.some((nm) => matches(nm, s))));
+    if (owners.length) owners.forEach((n) => (byNode[n.id] ??= []).push(label));
+    else if (names.some((nm) => shared.some((s) => matches(nm, s)))) sharedHits.push(label);
+    else unmapped.push(label);
+  }
+  const ids = Object.keys(byNode);
+  Object.assign(changedFiles, byNode);
+  ids.forEach((id) => cy.getElementById(id).addClass("changed"));
+  const truncated = (j.files || []).length >= 300 ? " GitHub lists at most 300 files, so some may be missing." : "";
+  if (!ids.length && !sharedHits.length && !unmapped.length)
+    return setBanner("ok", `Up to date. ${j.ahead_by ? `${j.ahead_by} newer commit(s) on ${esc(branch)}, none touch mapped code.` : `Matches ${esc(branch)}.`} Mapped at <code>${short}</code>.${truncated}`);
+  const li = (xs) => `<ul>${xs.map((x) => `<li><code>${esc(x)}</code></li>`).join("")}</ul>`;
+  setBanner("stale", `<b>Needs an update.</b> Code changed since <code>${short}</code>: ${ids.length} node(s) marked${unmapped.length ? `, ${unmapped.length} file(s) no node covers` : ""}${sharedHits.length ? `, ${sharedHits.length} shared file(s)` : ""}.${truncated}
+    <details><summary>Details and how to re-stamp</summary>
+      ${ids.length ? `<p>Changed nodes:</p><ul>${ids.map((id) => `<li><b>${esc(nodeById[id].label)}</b>: ${byNode[id].map((f) => `<code>${esc(f)}</code>`).join(" ")}</li>`).join("")}</ul>` : ""}
+      ${unmapped.length ? `<p>Not covered by any node (new feature? add a node or add it to a node's src):</p>${li(unmapped)}` : ""}
+      ${sharedHits.length ? `<p>Shared files (strings, icons, styles):</p>${li(sharedHits)}` : ""}
+      <p>After checking the edges above against the code, set <code>meta.mappedAt</code> to <code>${esc(latest)}</code>.
+      <a href="https://github.com/${esc(repo)}/compare/${mappedAt}...${esc(branch)}" target="_blank" rel="noopener">See the diff on GitHub</a>.</p>
+    </details>`);
+}
+check().catch((e) => setBanner("error", "Couldn't check: " + esc(e.message || e)));
+</script>
+</body>
+</html>
