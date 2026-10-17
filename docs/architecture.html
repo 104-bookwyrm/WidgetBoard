@@ -253,8 +253,14 @@ main { flex: 1; display: flex; min-height: 0; }
 .sum li { border-bottom: 0; padding: 2px 0; }
 #sideHide { display: block; margin: -4px 0 8px auto; font-size: 12px; }
 #sideShow { position: absolute; top: 10px; right: 10px; z-index: 4; }
-.notes textarea { width: 100%; font: 13px/1.4 system-ui, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; resize: vertical; }
-.notes .btns { display: flex; gap: 8px; align-items: center; margin: 4px 0 6px; }
+header h1 { flex: 1; }
+#memoToggle[aria-pressed="true"] { background: var(--bg); }
+#memo { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 16px 10px; }
+#memo textarea { width: 100%; font: 13px/1.45 system-ui, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+#memo .btns { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
+#memo .meta { color: var(--muted); font-size: 12px; }
+#memo .right { margin-left: auto; }
+.nid { font-weight: 700; font-size: 14px; margin: 2px 0; }
 .ph { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 aside { width: 340px; border-left: 1px solid var(--line); background: var(--panel); padding: 14px 16px; overflow: auto; }
 aside h2 { font-size: 16px; margin: 0 0 2px; } aside h3 { font-size: 13px; margin: 14px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -272,6 +278,7 @@ a { color: var(--k-data); }
 <body>
 <header>
   <h1>WidgetBoard architecture</h1>
+  <button id="memoToggle" aria-pressed="true" title="Show or hide the memo">Memo</button>
 </header>
 <div id="banner">Checking for code changes...</div>
 <main>
@@ -304,6 +311,11 @@ a { color: var(--k-data); }
     <div id="panel"><p class="meta">Hover a node to preview what it touches; click to pin it. Arrows point the way influence flows.</p></div>
   </aside>
 </main>
+<section id="memo">
+  <textarea id="memoText" rows="4" placeholder="Memo for a discussion. Mention nodes as @pomodoro, @events, @w-diary (the bold @id in node details). Kept until the page closes."></textarea>
+  <div class="btns"><button id="memoCopy">Copy for chat</button><span id="memoMsg" class="meta"></span><button id="memoHide" class="right">Hide memo</button></div>
+  <textarea id="memoOut" rows="6" readonly hidden></textarea>
+</section>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
 <script>
 const KINDS = { data: "Data", event: "Event / command", signal: "Board signal", import: "Import" };
@@ -614,13 +626,9 @@ function showPanel(id) {
   };
   document.getElementById("panel").innerHTML = `
     <div class="ph"><h2>${esc(n.label)}</h2><button onclick="hideNode('${id}')" title="Hide this node; View > Hidden brings it back">Hide node</button></div>
-    <div class="meta">${esc(layer)}${n.groups?.length ? " / " + esc(n.groups.map((g) => groupLabel[g]).join(", ")) : ""} &middot; id <code title="Refer to this node by its id">${esc(id)}</code></div>
+    <div class="nid" title="Write this in the memo to mention the node">@${esc(id)}</div>
+    <div class="meta">${esc(layer)}${n.groups?.length ? " / " + esc(n.groups.map((g) => groupLabel[g]).join(", ")) : ""}</div>
     <p>${esc(n.desc)}</p>
-    <div class="notes">
-      <textarea id="note" rows="4" placeholder="Notes on ${esc(n.label)} for a discussion. Kept until the page closes."></textarea>
-      <div class="btns"><button onclick="copyNote('${id}')">Copy for chat</button><span id="noteMsg" class="meta"></span></div>
-      <textarea id="noteOut" rows="6" readonly hidden></textarea>
-    </div>
     <h3 style="color:var(--up)">Can affect ${esc(n.label)}</h3>${summary(traced.up)}
     <h3 style="color:var(--down)">${esc(n.label)} can affect</h3>${summary(traced.down)}
     ${id === "board" ? '<p class="meta">Every widget runs inside the board; those 14 links are not drawn.</p>' : ""}
@@ -629,31 +637,49 @@ function showPanel(id) {
     <h3>Direct links in</h3>${list(ins)}
     <h3>Direct links out</h3>${list(outs)}
     <h3>Source</h3>${n.src.length ? `<ul>${n.src.map((s) => `<li><a href="${esc(ghFile(s))}" target="_blank" rel="noopener">${esc(s)}</a></li>`).join("")}</ul>` : '<p class="meta">Stored by Native (src-tauri/src/main.rs).</p>'}`;
-  const note = document.getElementById("note");
-  note.value = notes[id] || "";
-  note.addEventListener("input", () => (notes[id] = note.value));
 }
 
-// ---- per-node notes: in memory only; the copy carries the node id and the map's stamp and status ----
-const notes = {};
-function mapStatus(id) {
-  const c = banner.className, files = changedFiles[id];
+// ---- memo: one text for the whole page, in memory only. @id mentions nodes; the copy adds the stamp and the mentioned nodes ----
+const memo = document.getElementById("memoText");
+function mapStatus() {
+  const c = banner.className;
   if (c === "ok") return "up to date with " + MAP.meta.branch;
-  if (c === "stale") return "NEEDS AN UPDATE: code changed since the stamp" + (files ? `; this node's files changed: ${files.join(", ")}` : "");
+  if (c === "stale") return "NEEDS AN UPDATE: code changed since the stamp";
   if (c === "error") return "not checked (" + banner.textContent.trim() + ")";
   return "check still running";
 }
-function copyNote(id) {
-  const n = nodeById[id];
-  const text = [
-    `WidgetBoard architecture map, node \`${id}\` (${n.label}, ${MAP.layers.find((l) => l.id === n.layer).label})`,
-    `Map stamp ${MAP.meta.mappedAt.slice(0, 7)}, ${mapStatus(id)}.`,
-    `Map data: docs/architecture.html, MAP node "${id}".${n.src.length ? " Code: " + n.src.join(", ") : ""}`,
-    "",
-    notes[id] || "",
-  ].join("\n");
-  copyOut(text, document.getElementById("noteOut"), document.getElementById("noteMsg"), "Copied with the map stamp.", "Clipboard blocked: copy this by hand.");
+/** @mentions in the memo: known node ids in order of first use, and the unknown ones. */
+function mentions(text) {
+  const all = [...new Set([...text.matchAll(/@([\w-]+)/g)].map((m) => m[1]))];
+  return { known: all.filter((id) => nodeById[id]), unknown: all.filter((id) => !nodeById[id]) };
 }
+function showUnknown() {
+  const { unknown } = mentions(memo.value);
+  document.getElementById("memoMsg").textContent = unknown.length ? "Not a node: " + unknown.map((u) => "@" + u).join(", ") : "";
+}
+memo.addEventListener("input", showUnknown);
+document.getElementById("memoCopy").addEventListener("click", () => {
+  const { known } = mentions(memo.value);
+  const layerOf = (n) => MAP.layers.find((l) => l.id === n.layer).label + (n.groups?.length ? " / " + n.groups.map((g) => groupLabel[g]).join(", ") : "");
+  const text = [
+    `WidgetBoard architecture map (docs/architecture.html, MAP). Stamp ${MAP.meta.mappedAt.slice(0, 7)}, ${mapStatus()}.`,
+    ...(known.length ? ["Nodes mentioned (@id = MAP node id):", ...known.map((id) => {
+      const n = nodeById[id], files = changedFiles[id];
+      return `- @${id}: ${n.label} (${layerOf(n)})${n.src.length ? ", " + n.src.join(", ") : ""}${files ? `. CODE CHANGED since the stamp: ${files.join(", ")}` : ""}`;
+    })] : []),
+    "",
+    memo.value,
+  ].join("\n");
+  copyOut(text, document.getElementById("memoOut"), document.getElementById("memoMsg"), "Copied with the map stamp.", "Clipboard blocked: copy this by hand.");
+});
+// dock show/hide (open by default; the text survives hiding)
+function setMemo(open) {
+  document.getElementById("memo").hidden = !open;
+  document.getElementById("memoToggle").setAttribute("aria-pressed", open);
+  cy.resize();
+}
+document.getElementById("memoToggle").addEventListener("click", () => setMemo(document.getElementById("memo").hidden));
+document.getElementById("memoHide").addEventListener("click", () => setMemo(false));
 
 // ---- update check: which code files changed on GitHub since meta.mappedAt ----
 const banner = document.getElementById("banner");
