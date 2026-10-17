@@ -25,12 +25,13 @@ const MAP = {
     // used everywhere (strings, icons, styles, the browser mock): a change here is a general notice, not a node badge
     shared: ["ui/i18n.js", "ui/icons.js", "ui/theme.js", "ui/base.css", "ui/default-theme.css", "ui/locales/", "ui/fonts/", "ui/icons/", "ui/mock-tauri.js", "ui/ai-theme-prompt.md"],
   },
+  // shape: a cytoscape node shape; colours come from the --F-<id> (fill) and --B-<id> (border) tokens in the CSS
   layers: [
-    { id: "native", label: "Native (Rust)" },
-    { id: "windows", label: "Windows" },
-    { id: "data", label: "Data" },
-    { id: "widgets", label: "Widgets" },
-    { id: "helpers", label: "Helpers" },
+    { id: "native", label: "Native (Rust)", shape: "hexagon" },
+    { id: "windows", label: "Windows", shape: "cut-rectangle" },
+    { id: "data", label: "Data", shape: "barrel" },
+    { id: "widgets", label: "Widgets", shape: "round-rectangle" },
+    { id: "helpers", label: "Helpers", shape: "rectangle" },
   ],
   // widget groups: a widget is drawn in its first group's box; its other groups show as a tag. col = sub-column.
   groups: [
@@ -198,7 +199,7 @@ const MAP = {
   --k-data: #3b5bdb; --k-event: #2b8a3e; --k-signal: #e67700; --k-import: #868e96;
   --up: #d6336c; --down: #0c8599; --both: #7048e8; --changed: #ffe3e3; --changed-line: #e03131;
   --ok: #2b8a3e; --warn: #e67700; --err: #868e96;
-  --L-native: #eef1f7; --L-windows: #f4eff8; --L-data: #eef6f1; --L-widgets: #fbf3ea; --L-helpers: #f1f1f1;
+  --F-native: #e9ecef; --B-native: #495057; --F-windows: #e7f5ff; --B-windows: #1c7ed6; --F-data: #ebfbee; --B-data: #2f9e44; --F-widgets: #fff9db; --B-widgets: #f59f00; --F-helpers: #f8f9fa; --B-helpers: #adb5bd;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -206,7 +207,7 @@ const MAP = {
     --k-data: #748ffc; --k-event: #51cf66; --k-signal: #fcc419; --k-import: #8f959b;
     --up: #f06595; --down: #3bc9db; --both: #9775fa; --changed: #4a2023; --changed-line: #ff6b6b;
     --ok: #51cf66; --warn: #fcc419; --err: #a0a0aa;
-    --L-native: #1f2330; --L-windows: #272030; --L-data: #1d2a23; --L-widgets: #2d251c; --L-helpers: #24242a;
+    --F-native: #2b2f36; --B-native: #adb5bd; --F-windows: #1b2a3a; --B-windows: #4dabf7; --F-data: #1b2e22; --B-data: #51cf66; --F-widgets: #33290f; --B-widgets: #fcc419; --F-helpers: #26262b; --B-helpers: #6c6c74;
   }
 }
 :root[data-theme="dark"] {
@@ -214,7 +215,7 @@ const MAP = {
   --k-data: #748ffc; --k-event: #51cf66; --k-signal: #fcc419; --k-import: #8f959b;
   --up: #f06595; --down: #3bc9db; --both: #9775fa; --changed: #4a2023; --changed-line: #ff6b6b;
   --ok: #51cf66; --warn: #fcc419; --err: #a0a0aa;
-  --L-native: #1f2330; --L-windows: #272030; --L-data: #1d2a23; --L-widgets: #2d251c; --L-helpers: #24242a;
+  --F-native: #2b2f36; --B-native: #adb5bd; --F-windows: #1b2a3a; --B-windows: #4dabf7; --F-data: #1b2e22; --B-data: #51cf66; --F-widgets: #33290f; --B-widgets: #fcc419; --F-helpers: #26262b; --B-helpers: #6c6c74;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -243,6 +244,7 @@ main { flex: 1; display: flex; min-height: 0; }
 #view h4 { margin: 10px 0 3px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 #view label { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 1px 0; }
 #view .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.swatch { width: 14px; height: 10px; border: 2px solid; border-radius: 3px; display: inline-block; }
 #view .meta { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
 #view textarea { width: 100%; font: 11px ui-monospace, Consolas, monospace; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; }
 #legend { position: absolute; left: 12px; bottom: 10px; z-index: 4; display: flex; flex-wrap: wrap; gap: 4px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; color: var(--muted); font-size: 12px; }
@@ -251,6 +253,8 @@ main { flex: 1; display: flex; min-height: 0; }
 .sum li { border-bottom: 0; padding: 2px 0; }
 #sideHide { display: block; margin: -4px 0 8px auto; font-size: 12px; }
 #sideShow { position: absolute; top: 10px; right: 10px; z-index: 4; }
+.notes textarea { width: 100%; font: 13px/1.4 system-ui, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+.notes .btns { display: flex; gap: 8px; align-items: center; margin: 4px 0 6px; }
 .ph { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 aside { width: 340px; border-left: 1px solid var(--line); background: var(--panel); padding: 14px 16px; overflow: auto; }
 aside h2 { font-size: 16px; margin: 0 0 2px; } aside h3 { font-size: 13px; margin: 14px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -327,7 +331,7 @@ function place(n, parent, sub = 0) {
   const k = n.layer + ":" + sub;
   colY[k] ??= 0;
   const extra = (n.groups || []).slice(1).map((g) => groupLabel[g]);
-  const el = { data: { id: n.id, label: n.label + (extra.length ? "\nalso " + extra.join(", ") : ""), parent }, classes: [n.helper && "helper", extra.length && "multi"].filter(Boolean).join(" ") };
+  const el = { data: { id: n.id, layer: n.layer, label: n.label + (extra.length ? "\nalso " + extra.join(", ") : ""), parent }, classes: [n.helper && "helper", extra.length && "multi"].filter(Boolean).join(" ") };
   if (parents.has(n.id)) colY[k] += BOX_GAP; // room for the box label
   else { el.position = { x: colX[n.layer] + sub * COL_W, y: colY[k] }; colY[k] += ROW_H; }
   elements.push(el);
@@ -348,10 +352,11 @@ function style() {
   const s = [
     { selector: "node", style: { label: "data(label)", shape: "round-rectangle", width: 150, height: 34, "font-size": 12, color: css("--text"),
       "text-valign": "center", "text-halign": "center", "background-color": css("--node"), "border-width": 1.5, "border-color": css("--line") } },
-    { selector: ":parent", style: { "text-valign": "top", "text-halign": "center", "font-weight": 600, padding: 12, "background-color": css("--node"), "background-opacity": 0.6 } },
-    { selector: "node.layer", style: { "font-size": 13, "text-margin-y": -4, padding: 18, "border-width": 0, events: "no", "background-opacity": 1 } },
-    ...MAP.layers.map((l) => ({ selector: ".L-" + l.id, style: { "background-color": css("--L-" + l.id) } })),
-    { selector: "node.group", style: { "font-size": 12, color: css("--muted"), "background-opacity": 0.35, "border-width": 1, "border-style": "dashed", padding: 10 } },
+    // each layer: its own shape and colours (no layer backgrounds; the layer name is a plain heading)
+    ...MAP.layers.map((l) => ({ selector: `node[layer = "${l.id}"]`, style: { shape: l.shape, "background-color": css("--F-" + l.id), "border-color": css("--B-" + l.id) } })),
+    { selector: ":parent", style: { shape: "round-rectangle", "text-valign": "top", "text-halign": "center", "font-weight": 600, padding: 12, "background-opacity": 0.3 } },
+    { selector: "node.layer", style: { "font-size": 13, "text-margin-y": -4, padding: 18, "border-width": 0, events: "no", "background-opacity": 0 } },
+    { selector: "node.group", style: { "font-size": 12, color: css("--muted"), "background-opacity": 0, "border-width": 1, "border-style": "dashed", "border-color": css("--line"), padding: 10 } },
     { selector: "node.multi", style: { "text-wrap": "wrap", height: 42, "line-height": 1.3 } },
     { selector: "edge", style: { width: 1.6, "curve-style": "bezier", "target-arrow-shape": "triangle", "arrow-scale": 0.9, opacity: 0.3 } },
     ...Object.keys(KINDS).map((k) => ({ selector: "edge." + k, style: { "line-color": css("--k-" + k), "target-arrow-color": css("--k-" + k), "source-arrow-color": css("--k-" + k) } })),
@@ -414,19 +419,23 @@ document.getElementById("resetLayout").addEventListener("click", () => {
   applyLayout();
   fitView();
 });
-document.getElementById("copyLayout").addEventListener("click", async () => {
-  const text = "  layout: {\n" + Object.entries(currentLayout()).map(([id, p]) => `    ${JSON.stringify(id)}: [${p.join(", ")}],`).join("\n") + "\n  },";
-  const box = document.getElementById("layoutText"), msg = document.getElementById("layoutSrc");
+/** Clipboard copy; without clipboard access the text goes into `box` (a textarea), selected for a manual copy. */
+async function copyOut(text, box, msg, done, manual) {
   try {
     await navigator.clipboard.writeText(text);
     box.hidden = true;
-    msg.textContent = "Copied. Paste it over the layout: line in MAP and commit.";
+    msg.textContent = done;
   } catch {
-    box.hidden = false; // no clipboard access: copy by hand
+    box.hidden = false;
     box.value = text;
     box.select();
-    msg.textContent = "Copy this and paste it over the layout: line in MAP.";
+    msg.textContent = manual;
   }
+}
+document.getElementById("copyLayout").addEventListener("click", () => {
+  const text = "  layout: {\n" + Object.entries(currentLayout()).map(([id, p]) => `    ${JSON.stringify(id)}: [${p.join(", ")}],`).join("\n") + "\n  },";
+  copyOut(text, document.getElementById("layoutText"), document.getElementById("layoutSrc"),
+    "Copied. Paste it over the layout: line in MAP and commit.", "Copy this and paste it over the layout: line in MAP.");
 });
 applyLayout();
 
@@ -452,7 +461,7 @@ const hiddenNodes = new Set();
 const checks = (type, items) =>
   items.map(([id, label, extra = ""]) => ((on[type][id] = true), `<label><input type="checkbox" data-${type}="${id}" checked>${extra}${esc(label)}</label>`)).join("");
 document.getElementById("kinds").innerHTML = checks("kind", Object.entries(KINDS).map(([k, l]) => [k, l, `<i class="sw ${k}" style="border-color:var(--k-${k})"></i>`]));
-document.getElementById("layers").innerHTML = checks("layer", MAP.layers.map((l) => [l.id, l.label]));
+document.getElementById("layers").innerHTML = checks("layer", MAP.layers.map((l) => [l.id, l.label, `<i class="swatch" style="background:var(--F-${l.id});border-color:var(--B-${l.id})"></i>`]));
 document.getElementById("groups").innerHTML = checks("group", MAP.groups.map((g) => [g.id, g.label]));
 const showUtil = document.getElementById("showUtil");
 const depthSel = document.getElementById("depth");
@@ -605,8 +614,13 @@ function showPanel(id) {
   };
   document.getElementById("panel").innerHTML = `
     <div class="ph"><h2>${esc(n.label)}</h2><button onclick="hideNode('${id}')" title="Hide this node; View > Hidden brings it back">Hide node</button></div>
-    <div class="meta">${esc(layer)}${n.groups?.length ? " / " + esc(n.groups.map((g) => groupLabel[g]).join(", ")) : ""}</div>
+    <div class="meta">${esc(layer)}${n.groups?.length ? " / " + esc(n.groups.map((g) => groupLabel[g]).join(", ")) : ""} &middot; id <code title="Refer to this node by its id">${esc(id)}</code></div>
     <p>${esc(n.desc)}</p>
+    <div class="notes">
+      <textarea id="note" rows="4" placeholder="Notes on ${esc(n.label)} for a discussion. Kept until the page closes."></textarea>
+      <div class="btns"><button onclick="copyNote('${id}')">Copy for chat</button><span id="noteMsg" class="meta"></span></div>
+      <textarea id="noteOut" rows="6" readonly hidden></textarea>
+    </div>
     <h3 style="color:var(--up)">Can affect ${esc(n.label)}</h3>${summary(traced.up)}
     <h3 style="color:var(--down)">${esc(n.label)} can affect</h3>${summary(traced.down)}
     ${id === "board" ? '<p class="meta">Every widget runs inside the board; those 14 links are not drawn.</p>' : ""}
@@ -615,6 +629,30 @@ function showPanel(id) {
     <h3>Direct links in</h3>${list(ins)}
     <h3>Direct links out</h3>${list(outs)}
     <h3>Source</h3>${n.src.length ? `<ul>${n.src.map((s) => `<li><a href="${esc(ghFile(s))}" target="_blank" rel="noopener">${esc(s)}</a></li>`).join("")}</ul>` : '<p class="meta">Stored by Native (src-tauri/src/main.rs).</p>'}`;
+  const note = document.getElementById("note");
+  note.value = notes[id] || "";
+  note.addEventListener("input", () => (notes[id] = note.value));
+}
+
+// ---- per-node notes: in memory only; the copy carries the node id and the map's stamp and status ----
+const notes = {};
+function mapStatus(id) {
+  const c = banner.className, files = changedFiles[id];
+  if (c === "ok") return "up to date with " + MAP.meta.branch;
+  if (c === "stale") return "NEEDS AN UPDATE: code changed since the stamp" + (files ? `; this node's files changed: ${files.join(", ")}` : "");
+  if (c === "error") return "not checked (" + banner.textContent.trim() + ")";
+  return "check still running";
+}
+function copyNote(id) {
+  const n = nodeById[id];
+  const text = [
+    `WidgetBoard architecture map, node \`${id}\` (${n.label}, ${MAP.layers.find((l) => l.id === n.layer).label})`,
+    `Map stamp ${MAP.meta.mappedAt.slice(0, 7)}, ${mapStatus(id)}.`,
+    `Map data: docs/architecture.html, MAP node "${id}".${n.src.length ? " Code: " + n.src.join(", ") : ""}`,
+    "",
+    notes[id] || "",
+  ].join("\n");
+  copyOut(text, document.getElementById("noteOut"), document.getElementById("noteMsg"), "Copied with the map stamp.", "Clipboard blocked: copy this by hand.");
 }
 
 // ---- update check: which code files changed on GitHub since meta.mappedAt ----
