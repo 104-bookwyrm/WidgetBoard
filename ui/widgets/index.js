@@ -9,8 +9,6 @@ import nowplaying from "./nowplaying.js";
 import calendar from "./calendar.js";
 import diary from "./diary.js";
 import showcase from "./showcase.js";
-import audioplayer from "./audioplayer.js";
-import collection from "./collection.js";
 import clock from "./clock.js";
 
 export default {
@@ -25,7 +23,9 @@ export default {
   pomodoro,
   image,
   showcase,
-  audioplayer,
-  collection,
+  // old saved Audio Player widgets keep type "audioplayer"; they open as Now Playing with the file list showing
+  audioplayer: { ...nowplaying, size: { w: 2, h: 2 }, min: { w: 2, h: 1 }, defaults: { ...nowplaying.defaults, list: true } },
+  // old saved Collection widgets keep type "collection"; they open as the Image widget in grid layout
+  collection: { ...image, defaults: { ...image.defaults, layout: "grid" } },
   clock,
 };

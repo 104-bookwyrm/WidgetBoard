@@ -1,8 +1,9 @@
 {
   "memo": ["text", "color"],
-  "image": ["imgs"],
+  "image": ["imgs", "labels"],
   "showcase": ["name", "imgs", "quotes", "birthday", "color", "calSync"],
-  "collection": ["items"],
+  "collection": ["imgs", "labels", "items"],
+  "nowplaying": ["tracks"],
   "audioplayer": ["tracks"],
   "timer": ["duration", "remaining", "endAt", "startedAt"],
   "stopwatch": ["startedAt", "elapsed", "total", "laps", "cat", "since", "runId", "cuts", "away"],

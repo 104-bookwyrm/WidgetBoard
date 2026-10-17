@@ -1257,17 +1257,24 @@ function changeType(w, type) {
   announce(t("a11y.type_changed", { name: t("widget." + type) }));
 }
 
-// Switching inside Images keeps the pictures (collection holds them as items), fit and frameless.
-// ponytail: Images is the only group whose types share content; Time widgets' run states don't map.
+// Switching inside Images keeps the pictures (imgs), their labels, fit and frameless.
+// Switching between Now Playing and its "audioplayer" alias keeps the tracks and playback settings.
+// ponytail: Time widgets' run states don't map.
+// "collection" is no longer in groups.json (it is the Image widget's alias), so it counts as an Images member here.
 function carried(from, type) {
-  if (groupOf(from.type)?.id !== "images" || groupOf(type)?.id !== "images") return {};
+  const media = (k) => k === "audioplayer" || k === "nowplaying";
+  if (media(from.type) && media(type)) {
+    const s = from.settings ?? {};
+    const out = {};
+    for (const k of ["tracks", "current", "volume", "shuffle", "loop"]) if (k in s) out[k] = structuredClone(s[k]);
+    return out;
+  }
+  const images = (k) => k === "collection" || groupOf(k)?.id === "images";
+  if (!images(from.type) || !images(type)) return {};
   const s = from.settings ?? {};
-  const pics = Array.isArray(s.imgs) ? s.imgs : Array.isArray(s.items) ? s.items.map((i) => i?.img).filter(Boolean) : [];
   const to = REGISTRY[type].defaults ?? {};
-  const out = { frameless: !!s.frameless };
-  if ("items" in to) out.items = pics.map((img) => ({ img, label: "" }));
-  else out.imgs = [...pics];
-  if ("fit" in to && s.fit) out.fit = s.fit;
+  const out = { frameless: !!s.frameless, imgs: Array.isArray(s.imgs) ? [...s.imgs] : [] };
+  for (const k of ["labels", "fit"]) if (k in to && s[k]) out[k] = structuredClone(s[k]);
   return out;
 }
 
@@ -1275,9 +1282,12 @@ const groupOf = (type) => GROUPS.find((g) => g.widgets.includes(type));
 // Menu items for widget types; pick(type) runs on click.
 const typeItems = (types, pick) =>
   types.filter((k) => REGISTRY[k]).map((k) => ({ text: t("widget." + k), action: () => pick(k) }));
-// One submenu per group (groups.json), leaving out `skip`.
+// One submenu per group (groups.json), leaving out `skip`; a group of one widget is a plain item.
 const groupMenus = (pick, skip) =>
-  GROUPS.filter((g) => g !== skip).map((g) => ({ text: t("group." + g.id), items: typeItems(g.widgets, pick) }));
+  GROUPS.filter((g) => g !== skip).flatMap((g) => {
+    const items = typeItems(g.widgets, pick);
+    return items.length === 1 ? items : [{ text: t("group." + g.id), items }];
+  });
 
 async function setBg(w, el) {
   const f = await pickImage();
@@ -1357,7 +1367,7 @@ async function openMenu(w, el, at) {
         text: t("menu.change_type"),
         items: [
           ...typeItems(groupOf(w.type)?.widgets.filter((k) => k !== w.type) ?? [], (k) => changeType(w, k)),
-          { item: "Separator" },
+          ...(groupOf(w.type)?.widgets.length > 1 ? [{ item: "Separator" }] : []),
           { text: t("menu.other_types"), items: groupMenus((k) => changeType(w, k), groupOf(w.type)) },
         ],
       },

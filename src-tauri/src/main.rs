@@ -1756,6 +1756,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let s = st.settings.lock().unwrap().clone();
     let t = |k: &str| tr(&s.lang, k);
 
+    // a group of one widget is a plain item, bigger groups are submenus
     let add_groups = widget_groups()
         .iter()
         .map(|(group, ids)| {
@@ -1763,11 +1764,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 .iter()
                 .map(|id| MenuItem::with_id(app, format!("add:{id}"), t(&format!("widget.{id}")), true, None::<&str>))
                 .collect::<Result<Vec<_>, _>>()?;
+            if items.len() == 1 {
+                return Ok(Box::new(items.into_iter().next().unwrap()) as Box<dyn IsMenuItem<Wry>>);
+            }
             let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
-            Submenu::with_items(app, t(&format!("group.{group}")), true, &refs)
+            Ok(Box::new(Submenu::with_items(app, t(&format!("group.{group}")), true, &refs)?) as Box<dyn IsMenuItem<Wry>>)
         })
-        .collect::<Result<Vec<_>, _>>()?;
-    let add_refs: Vec<&dyn IsMenuItem<Wry>> = add_groups.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+        .collect::<tauri::Result<Vec<_>>>()?;
+    let add_refs: Vec<&dyn IsMenuItem<Wry>> = add_groups.iter().map(|i| i.as_ref()).collect();
     let add = Submenu::with_items(app, t("tray.add_widget"), true, &add_refs)?;
 
     let edit = CheckMenuItem::with_id(app, "edit", t("tray.edit_layout"), true, st.edit.load(Ordering::Relaxed), None::<&str>)?;

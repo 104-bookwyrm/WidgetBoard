@@ -57,10 +57,11 @@ function preview(c) {
     case "image":
       return `<div class="lib-preview">${img(d.imgs, t("lib.images", { n: (d.imgs ?? []).length }))}</div>`;
     case "collection":
-      return `<div class="lib-preview">${img(d.items, t("lib.items", { n: (d.items ?? []).length }))}</div>`;
+      return `<div class="lib-preview">${img(d.imgs ?? d.items, t("lib.items", { n: (d.imgs ?? d.items ?? []).length }))}</div>`;
     case "showcase":
       return `<div class="lib-preview">${img(d.imgs, d.name ?? "")}</div>`;
     case "audioplayer":
+    case "nowplaying":
       return `<div class="lib-preview">${esc(t("lib.tracks", { n: (d.tracks ?? []).length }))}\n${esc((d.tracks ?? []).map((x) => x.label).slice(0, 3).join("\n"))}</div>`;
     case "timer":
       return `<div class="lib-preview"><span class="big">${fmtTimer(d.endAt ? Math.max(0, d.endAt - Date.now()) : (d.remaining ?? d.duration ?? 0))}</span></div>`;

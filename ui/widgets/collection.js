@@ -1,19 +1,11 @@
-// Collection: a thumbnail grid for displaying goods, figures, merchandise, cards.
-// Each item has an image and an optional label. Click to view full-size.
+// Grid layout of the Image widget (image.js): a thumbnail grid for goods, figures, merchandise, cards.
+// Pictures are s.imgs; an optional label per picture lives in s.labels[name]. Click to view full-size.
 // Drag-and-drop images or use the + button. Drag a thumbnail (or Alt+arrows) to reorder.
 // Frameless mode for transparent desktop display.
 import { esc, dropZone } from '../util.js';
 import { icon } from '../icons.js';
 
-export default {
-    size: { w: 2, h: 3 },
-    min: { w: 1, h: 2 },
-    defaults: {
-        items: [],      // [{img:'hash.png', label:''}, ...]
-        columns: 0,     // 0 = auto
-        frameless: false,
-    },
-    css: `
+export const gridCss = `
     .coll { position: absolute; inset: 0; display: flex; flex-direction: column;
       box-sizing: border-box; padding: calc(var(--head-h) - 2px) var(--pad) var(--pad);
       overflow: hidden; }
@@ -59,8 +51,9 @@ export default {
     .coll-edit { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
       padding: 2px 4px; font-size: var(--fs-meta); border: none; outline: 1px solid var(--c2);
       background: var(--c1); color: var(--c3); text-align: center; }
-  `,
-    mount(root, s, api) {
+  `;
+
+export function grid(root, s, api) {
         const { t } = api;
         const bad = new Set();
 
@@ -76,8 +69,7 @@ export default {
             for (const f of imgs) {
                 try {
                     const name = await api.uploadImage(f);
-                    if (!s.items.some((it) => it.img === name))
-                        s.items.push({ img: name, label: '' });
+                    if (!s.imgs.includes(name)) s.imgs.push(name);
                     bad.delete(name);
                 } catch { }
             }
@@ -101,7 +93,7 @@ export default {
 
         // -- build --
         function build() {
-            if (!s.items.length) {
+            if (!s.imgs.length) {
                 box.innerHTML = `<div class="coll-empty"><div>${icon('image')} ${t('cl.empty')}<small>${t('cl.hint')}</small></div></div>`;
                 box.querySelector('.coll-empty').addEventListener('click', chooser);
                 return;
@@ -110,18 +102,21 @@ export default {
             const cols = autoCols();
             box.innerHTML = `
         <div class="coll-grid" style="--cols:${cols}">
-          ${s.items.map((it, i) => `
-            <div class="coll-item" data-i="${i}" tabindex="0" aria-label="${esc(it.label || t('cl.item', { n: i + 1 }))}">
-              <img src="${esc(api.assetUrl(it.img))}" alt="${esc(it.label)}" loading="lazy" draggable="false">
-              ${it.label ? `<span class="coll-lbl">${esc(it.label)}</span>` : ''}
-              <button class="coll-del" data-del="${i}" aria-label="${esc(t('cl.delete', { name: it.label || i + 1 }))}">${icon('x')}</button>
-            </div>`).join('')}
+          ${s.imgs.map((name, i) => {
+              const label = s.labels[name] || '';
+              return `
+            <div class="coll-item" data-i="${i}" tabindex="0" aria-label="${esc(label || t('cl.item', { n: i + 1 }))}">
+              <img src="${esc(api.assetUrl(name))}" alt="${esc(label)}" loading="lazy" draggable="false">
+              ${label ? `<span class="coll-lbl">${esc(label)}</span>` : ''}
+              <button class="coll-del" data-del="${i}" aria-label="${esc(t('cl.delete', { name: label || i + 1 }))}">${icon('x')}</button>
+            </div>`;
+          }).join('')}
         </div>
-        <div class="coll-count"><span>${s.items.length} ${t('cl.items')}</span><button data-a="add" title="${esc(t('cl.add'))}" aria-label="${esc(t('cl.add'))}">${icon('plus')}</button></div>`;
+        <div class="coll-count"><span>${s.imgs.length} ${t('cl.items')}</span><button data-a="add" title="${esc(t('cl.add'))}" aria-label="${esc(t('cl.add'))}">${icon('plus')}</button></div>`;
 
             // mark broken images
             box.querySelectorAll('.coll-item img').forEach((img) => {
-                img.onerror = () => { bad.add(s.items[+img.closest('[data-i]').dataset.i]?.img); img.style.opacity = '.3'; };
+                img.onerror = () => { bad.add(s.imgs[+img.closest('[data-i]').dataset.i]); img.style.opacity = '.3'; };
             });
         }
 
@@ -132,9 +127,15 @@ export default {
             const del = e.target.closest('[data-del]');
             if (del) {
                 const i = +del.dataset.del;
-                const [gone] = s.items.splice(i, 1);
+                const [gone] = s.imgs.splice(i, 1);
+                const label = s.labels[gone];
+                delete s.labels[gone];
                 api.save(); build();
-                api.deleted(() => { s.items.splice(Math.min(i, s.items.length), 0, gone); api.save(); build(); });
+                api.deleted(() => {
+                    s.imgs.splice(Math.min(i, s.imgs.length), 0, gone);
+                    if (label) s.labels[gone] = label;
+                    api.save(); build();
+                });
                 return;
             }
 
@@ -149,20 +150,21 @@ export default {
 
         let lbTimer = 0;
         function openLightbox(i) {
-            const it = s.items[i];
-            if (!it) return;
+            const name = s.imgs[i];
+            if (!name) return;
+            const label = s.labels[name] || '';
             const lb = document.createElement('div');
             lb.className = 'coll-lb';
             lb.tabIndex = -1; // focusable so Esc reaches the keydown handler below
-            lb.innerHTML = `<img src="${esc(api.assetUrl(it.img))}" alt="">
-          ${it.label ? `<div class="coll-lb-label">${esc(it.label)}</div>` : ''}`;
+            lb.innerHTML = `<img src="${esc(api.assetUrl(name))}" alt="">
+          ${label ? `<div class="coll-lb-label">${esc(label)}</div>` : ''}`;
             root.appendChild(lb);
             lb.focus();
         }
 
         function moveItem(from, to) {
-            const [it] = s.items.splice(from, 1);
-            s.items.splice(to, 0, it);
+            const [name] = s.imgs.splice(from, 1);
+            s.imgs.splice(to, 0, name);
             api.save();
             build();
         }
@@ -241,11 +243,11 @@ export default {
             const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -autoCols(), ArrowDown: autoCols() }[e.key];
             if (!e.altKey || !step) return;
             e.preventDefault();
-            const j = Math.max(0, Math.min(s.items.length - 1, i + step));
+            const j = Math.max(0, Math.min(s.imgs.length - 1, i + step));
             if (j === i) return;
             moveItem(i, j);
             box.querySelector(`.coll-item[data-i="${j}"]`)?.focus();
-            api.announce?.(t('cl.moved', { n: j + 1, total: s.items.length }));
+            api.announce?.(t('cl.moved', { n: j + 1, total: s.imgs.length }));
         });
 
         // close lightbox: it lives on root (outside box), so box's click handler never sees it
@@ -259,15 +261,15 @@ export default {
             const item = e.target.closest('.coll-item');
             if (!item || e.target.closest('.coll-del')) return;
             const idx = +item.dataset.i;
-            const it = s.items[idx];
-            if (!it) return;
+            const name = s.imgs[idx];
+            if (!name) return;
 
             // remove existing edit inputs
             box.querySelectorAll('.coll-edit').forEach((el) => el.remove());
 
             const input = document.createElement('input');
             input.className = 'coll-edit';
-            input.value = it.label;
+            input.value = s.labels[name] || '';
             input.placeholder = t('cl.label_hint');
             item.appendChild(input);
             input.focus();
@@ -278,7 +280,11 @@ export default {
             const finish = (keep) => {
                 if (done) return;
                 done = true;
-                if (keep) { it.label = input.value.trim(); api.save(); }
+                if (keep) {
+                    const label = input.value.trim();
+                    if (label) s.labels[name] = label; else delete s.labels[name];
+                    api.save();
+                }
                 input.remove();
                 build();
             };
@@ -295,7 +301,7 @@ export default {
         });
 
         // frameless
-        if (s.frameless) api.setFrameless(true);
+        api.setFrameless(s.frameless);
 
         build();
 
@@ -313,9 +319,8 @@ export default {
                 },
             ],
             summary: () =>
-                s.items.length
-                    ? t('sum.collection', { n: s.items.length })
+                s.imgs.length
+                    ? t('sum.collection', { n: s.imgs.length })
                     : t('sum.cl_empty'),
         };
-    },
-};
+}

@@ -133,6 +133,36 @@ for (const path of ["settings.html", "library.html"]) {
   ok(!diff.length, "9: en and ko have the same keys", diff.join(", "));
 }
 
+// 10. an old Collection widget opens as the merged Image widget and keeps pictures and labels
+{
+  const old = at("c", "collection", 0, 0, { items: [{ img: "a.png", label: "A" }, { img: "b.png", label: "" }] });
+  const p = await page([old]);
+  const cells = () => p.$$eval('.widget[data-id="c"] .coll-item', (e) => e.length);
+  ok((await cells()) === 2, "10: old collection mounts as a grid", String(await cells()));
+  await idle(p);
+  await p.reload();
+  await ready(p);
+  ok((await cells()) === 2, "10: grid cells survive a reload");
+  const d = await p.evaluate(() => __mock.content().c?.data);
+  ok(d?.imgs?.length === 2 && d.labels?.["a.png"] === "A" && !("items" in d), "10: migrated content keeps pictures and labels", JSON.stringify(d));
+  await p.close();
+}
+
+// 11. an old Audio Player widget opens as Now Playing with its file list, and keeps its tracks
+{
+  const old = at("a", "audioplayer", 0, 0, { tracks: [{ file: "a.mp3", label: "A" }] });
+  const p = await page([old]);
+  const rows = () => p.$$eval('.widget[data-id="a"] .np-track', (e) => e.length);
+  ok((await rows()) === 1, "11: old audio player shows its track list", String(await rows()));
+  await idle(p);
+  await p.reload();
+  await ready(p);
+  ok((await rows()) === 1, "11: track list survives a reload");
+  const d = await p.evaluate(() => __mock.content().a?.data);
+  ok(d?.tracks?.length === 1 && d.tracks[0].file === "a.mp3", "11: tracks stay in the Library content", JSON.stringify(d));
+  await p.close();
+}
+
 await b.close();
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", errs);
