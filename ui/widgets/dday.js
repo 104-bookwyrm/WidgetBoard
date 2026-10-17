@@ -530,8 +530,8 @@ export default {
           </div>
         </div>
         <div class="dd-icons" hidden></div>
-        <input data-f="tag" list="dd-tags-${it.id}" placeholder="${t("dday.tag")}" value="${esc(it.tag)}">
-        <datalist id="dd-tags-${it.id}">${tagOpts}</datalist>
+        <input data-f="tag" list="dd-tags-${esc(it.id)}" placeholder="${t("dday.tag")}" value="${esc(it.tag)}">
+        <datalist id="dd-tags-${esc(it.id)}">${tagOpts}</datalist>
         <select data-f="mode">
           <option value="until">${t("dday.mode_until")}</option>
           <option value="since">${t("dday.mode_since")}</option>

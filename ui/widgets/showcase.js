@@ -272,7 +272,7 @@ export default {
         <label>${esc(t('sc.quotes'))}</label>
         <textarea data-f="quotes" placeholder="${esc(t('sc.quotes_hint'))}" rows="3">${esc(draft.quotes)}</textarea>
         <label>${esc(t('sc.accent'))}</label>
-        <input data-f="color" type="color" value="${draft.color || '#888888'}" style="width:2.5em;height:2em;padding:0;border:0;">
+        <input data-f="color" type="color" value="${esc(draft.color || '#888888')}" style="width:2.5em;height:2em;padding:0;border:0;">
         <label style="display:flex;gap: var(--space-3);align-items:center;font-size:1em;color:var(--c3);">
           <input data-f="calSync" type="checkbox" ${draft.calSync ? 'checked' : ''}> ${esc(t('sc.cal_sync'))}
         </label>

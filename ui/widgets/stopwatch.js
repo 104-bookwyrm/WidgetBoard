@@ -113,7 +113,7 @@ export function stopwatch(root, s, api) {
     q(".sw-laps").innerHTML = s.laps
       .map(
         (l) =>
-          `<div><span>#${l.n}</span><span>+${fmtSession(l.split)}</span><span>${fmtSession(l.at)}</span></div>`,
+          `<div><span>#${Number(l.n) || ""}</span><span>+${fmtSession(l.split)}</span><span>${fmtSession(l.at)}</span></div>`,
       )
       .join("");
   }

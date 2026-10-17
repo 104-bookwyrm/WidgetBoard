@@ -1262,11 +1262,12 @@ fn now_secs() -> u64 {
 fn now_ms() -> u64 {
     SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
-/// config.json → "update": { "check": "weekly" | "daily" | "off", "url": "https://…/latest.json" }
+/// config.json → "update": { "check": "weekly" | "daily" | "off" }. The URL is build-time only
+/// (updater::DEFAULT_URL), so an edited or restored config.json can't redirect update checks.
 fn update_config(dir: &Path) -> (String, String) {
     let c = read_config(dir);
     let check = c["update"]["check"].as_str().unwrap_or("weekly").to_string();
-    let url = c["update"]["url"].as_str().map(str::trim).filter(|u| !u.is_empty()).or(updater::DEFAULT_URL).unwrap_or("").to_string();
+    let url = updater::DEFAULT_URL.unwrap_or("").to_string();
     (check, url)
 }
 fn update_info(st: &AppState) -> Value {

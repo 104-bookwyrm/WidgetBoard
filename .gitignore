@@ -28,3 +28,6 @@ release.cmd
 shots/
 # Browser screenshots, native test fixtures, and test logs
 /test-artifacts/
+
+# dev docs (architecture map, design records, QA worksheets)
+docs/

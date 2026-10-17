@@ -484,7 +484,7 @@ Everything the settings window changes lives here, so you rarely need to open it
   },
   "backup": { "auto": "off", "keep": 7, "dir": "" }, // "daily" / "weekly"; empty dir = Documents\WidgetBoard\Backups
   "archive": { "memos": false }, // the memo archive
-  "update": { "check": "weekly", "url": "" } // "daily" / "off"; empty url = the one built into the app
+  "update": { "check": "weekly" } // "daily" / "off"
 }
 ```
 
@@ -540,8 +540,7 @@ _지금 확인_, or tray → _업데이트 확인_). The first look is 3 minutes
 - The old exe is kept as `WidgetBoard.exe.old` until the new one is running. It's put back if the swap fails, for
   example in a read-only folder. You're told, and you keep the current version.
 - Your widgets, notes and settings live in `%APPDATA%` and are not touched by an update.
-- Releases come from this repo's GitHub Releases. `config.json` → `"update": { "url": "https://…/latest.json" }`
-  points a copy somewhere else.
+- Releases come from this repo's GitHub Releases. The address is built into the app, so `config.json` can't change it.
 
 ## Languages
 
@@ -575,14 +574,15 @@ window is `settings.html` and has its own mock.
 
 **Publish a release (auto-update)** - once, `node tools/release.mjs keygen` makes the release key
 (private key → `~/.widgetboard/updater.key`, public key → `src-tauri/updater.pub`, compiled into the app; builds with a
-different public key refuse your updates). For every release:
+different public key refuse your updates). The private key is encrypted with a passphrase, asked for at each signing.
+A key made before that is upgraded once with `node tools/release.mjs encrypt`. For every release:
 
 1. bump `version` in `src-tauri/Cargo.toml` and `tauri.conf.json`, commit, and build;
 2. `node tools/release.mjs sign target\release\widgetboard.exe --version 0.12.1 --notes "what changed"` writes
    `latest.json` next to the exe;
 3. create a GitHub release tagged `v0.12.1` and upload `latest.json` and the exe, renamed to `WidgetBoard.exe`.
    Builds check `https://github.com/104-bookwyrm/WidgetBoard/releases/latest/download/latest.json`. A fork builds with
-   `WIDGETBOARD_UPDATE_URL=<its own>` or sets `config.json` → `update.url`.
+   `WIDGETBOARD_UPDATE_URL=<its own>`.
    `node tools/release.mjs verify latest.json WidgetBoard.exe` checks a release the way the app will.
    Updater logic tests (no Windows needed): `bash tools/updater-test/run.sh` (44 checks: signatures, relabelled or
    foreign-key releases, downgrades, http, tampered downloads, the exe swap and rollback).

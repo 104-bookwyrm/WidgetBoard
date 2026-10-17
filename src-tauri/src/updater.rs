@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 pub const CURRENT: &str = env!("CARGO_PKG_VERSION");
 /// Release public key (base64, 32 bytes). Made with `node tools/release.mjs keygen`.
 pub const PUBLIC_KEY: &str = include_str!("../updater.pub");
-/// Where to look when config.json has no `update.url`. A fork can build with WIDGETBOARD_UPDATE_URL=... instead.
+/// Where update checks look. A fork builds with WIDGETBOARD_UPDATE_URL=... to point at its own releases.
 pub const DEFAULT_URL: Option<&str> = match option_env!("WIDGETBOARD_UPDATE_URL") {
     Some(u) => Some(u),
     None => Some("https://github.com/104-bookwyrm/WidgetBoard/releases/latest/download/latest.json"),
