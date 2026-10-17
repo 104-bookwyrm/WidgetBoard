@@ -36,8 +36,19 @@ const DEFAULT_THEME: &str = include_str!("../../ui/default-theme.css");
 const DEFAULT_CONFIG: &str = include_str!("default-config.json");
 const TRAY_ID: &str = "main";
 
-/// Widget types offered in the tray; ids must match the REGISTRY in ui/app.js.
-const WIDGETS: &[&str] = &["checklist", "calendar", "dday", "diary", "memo", "nowplaying", "timer", "stopwatch", "pomodoro", "image", "showcase", "audioplayer", "collection", "clock"];
+/// Widget groups for the add menus (same file the UI loads); ids must match the REGISTRY in ui/app.js.
+fn widget_groups() -> &'static Vec<(String, Vec<String>)> {
+    static G: OnceLock<Vec<(String, Vec<String>)>> = OnceLock::new();
+    G.get_or_init(|| {
+        #[derive(Deserialize)]
+        struct Group { id: String, widgets: Vec<String> }
+        let v: Vec<Group> = serde_json::from_str(include_str!("../../ui/widgets/groups.json")).unwrap_or_default();
+        v.into_iter().map(|g| (g.id, g.widgets)).collect()
+    })
+}
+fn widget_ids() -> Vec<&'static str> {
+    widget_groups().iter().flat_map(|(_, w)| w.iter().map(String::as_str)).collect()
+}
 
 /// Embedded translations (same files the UI loads). First entry is the default language.
 const LOCALES: &[(&str, &str)] = &[
@@ -772,7 +783,7 @@ fn get_settings(state: State<AppState>) -> Value {
         "version": updater::CURRENT,
         "displays": state.boards.lock().unwrap().clone(),
         "widgets": widgets,
-        "widgetTypes": WIDGETS,
+        "widgetTypes": widget_ids(),
         "dataDir": state.dir.to_string_lossy(),
         "assetsDir": state.dir.join("assets"),
     })
@@ -1745,11 +1756,18 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let s = st.settings.lock().unwrap().clone();
     let t = |k: &str| tr(&s.lang, k);
 
-    let add_items = WIDGETS
+    let add_groups = widget_groups()
         .iter()
-        .map(|id| MenuItem::with_id(app, format!("add:{id}"), t(&format!("widget.{id}")), true, None::<&str>))
+        .map(|(group, ids)| {
+            let items = ids
+                .iter()
+                .map(|id| MenuItem::with_id(app, format!("add:{id}"), t(&format!("widget.{id}")), true, None::<&str>))
+                .collect::<Result<Vec<_>, _>>()?;
+            let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+            Submenu::with_items(app, t(&format!("group.{group}")), true, &refs)
+        })
         .collect::<Result<Vec<_>, _>>()?;
-    let add_refs: Vec<&dyn IsMenuItem<Wry>> = add_items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+    let add_refs: Vec<&dyn IsMenuItem<Wry>> = add_groups.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
     let add = Submenu::with_items(app, t("tray.add_widget"), true, &add_refs)?;
 
     let edit = CheckMenuItem::with_id(app, "edit", t("tray.edit_layout"), true, st.edit.load(Ordering::Relaxed), None::<&str>)?;

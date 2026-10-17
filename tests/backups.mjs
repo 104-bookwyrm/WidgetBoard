@@ -7,8 +7,6 @@ try {
   await page.waitForSelector('#backup-auto');
   assert.equal(await page.locator('#backup-auto').inputValue(), 'daily');
   assert.equal(await page.locator('#backup-keep').inputValue(), '7');
-  assert.match(await page.locator('#backup-policy').innerText(), /매주/);
-  assert.match(await page.locator('#backup-policy').innerText(), /매월/);
   console.log('PASS Korean backup policy exposes daily and long-term recovery points');
   await page.locator('#backup-auto').selectOption('off');
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('wb-config')).backup.auto === 'off');

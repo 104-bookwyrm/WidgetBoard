@@ -34,8 +34,8 @@ const rect = (p, id) => p.$eval(`.widget[data-id="${id}"]`, (e) => e.getBounding
 
 // 1. every widget type the tray offers mounts without errors
 {
-  const rs = await readFile(new URL("../src-tauri/src/main.rs", import.meta.url), "utf8");
-  const types = JSON.parse(rs.match(/const WIDGETS: &\[&str\] = &(\[[^\]]*\])/)[1]);
+  const groups = JSON.parse(await readFile(new URL("../ui/widgets/groups.json", import.meta.url), "utf8"));
+  const types = groups.flatMap((g) => g.widgets);
   const p = await page(types.map((t, i) => at("w" + i, t, (i % 4) * 4, Math.floor(i / 4) * 3)));
   const n = await p.$$eval(".widget:not(.invalid)", (ws) => ws.length);
   ok(n === types.length, "1: every widget type mounts", `${n}/${types.length}`);

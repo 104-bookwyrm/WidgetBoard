@@ -19,6 +19,7 @@ import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
 import { icon } from "./icons.js";
 import REGISTRY from "./widgets/index.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
+import GROUPS from "./widgets/groups.json" with { type: "json" };
 import { createMockTauri } from "./mock-tauri.js";
 
 const T = window.__TAURI__ ?? createMockTauri();
@@ -1222,6 +1223,7 @@ function locate(id) {
 function changeType(w, type) {
   const def = REGISTRY[type];
   if (!def || type === w.type) return;
+  const from = { type: w.type, settings: w.settings };
   const m = mounted.get(w.id);
   m?.inst.destroy?.(); // flushes the last edit into w
   m?.inst.unsub?.();
@@ -1233,7 +1235,7 @@ function changeType(w, type) {
   closeContent(structuredClone(w));
   w.id = crypto.randomUUID();
   w.type = type;
-  w.settings = structuredClone(def.defaults ?? {});
+  w.settings = { ...structuredClone(def.defaults ?? {}), ...carried(from, type) };
   delete w.name;
   delete w.stash;
   const min = def.min ?? { w: 1, h: 1 };
@@ -1254,6 +1256,28 @@ function changeType(w, type) {
   syncHits();
   announce(t("a11y.type_changed", { name: t("widget." + type) }));
 }
+
+// Switching inside Images keeps the pictures (collection holds them as items), fit and frameless.
+// ponytail: Images is the only group whose types share content; Time widgets' run states don't map.
+function carried(from, type) {
+  if (groupOf(from.type)?.id !== "images" || groupOf(type)?.id !== "images") return {};
+  const s = from.settings ?? {};
+  const pics = Array.isArray(s.imgs) ? s.imgs : Array.isArray(s.items) ? s.items.map((i) => i?.img).filter(Boolean) : [];
+  const to = REGISTRY[type].defaults ?? {};
+  const out = { frameless: !!s.frameless };
+  if ("items" in to) out.items = pics.map((img) => ({ img, label: "" }));
+  else out.imgs = [...pics];
+  if ("fit" in to && s.fit) out.fit = s.fit;
+  return out;
+}
+
+const groupOf = (type) => GROUPS.find((g) => g.widgets.includes(type));
+// Menu items for widget types; pick(type) runs on click.
+const typeItems = (types, pick) =>
+  types.filter((k) => REGISTRY[k]).map((k) => ({ text: t("widget." + k), action: () => pick(k) }));
+// One submenu per group (groups.json), leaving out `skip`.
+const groupMenus = (pick, skip) =>
+  GROUPS.filter((g) => g !== skip).map((g) => ({ text: t("group." + g.id), items: typeItems(g.widgets, pick) }));
 
 async function setBg(w, el) {
   const f = await pickImage();
@@ -1329,13 +1353,13 @@ async function openMenu(w, el, at) {
           ]
         : []),
       {
+        // siblings in the same group first, then every other group
         text: t("menu.change_type"),
-        items: Object.keys(REGISTRY)
-          .filter((k) => k !== w.type)
-          .map((k) => ({
-            text: t("widget." + k),
-            action: () => changeType(w, k),
-          })),
+        items: [
+          ...typeItems(groupOf(w.type)?.widgets.filter((k) => k !== w.type) ?? [], (k) => changeType(w, k)),
+          { item: "Separator" },
+          { text: t("menu.other_types"), items: groupMenus((k) => changeType(w, k), groupOf(w.type)) },
+        ],
       },
       ...(others.length
         ? [
@@ -1374,10 +1398,7 @@ async function openMenu(w, el, at) {
 // Right-click menu on empty board space (edit mode only): add a widget where clicked.
 async function openAddMenu(cell, at) {
   const items = [
-    ...Object.keys(REGISTRY).map((k) => ({
-      text: t("widget." + k),
-      action: () => addWidgetAt(k, cell, at),
-    })),
+    ...groupMenus((k) => addWidgetAt(k, cell, at)),
     { item: "Separator" },
     { text: t("edit.done"), action: () => invoke("set_edit_mode", { on: false }) },
   ];

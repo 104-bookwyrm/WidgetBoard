@@ -1,0 +1,7 @@
+[
+  { "id": "plan", "widgets": ["checklist", "calendar", "dday"] },
+  { "id": "notes", "widgets": ["memo", "diary"] },
+  { "id": "time", "widgets": ["clock", "timer", "stopwatch", "pomodoro"] },
+  { "id": "images", "widgets": ["image", "showcase", "collection"] },
+  { "id": "media", "widgets": ["nowplaying", "audioplayer"] }
+]

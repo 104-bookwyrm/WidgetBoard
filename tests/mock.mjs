@@ -24,14 +24,10 @@ try {
   assert.equal(config.version, nativeVersion);
   assert.equal(status.current, nativeVersion);
   assert.deepEqual(config.config, state.config);
-  const rust = await readFile(
-    new URL("../src-tauri/src/main.rs", import.meta.url),
-    "utf8",
+  const groups = JSON.parse(
+    await readFile(new URL("../ui/widgets/groups.json", import.meta.url), "utf8"),
   );
-  const typeList = rust.match(/const WIDGETS:[^=]+=\s*&\s*\[([\s\S]*?)\];/);
-  assert.ok(typeList, "native widget list must be readable");
-  const nativeTypes = [...typeList[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(config.widgetTypes, nativeTypes);
+  assert.deepEqual(config.widgetTypes, groups.flatMap((g) => g.widgets)); // main.rs reads the same file
   console.log(
     "PASS shared version, config and widget types match native sources",
   );

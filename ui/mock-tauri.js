@@ -1,5 +1,5 @@
 // One browser-only native substitute for boards and settings. Never touches real app data.
-import REGISTRY from "./widgets/index.js";
+import GROUPS from "./widgets/groups.json" with { type: "json" };
 import { checklistToEvents } from "./util.js";
 
 export function createMockTauri() {
@@ -186,7 +186,7 @@ export function createMockTauri() {
           version: metadata.version,
           widgets: all(),
           displays,
-          widgetTypes: Object.keys(REGISTRY),
+          widgetTypes: GROUPS.flatMap((g) => g.widgets), // = main.rs widget_ids()
           theme: localStorage.getItem("wb-theme") || "",
           dataDir: "C:/mock/appdata",
           autostart: {

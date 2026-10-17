@@ -1,11 +1,11 @@
 // Clock: the current time and date in a chosen timezone — "what time is it for my oshi right now".
-// Pick from the common zones or this computer's own; the date shows the day roll-over across zones.
+// Pick from the common zones or your own (Settings time zone, else this computer's); the date shows the day roll-over across zones.
 import { TZ_COMMON, tzLabel, osZone } from "../util.js";
 
 export default {
   size: { w: 3, h: 2 },
   min: { w: 2, h: 1 },
-  defaults: { tz: "", seconds: false }, // "" = this computer's zone, fixed on first mount
+  defaults: { tz: "", seconds: false }, // "" = the viewer's zone (Settings, else the OS), fixed on first mount
   css: `
     .clk { position: absolute; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 2cqh; box-sizing: border-box; padding: var(--head-h) var(--pad) var(--pad); }
@@ -17,14 +17,15 @@ export default {
   `,
   mount(root, s, api) {
     const { t, lang } = api;
-    if (typeof s.tz !== "string" || !s.tz) s.tz = osZone();
+    const here = () => api.config?.ui?.currentTz || osZone(); // the viewer's zone, as app.js currentTz()
+    if (typeof s.tz !== "string" || !s.tz) s.tz = here();
     s.seconds = !!s.seconds;
 
     root.innerHTML = `<div class="clk"><div class="clk-time"></div><div class="clk-sub"></div></div>`;
     const timeEl = root.querySelector(".clk-time");
     const subEl = root.querySelector(".clk-sub");
 
-    const zoneLabel = (z) => (z === osZone() ? t("clock.here") : tzLabel(z));
+    const zoneLabel = (z) => (z === here() ? t("clock.here") : tzLabel(z));
     let tick;
 
     function render() {
@@ -67,7 +68,7 @@ export default {
       menu: () => [
         {
           text: t("clock.zone"),
-          items: [osZone(), ...TZ_COMMON.filter((z) => z !== osZone())].map(
+          items: [here(), ...TZ_COMMON.filter((z) => z !== here())].map(
             (z) => ({
               text: (s.tz === z ? "✓ " : "") + zoneLabel(z),
               action: () => {

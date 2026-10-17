@@ -92,7 +92,7 @@ const MAP = {
     { id: "collection", layer: "widgets", groups: ["display", "records"], label: "Collection", src: ["ui/widgets/collection.js"], desc: "Grid of saved items with pictures." },
     { id: "audioplayer", layer: "widgets", groups: ["display"], label: "Audio player", src: ["ui/widgets/audioplayer.js"], desc: "Plays uploaded tracks." },
     { id: "nowplaying", layer: "widgets", groups: ["display"], label: "Now playing", src: ["ui/widgets/nowplaying.js"], desc: "Shows and controls the OS media session through Native." },
-    { id: "clock", layer: "widgets", groups: ["time"], label: "Clock", src: ["ui/widgets/clock.js"], desc: "Clock with time zones. Connected to nothing but util." },
+    { id: "clock", layer: "widgets", groups: ["time"], label: "Clock", src: ["ui/widgets/clock.js"], desc: "Clock with a time zone per widget, kept in its own settings (right-click: your zone or 8 common ones from util). Your zone = Settings time zone (config ui.currentTz), else this computer's." },
 
     { id: "holidays", layer: "helpers", label: "holidays", src: ["ui/holidays.js", "ui/holidays/"], desc: "Built-in Korean holiday table plus config add/remove." },
     { id: "timelog", layer: "helpers", label: "timelog", src: ["ui/timelog.js"], desc: "Shared reader and writer for the time store." },
