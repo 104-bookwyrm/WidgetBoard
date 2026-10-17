@@ -163,6 +163,26 @@ for (const path of ["settings.html", "library.html"]) {
   await p.close();
 }
 
+// 12. old Stopwatch and Pomodoro widgets open as the Timer widget in their mode and keep their state
+{
+  const lap = (n, at) => ({ n, at, split: 1000 });
+  const old = [
+    at("s", "stopwatch", 0, 0, { laps: [lap(1, 1000), lap(2, 2000)], cat: "other" }),
+    at("p", "pomodoro", 4, 0, { work: 50 }),
+  ];
+  const p = await page(old);
+  const modes = () => p.evaluate(() => ["s", "p"].map((id) => [!!document.querySelector(`.widget[data-id="${id}"] .sw`), !!document.querySelector(`.widget[data-id="${id}"] .pm`)]));
+  ok(JSON.stringify(await modes()) === "[[true,false],[false,true]]", "12: old widgets mount in their mode", JSON.stringify(await modes()));
+  await idle(p);
+  await p.reload();
+  await ready(p);
+  ok(JSON.stringify(await modes()) === "[[true,false],[false,true]]", "12: modes survive a reload");
+  const c = await p.evaluate(() => __mock.content());
+  ok(c.s?.data?.laps?.length === 2 && c.s.data.cat === "other", "12: stopwatch laps stay in the Library content", JSON.stringify(c.s?.data));
+  ok(c.p?.data?.work === 50, "12: pomodoro length stays in the Library content", JSON.stringify(c.p?.data));
+  await p.close();
+}
+
 await b.close();
 console.log(`\n${passes} passed, ${fails} failed`);
 console.log("page errors:", errs);

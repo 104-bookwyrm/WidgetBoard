@@ -49,7 +49,8 @@ function preview(c) {
   const d = c.data || {};
   const img = (list, label) =>
     `${firstImg(list) ? `<img src="${esc(url(firstImg(list)))}" alt="">` : ""}${esc(label)}`;
-  switch (c.type) {
+  // the Timer widget shows as the mode it is in; old Stopwatch and Pomodoro items have their own type
+  switch (c.type === "timer" ? d.mode || "timer" : c.type) {
     case "memo": {
       const bg = COLORS[d.color];
       return `<div class="lib-preview memo"${bg ? ` style="background:${bg}"` : ` style="color:inherit"`}>${esc(d.text ?? "")}</div>`;

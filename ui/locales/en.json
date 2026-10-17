@@ -36,6 +36,7 @@
   "timer.resume": "Resume",
   "timer.reset": "Reset",
   "timer.min": "{n}m",
+  "timer.mode": "Mode",
   "timer.hint": "Click to type (25 · 1:30 · 1:00:00), scroll to adjust by a minute",
   "image.empty": "Drop images here or click to add them.",
   "image.fit": "Fit",

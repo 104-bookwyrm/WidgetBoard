@@ -5,7 +5,7 @@
   "collection": ["imgs", "labels", "items"],
   "nowplaying": ["tracks"],
   "audioplayer": ["tracks"],
-  "timer": ["duration", "remaining", "endAt", "startedAt"],
-  "stopwatch": ["startedAt", "elapsed", "total", "laps", "cat", "since", "runId", "cuts", "away"],
-  "pomodoro": ["phase", "remaining", "endAt", "round", "workFrom", "runId", "runStart", "cuts", "away", "work", "short", "long", "every", "auto", "day", "done"]
+  "timer": ["duration", "remaining", "endAt", "startedAt", "mode", "elapsed", "total", "laps", "cat", "since", "runId", "cuts", "away", "phase", "round", "workFrom", "runStart", "work", "short", "long", "every", "auto", "day", "done"],
+  "stopwatch": ["duration", "remaining", "endAt", "startedAt", "mode", "elapsed", "total", "laps", "cat", "since", "runId", "cuts", "away", "phase", "round", "workFrom", "runStart", "work", "short", "long", "every", "auto", "day", "done"],
+  "pomodoro": ["duration", "remaining", "endAt", "startedAt", "mode", "elapsed", "total", "laps", "cat", "since", "runId", "cuts", "away", "phase", "round", "workFrom", "runStart", "work", "short", "long", "every", "auto", "day", "done"]
 }
