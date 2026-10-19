@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "demo",
+  "description": "Tutorial demo window: events, window, webview and native menus only",
+  "windows": ["demo"],
+  "permissions": [
+    "core:event:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:webview:default",
+    "core:menu:default"
+  ]
+}

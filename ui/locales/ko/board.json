@@ -54,16 +54,16 @@
   "look.svg_bad": "SVG 파일이 아닙니다.",
   "look.reset": "초기화",
   "wc.title": "위젯보드 시작",
-  "wc.body": "시작할 배치를 선택하세요. 위젯은 나중에 트레이 메뉴에서 추가할 수 있습니다.",
+  "wc.body": "시작할 레이아웃을 선택하세요. 위젯은 나중에 트레이 메뉴에서 추가할 수 있습니다.",
   "wc.blank": "빈 보드로 시작",
   "lay.partial": "화면 공간 부족으로 일부 위젯이 제외되었습니다.",
-  "lay.applied": "‘{name}’ 배치를 적용했습니다.",
+  "lay.applied": "‘{name}’ 레이아웃을 적용했습니다.",
   "upd.latest": "최신 버전입니다.",
   "upd.details": "자세히",
   "upd.done": "v{v}(으)로 업데이트했습니다.",
   "menu.hide": "숨기기",
   "menu.show": "보이기",
-  "toast.hidden": "{name} 위젯을 숨겼습니다. 설정 → 위젯 · 배치에서 다시 표시할 수 있습니다.",
+  "toast.hidden": "{name} 위젯을 숨겼습니다. 레이아웃 편집에서 우클릭하고 보이기를 선택하면 다시 표시됩니다.",
   "menu.other_types": "다른 위젯",
   "menu.library": "보관함…",
   "menu.search": "검색…",
@@ -83,5 +83,7 @@
   "layers.locked": "위치가 잠긴 위젯입니다. 레이어에서 잠금을 해제하세요.",
   "a11y.layer": "레이어 {total}개 중 {n}번째",
   "a11y.moved_px": "이동: 왼쪽 {x}px, 위 {y}px",
-  "a11y.resized_px": "크기: {w}×{h}px"
+  "a11y.resized_px": "크기: {w}×{h}px",
+  "demo.unavailable": "실제 앱에서 사용할 수 있습니다.",
+  "demo.tray_icon": "위젯보드 트레이 아이콘"
 }

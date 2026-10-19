@@ -873,6 +873,88 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Margin (logical px) between the demo window and the edges of the monitor's work area.
+const DEMO_MARGIN: f64 = 24.0;
+
+/// The tutorial demo: a normal opaque window running index.html?demo on the in-memory mock backend.
+/// It gets the user's theme and config as a snapshot (window.__demoInit) and never reads their files itself.
+/// `origin` is the label of the window that asked ("settings", a board); it is told when the demo closes.
+fn open_demo_window(app: &AppHandle, origin: &str, focus: Option<&str>) -> tauri::Result<()> {
+    if let Some(w) = app.get_webview_window("demo") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        return w.set_focus();
+    }
+    let state = app.state::<AppState>();
+    let lang = state.settings.lock().unwrap().lang.clone();
+    let theme = fs::read_to_string(state.dir.join("theme.css")).unwrap_or_else(|_| DEFAULT_THEME.into());
+    let mut config = read_config(&state.dir);
+    if !config.is_object() {
+        config = json!({});
+    }
+    if !config.get("ui").is_some_and(Value::is_object) {
+        config["ui"] = json!({});
+    }
+    config["ui"]["layoutMode"] = json!("grid"); // push-aside only exists in grid mode
+    let init = format!("window.__demoInit = {};", json!({ "theme": theme, "config": config }));
+    let mut url = String::from("index.html?demo");
+    if let Some(f) = focus.filter(|f| widget_ids().contains(f)) {
+        url.push_str("&focus=");
+        url.push_str(f);
+    }
+    let w = WebviewWindowBuilder::new(app, "demo", WebviewUrl::App(url.into()))
+        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
+        .title(tr(&lang, "demo.title"))
+        .initialization_script(init)
+        .background_color(tauri::window::Color(24, 25, 28, 255)) // opaque: the desktop never shows through
+        .decorations(true)
+        .transparent(false)
+        .always_on_top(false)
+        .resizable(true)
+        .visible(false) // fitted below, then shown
+        .build()?;
+    // fill the work area of the origin window's monitor (primary if unknown), minus a margin
+    let monitor = app
+        .get_webview_window(origin)
+        .and_then(|o| o.current_monitor().ok().flatten())
+        .or_else(|| app.primary_monitor().ok().flatten());
+    if let Some(m) = monitor {
+        let wa = m.work_area();
+        let margin = (DEMO_MARGIN * m.scale_factor()).round() as i32;
+        let _ = w.set_position(tauri::PhysicalPosition::new(wa.position.x + margin, wa.position.y + margin));
+        // set_size is the inner size: take the frame (title bar, borders) off the target
+        if let (Ok(outer), Ok(inner)) = (w.outer_size(), w.inner_size()) {
+            let frame_w = outer.width.saturating_sub(inner.width);
+            let frame_h = outer.height.saturating_sub(inner.height);
+            let want_w = wa.size.width.saturating_sub(2 * margin as u32).saturating_sub(frame_w);
+            let want_h = wa.size.height.saturating_sub(2 * margin as u32).saturating_sub(frame_h);
+            let _ = w.set_size(tauri::PhysicalSize::new(want_w.max(480), want_h.max(360)));
+        }
+    }
+    let (handle, origin) = (app.clone(), origin.to_string());
+    w.on_window_event(move |e| {
+        if let tauri::WindowEvent::Destroyed = e {
+            let _ = handle.emit("demo-closed", json!({ "origin": origin }));
+            if origin == "settings" {
+                if let Some(s) = handle.get_webview_window("settings") {
+                    let _ = s.unminimize();
+                    let _ = s.show();
+                    let _ = s.set_focus();
+                }
+            }
+        }
+    });
+    let _ = w.show();
+    let _ = w.set_focus();
+    Ok(())
+}
+
+/// async: building a window inside a sync command deadlocks the IPC on Windows (tauri docs).
+#[tauri::command]
+async fn open_demo(app: AppHandle, origin: String, focus: Option<String>) -> Result<(), String> {
+    open_demo_window(&app, &origin, focus.as_deref()).map_err(|e| e.to_string())
+}
+
 /// The Library: every content item, on the board or not, plus Recently deleted.
 /// `page`: "items" (default), "search" (cursor in the search box) or "layouts" (the Layouts tab).
 fn open_library_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
@@ -2018,6 +2100,7 @@ fn main() {
             get_settings,
             set_app,
             open_settings,
+            open_demo,
             flush_boards,
             backup_now,
             restore_backup,

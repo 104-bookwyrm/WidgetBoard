@@ -145,8 +145,8 @@
   "set.backup.kind.pre-restore": "복원 전",
   "set.backup.kind.pre-migration": "데이터 변환 전",
   "set.backup.kind.manual": "직접 백업",
-  "set.layout_mode": "배치 방식",
+  "set.layout_mode": "레이아웃 방식",
   "set.layout_grid": "칸에 맞춤 (밀어내기)",
   "set.layout_free": "자유 배치",
-  "set.layout_hint": "자유 배치: 위젯을 화면 끝까지 원하는 곳에 두고, 크기도 자유롭게, 겹쳐 놓을 수도 있습니다. 끌면 가장자리·가운데·다른 위젯에 맞춰 붙고, Alt를 누른 채 끌면 붙지 않습니다. 두 방식은 각자의 배치를 기억합니다."
+  "set.layout_hint": "자유 배치: 위젯을 화면 끝까지 원하는 곳에 두고, 크기도 자유롭게, 겹쳐 놓을 수도 있습니다. 끌면 가장자리·가운데·다른 위젯에 맞춰 붙고, Alt를 누른 채 끌면 붙지 않습니다. 두 방식은 각자의 레이아웃을 기억합니다."
 }

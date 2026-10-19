@@ -34,5 +34,6 @@
   "tray.library": "Library…",
   "lib.title": "Library",
   "tray.search": "Search…",
-  "widget.pomodoro": "Pomodoro"
+  "widget.pomodoro": "Pomodoro",
+  "demo.title": "WidgetBoard demo"
 }

@@ -1,5 +1,5 @@
 // Tiny i18n: flat JSON files in ./locales/<lang>/ (ko = default, en = fallback), merged into one map per language.
-// A page loads common, native, its own file and every widget file (widgets/<host>.json).
+// A page loads common, native, its own file, help and every widget file (widgets/<host>.json).
 import GROUPS from "./widgets/groups.json" with { type: "json" };
 
 let strings = {};
@@ -16,7 +16,7 @@ async function fetchPart(code, name) {
 }
 
 async function fetchLocale(code, page) {
-  const parts = await Promise.all(["common", "native", page, ...widgetFiles()].map((n) => fetchPart(code, n)));
+  const parts = await Promise.all(["common", "native", page, "help", ...widgetFiles()].map((n) => fetchPart(code, n)));
   return Object.assign({}, ...parts);
 }
 

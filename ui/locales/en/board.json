@@ -63,7 +63,7 @@
   "upd.done": "Updated to v{v}",
   "menu.hide": "Hide",
   "menu.show": "Show",
-  "toast.hidden": "Hid {name}. Show it again from Settings → Widgets",
+  "toast.hidden": "Hid {name}. To show it again, right-click it in Edit layout and choose Show",
   "menu.other_types": "Other widgets",
   "menu.library": "Library…",
   "menu.search": "Search…",
@@ -83,5 +83,7 @@
   "layers.locked": "This widget's position is locked. Unlock it in Layers.",
   "a11y.layer": "Layer {n} of {total}",
   "a11y.moved_px": "Moved to {x}, {y} px",
-  "a11y.resized_px": "Size {w}×{h} px"
+  "a11y.resized_px": "Size {w}×{h} px",
+  "demo.unavailable": "Available in the real app",
+  "demo.tray_icon": "WidgetBoard tray icon"
 }

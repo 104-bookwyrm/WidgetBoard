@@ -1,0 +1,157 @@
+/* Tutorial demo stage (loaded by demo.js in demo mode only): wallpaper, fake taskbar, practice-screen frame. */
+body.demo {
+  --demo-taskbar: 48px;
+}
+
+/* the board's grid fits above the taskbar; floating bars and the toast move up with it */
+body.demo #board {
+  height: calc(100% - var(--demo-taskbar));
+}
+body.demo #editbar,
+body.demo #focusbar {
+  bottom: calc(16px + var(--demo-taskbar));
+}
+body.demo #toast {
+  bottom: calc(72px + var(--demo-taskbar));
+}
+
+#demo-wallpaper {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: #3a5a78 url("tutorial/assets/wallpaper.png") center / cover no-repeat;
+}
+
+/* the tray's left-click hides the board layer; the toast stays so messages remain visible */
+body.demo-board-off > :not(#demo-wallpaper):not(#demo-taskbar):not(#demo-frame):not(#toast):not(#sr):not(script) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* practice-screen cue: a calm accent frame around the whole window, following the theme. Static, so reduced
+   motion needs no special case. */
+#demo-frame {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 3px color-mix(in srgb, var(--c2) 80%, transparent),
+    inset 0 0 36px color-mix(in srgb, var(--c2) 28%, transparent);
+}
+
+/* a Windows 11 style strip drawn from scratch: centred apps, tray and clock on the right */
+#demo-taskbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--demo-taskbar);
+  z-index: 40;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: rgb(28 28 32 / 0.88);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+  color: #f2f3f5;
+  font-size: 12px;
+}
+.dt-side {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+.dt-tray {
+  justify-content: flex-end;
+  gap: 4px;
+}
+.dt-apps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dt-app {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.08);
+}
+.dt-app svg {
+  width: 18px;
+  height: 18px;
+}
+.dt-app::after {
+  content: "";
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--dt-hue);
+}
+.dt-app:first-child::after {
+  display: none;
+}
+.dt-a1 {
+  --dt-hue: #6b7fd7;
+}
+.dt-a2 {
+  --dt-hue: #d7916b;
+}
+.dt-a3 {
+  --dt-hue: #6bd7a1;
+}
+.dt-search {
+  width: 150px;
+  height: 28px;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 0.1);
+}
+.dt-chev {
+  width: 28px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  opacity: 0.8;
+}
+.dt-chev svg {
+  width: 14px;
+  height: 14px;
+}
+#demo-tray {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+#demo-tray:hover {
+  background: rgb(255 255 255 / 0.12);
+}
+#demo-tray:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -2px;
+}
+#demo-tray img {
+  width: 20px;
+  height: 20px;
+}
+.dt-clock {
+  display: grid;
+  margin-left: 6px;
+  padding: 0 8px;
+  text-align: right;
+  line-height: 1.25;
+}
+.dt-clock b {
+  font-weight: 400;
+}
+.dt-clock small {
+  font-size: 11px;
+}

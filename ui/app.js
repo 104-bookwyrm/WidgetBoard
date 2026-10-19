@@ -27,7 +27,13 @@ import { createMockTauri } from "./mock-tauri.js";
 // The demo (?demo) runs on an in-memory mock with nothing saved; only the native menus are real.
 const DEMO = new URLSearchParams(location.search).has("demo");
 const T = DEMO
-  ? { ...createMockTauri({ memory: true }), ...(window.__TAURI__?.menu && { menu: window.__TAURI__.menu }) }
+  ? {
+      ...createMockTauri({ memory: true }),
+      ...(window.__TAURI__?.menu && { menu: window.__TAURI__.menu }),
+      // the stage closes the demo window and pops its menu at the tray icon: the mock's window only records close()
+      ...(window.__TAURI__?.webviewWindow && { demoWindow: window.__TAURI__.webviewWindow.getCurrentWebviewWindow() }),
+      ...(window.__TAURI__?.dpi && { dpi: window.__TAURI__.dpi }),
+    }
   : (window.__TAURI__ ?? createMockTauri());
 // the demo must refuse to start rather than touch real data if T.core is ever the real one
 if (DEMO && (!T.core.__mock || T.core.invoke === window.__TAURI__?.core?.invoke)) throw new Error("demo: backend is not the mock");
@@ -2081,14 +2087,16 @@ async function checkReminder() {
 // De-dupe per occurrence and fire time (id + date + instant) so each fires once, and an edited time fires
 // again; primary board only.
 const FIRED_KEY = "wb-reminder-fired";
+// the demo keeps it in memory only: demo reminders must not persist into the real app's storage
 let firedSet = (() => {
   try {
-    return new Set(JSON.parse(localStorage.getItem(FIRED_KEY) || "[]"));
+    return new Set(DEMO ? [] : JSON.parse(localStorage.getItem(FIRED_KEY) || "[]"));
   } catch {
     return new Set();
   }
 })();
 const saveFired = () => {
+  if (DEMO) return;
   try {
     localStorage.setItem(FIRED_KEY, JSON.stringify([...firedSet]));
   } catch {}
@@ -2510,6 +2518,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     () => setMotion(reduceMotion),
   );
   await loadLang(lang, "board");
+  if (DEMO) await (await import("./demo.js")).mountStage({ T, invoke, toast, groupMenus, isEdit: () => editMode });
   myDisplay = st.display || "";
   isPrimary = !!st.primary;
   displays = st.displays || [];
@@ -2642,7 +2651,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   else if (st.migrateError) toast(t("toast.migrate_failed"));
   else if (st.configBroken) toast(t("toast.config_bad"));
   else if (st.justUpdated) toast(t("upd.done", { v: st.justUpdated }));
-  else if (st.primary && !widgets.length && !(await invoke("get_all_widgets").catch(() => [])).length) {
+  else if (!DEMO && st.primary && !widgets.length && !(await invoke("get_all_widgets").catch(() => [])).length) {
     // an empty board is invisible and click-through: offer a start until "empty board" is picked once
     const welcomed = await invoke("store_get", { key: "welcomed" }).catch(() => null);
     if (welcomed) toast(t("toast.empty"));

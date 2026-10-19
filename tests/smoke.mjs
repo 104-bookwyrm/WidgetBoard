@@ -149,6 +149,12 @@ for (const path of ["settings.html", "library.html"]) {
     }
   const bare = enKeys.filter((k) => !noted.has(k));
   ok(!bare.length, "9: every key has a note or is on the legacy list", bare.join(", "));
+  // help text: the catalogue derives help.<id>.title/body/<section>; help.json holds exactly those keys
+  const cat = JSON.parse(await readFile(new URL("../ui/help/catalogue.json", import.meta.url), "utf8"));
+  const derived = cat.flatMap((e) => ["title", "body", ...(e.sections ?? [])].map((s) => `help.${e.id}.${s}`));
+  const helpKeys = Object.keys(await load("en", "help.json"));
+  const [lost, extra] = [derived.filter((k) => !helpKeys.includes(k)), helpKeys.filter((k) => !derived.includes(k))];
+  ok(!lost.length && !extra.length, "9: help.json keys match the catalogue", `missing ${lost} | unused ${extra}`);
 }
 
 // 10. an old Collection widget opens as the merged Image widget and keeps pictures and labels
