@@ -1,0 +1,17 @@
+[
+  { "id": "add", "label": "tray.add_widget" },
+  { "id": "edit", "label": "tray.edit_layout" },
+  { "id": "library", "label": "tray.library" },
+  { "id": "search", "label": "tray.search" },
+  { "id": "theme", "label": "tray.theme" },
+  { "id": "settings", "label": "tray.settings" },
+  { "id": "layouts", "label": "tray.layouts" },
+  "-",
+  { "id": "lang", "label": "tray.language" },
+  { "id": "toggle", "label": "tray.show_hide" },
+  { "id": "folder", "label": "tray.open_folder" },
+  { "id": "config", "label": "tray.open_config" },
+  { "id": "update", "label": "tray.update_check" },
+  "-",
+  { "id": "quit", "label": "tray.quit" }
+]

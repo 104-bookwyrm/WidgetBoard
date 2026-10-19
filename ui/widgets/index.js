@@ -11,6 +11,9 @@ import diary from "./diary.js";
 import showcase from "./showcase.js";
 import clock from "./clock.js";
 
+/** Retired types that saved widgets may still carry, and the widget each one opens as. */
+export const HOSTS = { audioplayer: "nowplaying", collection: "image", stopwatch: "timer", pomodoro: "timer" };
+
 export default {
   checklist,
   calendar,

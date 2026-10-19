@@ -9,6 +9,8 @@ import { COLORS } from "./widgets/memo.js";
 import { fmt as fmtTimer } from "./widgets/timer.js";
 import { fmtTotal } from "./widgets/stopwatch.js";
 
+// RULE: every backend call goes through T. Never call window.__TAURI__ directly: the mock (tests, browser
+// preview, the demo) only replaces T, so a direct call reaches real app data from a page that must not touch it.
 const T = window.__TAURI__ ?? createMockTauri();
 appWindow();
 // Ctrl+F means "search" here (the browser's find bar is blocked by appWindow)
@@ -400,7 +402,7 @@ function applyTheme(css) {
   assetsDir = data.assetsDir || "";
   lang = data.app.lang;
   applyTheme(data.theme);
-  await loadLang(data.app.lang);
+  await loadLang(data.app.lang, "library");
   applyStatic();
   await load();
   await listen("content-changed", load);
@@ -419,7 +421,7 @@ function applyTheme(css) {
   await listen("theme-changed", applyTheme);
   await listen("lang-changed", async (code) => {
     lang = code;
-    await loadLang(code);
+    await loadLang(code, "library");
     applyStatic();
     render();
     if (tab === "layouts") renderLayouts();

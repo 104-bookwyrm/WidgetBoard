@@ -1,0 +1,13 @@
+{
+  "memo.placeholder": "메모…",
+  "memo.color": "메모 색",
+  "memo.color.theme": "테마",
+  "memo.color.yellow": "노랑",
+  "memo.color.pink": "분홍",
+  "memo.color.green": "초록",
+  "memo.color.blue": "파랑",
+  "memo.color.purple": "보라",
+  "memo.color.orange": "주황",
+  "sum.memo_empty": "빈 메모",
+  "hint.memo": "자동 저장"
+}

@@ -1,6 +1,6 @@
 // Smoke suite: a short list of the bugs that keep coming back. Not a spec of every behaviour: when something
 // breaks, debug it then. Checks state and structure, never displayed text (copy is meant to change).
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { chromium, ready } from "./browser.mjs";
 
 const b = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
@@ -125,12 +125,30 @@ for (const path of ["settings.html", "library.html"]) {
   await p.close();
 }
 
-// 9. both languages have the same keys
+// 9. en and ko have the same files and keys; every en key has a translator note or is on the legacy list
 {
-  const keys = async (l) => Object.keys(JSON.parse(await readFile(new URL(`../ui/locales/${l}.json`, import.meta.url), "utf8")));
-  const [en, ko] = [await keys("en"), await keys("ko")];
-  const diff = [...en.filter((k) => !ko.includes(k)), ...ko.filter((k) => !en.includes(k))];
-  ok(!diff.length, "9: en and ko have the same keys", diff.join(", "));
+  const dir = new URL("../ui/locales/", import.meta.url);
+  const tree = async (sub) =>
+    (await readdir(new URL(sub, dir), { recursive: true })).map((f) => f.replaceAll("\\", "/")).filter((f) => f.endsWith(".json")).sort();
+  const load = async (sub, f) => JSON.parse(await readFile(new URL(`${sub}/${f}`, dir), "utf8"));
+  const [enFiles, koFiles] = [await tree("en/"), await tree("ko/")];
+  ok(enFiles.join() === koFiles.join(), "9: en and ko have the same files", `${enFiles} | ${koFiles}`);
+  const enKeys = [];
+  for (const f of enFiles) {
+    const [en, ko] = [await load("en", f), await load("ko", f).catch(() => ({}))];
+    const diff = [...Object.keys(en).filter((k) => !(k in ko)), ...Object.keys(ko).filter((k) => !(k in en))];
+    ok(!diff.length, `9: en and ko have the same keys in ${f}`, diff.join(", "));
+    enKeys.push(...Object.keys(en));
+  }
+  ok(new Set(enKeys).size === enKeys.length, "9: no key sits in two files");
+  const noted = new Set(await load("context", "_legacy.json"));
+  for (const f of (await tree("context/")).filter((f) => f !== "_legacy.json"))
+    for (const k of Object.keys(await load("context", f))) {
+      noted.add(k);
+      ok(enKeys.includes(k), `9: note for unknown key ${k} (${f})`);
+    }
+  const bare = enKeys.filter((k) => !noted.has(k));
+  ok(!bare.length, "9: every key has a note or is on the legacy list", bare.join(", "));
 }
 
 // 10. an old Collection widget opens as the merged Image widget and keeps pictures and labels

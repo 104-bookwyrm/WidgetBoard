@@ -544,9 +544,12 @@ _지금 확인_, or tray → _업데이트 확인_). The first look is 3 minutes
 
 ## Languages
 
-Korean is the default; English lives in `ui/locales/en.json` (also the fallback for missing keys).
+Korean is the default; English lives in `ui/locales/en/` (also the fallback for missing keys).
+Each language is a folder of small flat files: `native.json` (tray and window titles), `common.json`, one per window
+(`board`, `settings`, `library`) and `widgets/<widget>.json`.
 Keys are flat (`"timer.start": "시작"`), `{n}` is a placeholder, `_name` is the name shown in the Language menu.
-To add a language: copy `en.json` to `<code>.json`, translate, and add it to `LOCALES` in `src-tauri/src/main.rs`.
+To add a language: copy `ui/locales/en/` to `ui/locales/<code>/`, translate, and add its `native.json` to `LOCALES` in `src-tauri/src/main.rs`.
+Notes for translators go in `ui/locales/context/` (same file names); keys listed in its `_legacy.json` have none yet.
 
 ## Developing
 
@@ -558,7 +561,7 @@ pickImage(s), uploadImage, assetUrl, listAssets, requestSize, size, reduceMotion
 setFrameless, on(event), media.subscribe/control, announce, alert(title, body)` (`alert` = the user's opted-in
    flash / Windows notification; sound stays the widget's job). Shared parts: `icon(name)` from `ui/icons.js`,
    `dropZone` from `ui/util.js`, and the tokens on `.widget` in `base.css` (`--text-muted`, `--space-*`, `--fs-*`).
-2. Register it in `REGISTRY` (`ui/app.js`) and `WIDGETS` (`src-tauri/src/main.rs`); add `widget.<name>` to the locales.
+2. Register it in `REGISTRY` (`ui/app.js`) and `WIDGETS` (`src-tauri/src/main.rs`); add `widget.<name>` to `native.json` and its other strings to `widgets/<name>.json`, in both languages.
 
 **Build (Windows)**
 

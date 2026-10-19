@@ -1,0 +1,12 @@
+{
+  "diary.today": "오늘",
+  "diary.prev": "이전",
+  "diary.next": "다음",
+  "diary.pick": "날짜 선택",
+  "diary.placeholder": "일기 쓰기…",
+  "diary.saved": "저장됨",
+  "diary.saving": "저장 중…",
+  "diary.chars": "{n}자",
+  "sum.diary": "{date} 다이어리, {n}자",
+  "hint.diary": "자동 저장, ‹ ›: 날짜 이동"
+}

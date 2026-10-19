@@ -17,12 +17,20 @@ import {
 } from "./util.js";
 import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
 import { icon } from "./icons.js";
-import REGISTRY from "./widgets/index.js";
+import REGISTRY, { HOSTS } from "./widgets/index.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import GROUPS from "./widgets/groups.json" with { type: "json" };
 import { createMockTauri } from "./mock-tauri.js";
 
-const T = window.__TAURI__ ?? createMockTauri();
+// RULE: every backend call goes through T. Never call window.__TAURI__ directly: the mock (tests, browser
+// preview, the demo) only replaces T, so a direct call reaches real app data from a page that must not touch it.
+// The demo (?demo) runs on an in-memory mock with nothing saved; only the native menus are real.
+const DEMO = new URLSearchParams(location.search).has("demo");
+const T = DEMO
+  ? { ...createMockTauri({ memory: true }), ...(window.__TAURI__?.menu && { menu: window.__TAURI__.menu }) }
+  : (window.__TAURI__ ?? createMockTauri());
+// the demo must refuse to start rather than touch real data if T.core is ever the real one
+if (DEMO && (!T.core.__mock || T.core.invoke === window.__TAURI__?.core?.invoke)) throw new Error("demo: backend is not the mock");
 const invoke = (cmd, args, opts) => T.core.invoke(cmd, args, opts);
 /** Writes that fail (disk full, file locked, ...) tell the user instead of failing silently. */
 const saveFailed = (e) => {
@@ -805,7 +813,7 @@ function mount(w) {
     <div class="w-frame" aria-hidden="true"></div>
     <div class="w-head">
       <button class="grip" data-act="grip" title="${esc(t("a11y.grip", { name }))}">${icon("grip")}</button><span class="title">${esc(name)}</span>
-      <span class="w-hint" title="${esc(t("hint." + w.type))}">${esc(t("hint." + w.type))}</span>
+      <span class="w-hint" title="${esc(hintOf(w))}">${esc(hintOf(w))}</span>
       <button data-act="remove" title="${esc(t("menu.close"))}">${icon("x")}</button>
     </div>
     <div class="w-resize" aria-hidden="true"></div>`;
@@ -848,7 +856,7 @@ function mount(w) {
     saveFailed("conflict");
   }
   const api = {
-    save: () => !retired.has(el) && save(w), // a late callback from a closed or moved widget never writes
+    save: () => !retired.has(el) && (applyHint(el, w), save(w)), // a late callback from a closed or moved widget never writes
     pickImage,
     pickImages,
     uploadImage,
@@ -1186,6 +1194,18 @@ function restoreClosed() {
 }
 
 const widgetName = (w) => w.name || t("widget." + w.type);
+/** Header hint: the host widget's, for the mode or layout it shows (a mode switch saves, which refreshes it). */
+function hintOf(w) {
+  const type = HOSTS[w.type] ?? w.type;
+  const s = { ...REGISTRY[w.type]?.defaults, ...w.settings };
+  if (type === "timer") return t("hint." + s.mode);
+  if (type === "image" && s.layout === "grid") return t("hint.image_grid");
+  return t("hint." + type);
+}
+function applyHint(el, w) {
+  const hint = el.querySelector(".w-hint");
+  hint.textContent = hint.title = hintOf(w);
+}
 function applyName(w) {
   const el = mounted.get(w.id)?.el;
   if (!el) return;
@@ -1269,7 +1289,7 @@ function carried(from, type) {
     for (const k of ["tracks", "current", "volume", "shuffle", "loop"]) if (k in s) out[k] = structuredClone(s[k]);
     return out;
   }
-  const images = (k) => k === "collection" || groupOf(k)?.id === "images";
+  const images = (k) => groupOf(k)?.id === "images";
   if (!images(from.type) || !images(type)) return {};
   const s = from.settings ?? {};
   const to = REGISTRY[type].defaults ?? {};
@@ -1278,7 +1298,8 @@ function carried(from, type) {
   return out;
 }
 
-const groupOf = (type) => GROUPS.find((g) => g.widgets.includes(type));
+// an old type (HOSTS) sits in its host's group
+const groupOf = (type) => GROUPS.find((g) => g.widgets.includes(HOSTS[type] ?? type));
 // Menu items for widget types; pick(type) runs on click.
 const typeItems = (types, pick) =>
   types.filter((k) => REGISTRY[k]).map((k) => ({ text: t("widget." + k), action: () => pick(k) }));
@@ -1366,7 +1387,7 @@ async function openMenu(w, el, at) {
         // siblings in the same group first, then every other group
         text: t("menu.change_type"),
         items: [
-          ...typeItems(groupOf(w.type)?.widgets.filter((k) => k !== w.type) ?? [], (k) => changeType(w, k)),
+          ...typeItems(groupOf(w.type)?.widgets.filter((k) => k !== (HOSTS[w.type] ?? w.type)) ?? [], (k) => changeType(w, k)),
           ...(groupOf(w.type)?.widgets.length > 1 ? [{ item: "Separator" }] : []),
           { text: t("menu.other_types"), items: groupMenus((k) => changeType(w, k), groupOf(w.type)) },
         ],
@@ -2091,6 +2112,7 @@ function fireEventReminder(e) {
 let lastReminderUrl = null;
 (async () => {
   try {
+    // the one direct window.__TAURI__ use (see RULE at T): a listener that writes nothing. Do not add others.
     const notif = window.__TAURI__?.notification;
     if (typeof notif?.onAction !== "function") return;
     await notif.onAction(() => {
@@ -2259,8 +2281,8 @@ const PRESETS = {
     ["nowplaying", 4, 2],
   ],
   study: [
-    ["timer", 3, 2],
-    ["stopwatch", 3, 2],
+    ["timer", 3, 2, { mode: "timer" }],
+    ["timer", 3, 2, { mode: "stopwatch" }],
     ["checklist", 3, 4],
     ["diary", 4, 4],
     ["dday", 3, 3],
@@ -2268,10 +2290,10 @@ const PRESETS = {
   ],
   oshi: [
     ["showcase", 4, 4],
-    ["collection", 3, 4],
+    ["image", 3, 4, { layout: "grid" }],
     ["dday", 3, 3],
     ["image", 3, 3],
-    ["audioplayer", 3, 2],
+    ["nowplaying", 3, 2, { list: true }],
   ],
 };
 /** Pack slots onto an empty cols×rows grid, right-aligned. Returns [{slot, x, y, w, h}] (slots that don't fit are left out). */
@@ -2334,10 +2356,15 @@ async function replaceAll(next, label, { undo = true } = {}) {
   // placements only: in-memory widgets carry their merged content
   await write("replace_widgets", { widgets: next.map((w) => splitContent(w)[0]) }); // every board reloads
 }
-/** Library content a preset slot may show: not deleted, not on another monitor, not already used. */
-const usable = (id, type, skip) => {
+/**
+ * Library content a preset slot may show: its type or an old type that opens as it, not deleted, not on another
+ * monitor, not already used. A slot's override of a content key must match (a stopwatch slot never takes a countdown).
+ */
+const usable = (id, type, skip, preset = {}) => {
   const c = contents.get(id);
-  return !!c && c.type === type && !c.deletedAt && !skip.has(id);
+  if (!c || (HOSTS[c.type] ?? c.type) !== type || c.deletedAt || skip.has(id)) return false;
+  const s = { ...REGISTRY[c.type]?.defaults, ...c.data };
+  return Object.entries(preset).every(([k, v]) => !CONTENT_KEYS[c.type].includes(k) || s[k] === v);
 };
 /**
  * A built-in preset on this monitor. A Library slot shows the content it showed last time in this preset,
@@ -2361,12 +2388,12 @@ async function applyPreset(name) {
     let base;
     if (isLibrary(type)) {
       const recent = [...contents.values()]
-        .filter((c) => usable(c.id, type, skip))
+        .filter((c) => usable(c.id, type, skip, preset))
         .sort((a, b) => b.updated - a.updated)[0];
-      const id = usable(bound[i], type, skip) ? bound[i] : recent?.id;
+      const id = usable(bound[i], type, skip, preset) ? bound[i] : recent?.id;
       const here = widgets.find((o) => o.id === id);
       base = id
-        ? structuredClone(here ?? { ...contents.get(id).placement, id, type })
+        ? structuredClone(here ?? { ...contents.get(id).placement, id, type: contents.get(id).type })
         : { id: crypto.randomUUID(), type, settings: { ...structuredClone(REGISTRY[type].defaults ?? {}), ...preset } };
       base.settings ??= {};
       skip.add(base.id);
@@ -2482,7 +2509,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     "change",
     () => setMotion(reduceMotion),
   );
-  await loadLang(lang);
+  await loadLang(lang, "board");
   myDisplay = st.display || "";
   isPrimary = !!st.primary;
   displays = st.displays || [];

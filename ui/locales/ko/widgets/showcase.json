@@ -1,0 +1,23 @@
+{
+  "hint.showcase": "이름 클릭: 이름과 생일 설정, 끌어다 놓기: 사진 추가",
+  "sc.name": "이름",
+  "sc.name_hint": "누구인가요?",
+  "sc.birthday": "생일",
+  "sc.birthday_today": "오늘 생일!",
+  "sc.birthday_event": "{name} 생일 🎂",
+  "sc.quotes": "문구",
+  "sc.quotes_hint": "한 줄에 하나씩, 번갈아 표시됩니다",
+  "sc.accent": "강조색",
+  "sc.clear_color": "색 지우기",
+  "sc.cal_sync": "생일을 달력과 D-day에 추가",
+  "sc.edit": "편집",
+  "sc.add_image": "이미지 추가",
+  "sc.unnamed": "이름 없음",
+  "sc.empty": "빈 쇼케이스",
+  "sc.export": "데이터 내보내기",
+  "sc.import": "데이터 가져오기",
+  "sc.exported": "클립보드에 복사했습니다.",
+  "sc.export_failed": "복사하지 못했습니다.",
+  "sc.imported": "가져왔습니다.",
+  "sc.import_failed": "가져오지 못했습니다. 클립보드의 JSON을 확인하세요."
+}

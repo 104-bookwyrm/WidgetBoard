@@ -1,0 +1,13 @@
+{
+  "memo.placeholder": "Memo…",
+  "memo.color": "Memo colour",
+  "memo.color.theme": "Theme",
+  "memo.color.yellow": "Yellow",
+  "memo.color.pink": "Pink",
+  "memo.color.green": "Green",
+  "memo.color.blue": "Blue",
+  "memo.color.purple": "Purple",
+  "memo.color.orange": "Orange",
+  "sum.memo_empty": "Empty memo",
+  "hint.memo": "Just type, it saves"
+}

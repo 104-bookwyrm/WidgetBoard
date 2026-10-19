@@ -50,10 +50,29 @@ fn widget_ids() -> Vec<&'static str> {
     widget_groups().iter().flat_map(|(_, w)| w.iter().map(String::as_str)).collect()
 }
 
-/// Embedded translations (same files the UI loads). First entry is the default language.
+/// Tray menu order (same file the demo reads): (id, label key) per entry, "-" is a separator.
+/// Ids must be ones `build_menu` knows (TRAY_PLAIN plus the special-cased add, edit, lang).
+const TRAY_PLAIN: &[&str] = &["library", "search", "theme", "settings", "layouts", "toggle", "folder", "config", "update", "quit"];
+fn tray_menu() -> &'static Vec<(String, String)> {
+    static M: OnceLock<Vec<(String, String)>> = OnceLock::new();
+    M.get_or_init(|| {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Entry { Item { id: String, label: String }, Sep(#[allow(dead_code)] String) }
+        let v: Vec<Entry> = serde_json::from_str(include_str!("../../ui/tray-menu.json")).unwrap_or_default();
+        v.into_iter()
+            .map(|e| match e {
+                Entry::Item { id, label } => (id, label),
+                Entry::Sep(_) => ("-".to_string(), String::new()),
+            })
+            .collect()
+    })
+}
+
+/// Embedded translations: only native.json (the keys Rust reads); the UI loads the rest. First entry is the default language.
 const LOCALES: &[(&str, &str)] = &[
-    ("ko", include_str!("../../ui/locales/ko.json")),
-    ("en", include_str!("../../ui/locales/en.json")),
+    ("ko", include_str!("../../ui/locales/ko/native.json")),
+    ("en", include_str!("../../ui/locales/en/native.json")),
 ];
 
 fn locales() -> &'static HashMap<&'static str, HashMap<String, String>> {
@@ -1776,7 +1795,6 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let add = Submenu::with_items(app, t("tray.add_widget"), true, &add_refs)?;
 
     let edit = CheckMenuItem::with_id(app, "edit", t("tray.edit_layout"), true, st.edit.load(Ordering::Relaxed), None::<&str>)?;
-    let theme = MenuItem::with_id(app, "theme", t("tray.theme"), true, None::<&str>)?;
 
     let lang_items = LOCALES
         .iter()
@@ -1788,21 +1806,21 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let lang_refs: Vec<&dyn IsMenuItem<Wry>> = lang_items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
     let lang = Submenu::with_items(app, t("tray.language"), true, &lang_refs)?;
 
-    let toggle = MenuItem::with_id(app, "toggle", t("tray.show_hide"), true, None::<&str>)?;
-    let folder = MenuItem::with_id(app, "folder", t("tray.open_folder"), true, None::<&str>)?;
-    let config = MenuItem::with_id(app, "config", t("tray.open_config"), true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", t("tray.settings"), true, None::<&str>)?;
-    let layouts = MenuItem::with_id(app, "layouts", t("tray.layouts"), true, None::<&str>)?;
-    let library = MenuItem::with_id(app, "library", t("tray.library"), true, None::<&str>)?;
-    let search = MenuItem::with_id(app, "search", t("tray.search"), true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", t("tray.quit"), true, None::<&str>)?;
-    let update = MenuItem::with_id(app, "update", t("tray.update_check"), true, None::<&str>)?;
+    // order and labels come from ui/tray-menu.json; add, edit and lang are special items
+    let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
+    for (id, label) in tray_menu() {
+        match id.as_str() {
+            "-" => items.push(Box::new(PredefinedMenuItem::separator(app)?)),
+            "add" => items.push(Box::new(add.clone())),
+            "edit" => items.push(Box::new(edit.clone())),
+            "lang" => items.push(Box::new(lang.clone())),
+            plain if TRAY_PLAIN.contains(&plain) => items.push(Box::new(MenuItem::with_id(app, plain, t(label), true, None::<&str>)?)),
+            _ => {}
+        }
+    }
+    let refs: Vec<&dyn IsMenuItem<Wry>> = items.iter().map(|i| i.as_ref()).collect();
+    let menu = Menu::with_items(app, &refs)?;
     let sep = || PredefinedMenuItem::separator(app);
-
-    let menu = Menu::with_items(
-        app,
-        &[&add, &edit, &library, &search, &theme, &settings, &layouts, &sep()?, &lang, &toggle, &folder, &config, &update, &sep()?, &quit],
-    )?;
     // a found (not skipped) update sits at the very bottom until it is installed or skipped
     if let Some(a) = updater::available(&st.dir.join("updates")) {
         let text = t("tray.update_available").replace("{v}", a["version"].as_str().unwrap_or(""));
@@ -2025,6 +2043,22 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tray_menu_ids_and_labels_exist() {
+        let menu = tray_menu();
+        assert!(!menu.is_empty(), "tray-menu.json parses");
+        for (id, label) in menu {
+            if id == "-" {
+                continue;
+            }
+            assert!(TRAY_PLAIN.contains(&id.as_str()) || ["add", "edit", "lang"].contains(&id.as_str()), "build_menu does not know tray id {id}");
+            for (code, src) in LOCALES {
+                let m: HashMap<String, String> = serde_json::from_str(src).unwrap();
+                assert!(m.contains_key(label), "{code}.json lacks tray label {label}");
+            }
+        }
+    }
 
     #[test]
     fn purge_assets_keeps_shared_images() {

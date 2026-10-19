@@ -14,6 +14,8 @@ import {
   copyText,
 } from "./theme.js";
 
+// RULE: every backend call goes through T. Never call window.__TAURI__ directly: the mock (tests, browser
+// preview, the demo) only replaces T, so a direct call reaches real app data from a page that must not touch it.
 const T = window.__TAURI__ ?? createMockTauri();
 appWindow();
 const invoke = (cmd, args) =>
@@ -712,7 +714,7 @@ function fillWidgets() {
 async function init() {
   data = await invoke("get_settings");
   applyTheme(data.theme);
-  await loadLang(data.app.lang);
+  await loadLang(data.app.lang, "settings");
   buildNav();
   applyStatic();
   applyA11y();
@@ -735,7 +737,7 @@ async function init() {
   await listen("settings-page", showPage);
   await listen("lang-changed", async (code) => {
     data.app.lang = code || data.app.lang;
-    await loadLang(data.app.lang);
+    await loadLang(data.app.lang, "settings");
     buildNav();
     applyStatic();
     fillA11y();

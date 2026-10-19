@@ -1,0 +1,12 @@
+{
+  "diary.today": "Today",
+  "diary.prev": "Previous entry",
+  "diary.next": "Next entry",
+  "diary.pick": "Pick a date",
+  "diary.placeholder": "How was today?",
+  "diary.saved": "Saved",
+  "diary.saving": "Saving…",
+  "diary.chars": "{n} chars",
+  "sum.diary": "Diary for {date}, {n} characters",
+  "hint.diary": "Just type, it saves · ‹ › for other days"
+}

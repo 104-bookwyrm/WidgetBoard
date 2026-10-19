@@ -1,8 +1,10 @@
 // One browser-only native substitute for boards and settings. Never touches real app data.
+// It works only if pages reach the backend through the T object it returns. A page that calls window.__TAURI__
+// directly bypasses it and writes real data. Keep it that way: no direct calls, anywhere.
 import GROUPS from "./widgets/groups.json" with { type: "json" };
 import { checklistToEvents } from "./util.js";
 
-export function createMockTauri() {
+export function createMockTauri({ memory = false } = {}) {
   const query = new URLSearchParams(location.search);
   const display = query.get("display") || "D1";
   const label = location.pathname.endsWith("settings.html")
@@ -14,9 +16,24 @@ export function createMockTauri() {
   // A plain browser preview has no native version to report.
   const metadata = window.__mockMetadata ?? { version: "browser", config: {} };
   window.__mockConfig = structuredClone(metadata.config);
+  // All storage goes through here: localStorage (shared across mock windows), or a private Map in memory mode.
+  const mem = new Map();
+  const store = memory
+    ? {
+        getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => mem.set(k, String(v)),
+        removeItem: (k) => mem.delete(k),
+        keys: () => [...mem.keys()],
+      }
+    : {
+        getItem: (k) => localStorage.getItem(k),
+        setItem: (k, v) => localStorage.setItem(k, v),
+        removeItem: (k) => localStorage.removeItem(k),
+        keys: () => Object.keys(localStorage),
+      };
   const get = (key, fallback = null) =>
-    JSON.parse(localStorage.getItem(key) ?? JSON.stringify(fallback));
-  const set = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+    JSON.parse(store.getItem(key) ?? JSON.stringify(fallback));
+  const set = (key, value) => store.setItem(key, JSON.stringify(value));
   const all = () => get("wb-widgets", []);
   // Library content: one key per item. A single shared map lost updates: pages see each other's localStorage
   // writes late, so two windows saving different items at once wrote back each other's stale copy.
@@ -24,7 +41,7 @@ export function createMockTauri() {
   const CONTENT_KEY = "wb-content:";
   const contentItems = () => {
     const items = get("wb-content", {});
-    for (const k of Object.keys(localStorage))
+    for (const k of store.keys())
       if (k.startsWith(CONTENT_KEY)) {
         const id = k.slice(CONTENT_KEY.length);
         const v = get(k);
@@ -43,7 +60,8 @@ export function createMockTauri() {
     { label: "board-1", display: "D2", index: 2, primary: false },
   ];
   const handlers = new Map();
-  const channel = new BroadcastChannel("widgetboard-mock");
+  // memory mode: no shared channel, so other windows never see this one
+  const channel = memory ? { postMessage() {}, close() {} } : new BroadcastChannel("widgetboard-mock");
   const client = crypto.randomUUID();
   const clients = () => get("wb-mock-windows", {});
   const register = () =>
@@ -68,12 +86,12 @@ export function createMockTauri() {
   // the message (Rust has no such gap), so the message carries them and is applied before dispatching.
   const emit = (event, payload, target, keys = []) => {
     dispatch(event, payload, target);
-    const writes = Object.fromEntries(keys.map((k) => [k, localStorage.getItem(k)]));
+    const writes = Object.fromEntries(keys.map((k) => [k, store.getItem(k)]));
     channel.postMessage({ event, payload, target, writes });
   };
   channel.onmessage = ({ data }) => {
     for (const [k, v] of Object.entries(data.writes || {}))
-      v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v);
+      v === null ? store.removeItem(k) : store.setItem(k, v);
     dispatch(data.event, data.payload, data.target);
   };
   const listen = async (event, handler) => {
@@ -155,10 +173,10 @@ export function createMockTauri() {
       case "load_state":
         register();
         // Rust merges data/checklist.json into events.json at startup (migrate.rs merge_checklist)
-        if (localStorage.getItem("wb-store-checklist") !== null) {
+        if (store.getItem("wb-store-checklist") !== null) {
           const ws = config().ui?.weekStart === "mon" ? 1 : 0;
           set("wb-store-events", checklistToEvents(get("wb-store-checklist", []), get("wb-store-events", []) || [], ws));
-          localStorage.removeItem("wb-store-checklist");
+          store.removeItem("wb-store-checklist");
         }
         return {
           display,
@@ -173,9 +191,9 @@ export function createMockTauri() {
               (display === "D1" &&
                 !displays.some((d) => d.display === w.display)),
           ),
-          theme: localStorage.getItem("wb-theme") || "",
+          theme: store.getItem("wb-theme") || "",
           assetsDir: "",
-          autostart: !!localStorage.getItem("wb-autostart"),
+          autostart: !!store.getItem("wb-autostart"),
           // launched 0: every saved run counts as started in this launch, unless a test seeds wb-session
           session: get("wb-session", { launched: 0, closed: null }),
         };
@@ -187,10 +205,10 @@ export function createMockTauri() {
           widgets: all(),
           displays,
           widgetTypes: GROUPS.flatMap((g) => g.widgets), // = main.rs widget_ids()
-          theme: localStorage.getItem("wb-theme") || "",
+          theme: store.getItem("wb-theme") || "",
           dataDir: "C:/mock/appdata",
           autostart: {
-            on: !!localStorage.getItem("wb-autostart"),
+            on: !!store.getItem("wb-autostart"),
             disabledByWindows: !!window.__mockAutostartDisabled,
           },
         };
@@ -218,7 +236,7 @@ export function createMockTauri() {
         return;
       }
       case "set_autostart":
-        localStorage.setItem("wb-autostart", args.on ? "1" : "");
+        store.setItem("wb-autostart", args.on ? "1" : "");
         return !!args.on;
       case "get_all_widgets":
         return all();
@@ -255,7 +273,7 @@ export function createMockTauri() {
       case "flush_boards":
         return flushBoards();
       case "save_theme":
-        localStorage.setItem("wb-theme", args.css);
+        store.setItem("wb-theme", args.css);
         native(cmd, args.css);
         emit("theme-changed", args.css);
         return;
@@ -270,17 +288,17 @@ export function createMockTauri() {
         return rev;
       }
       case "diary_get":
-        return localStorage.getItem("wb-diary-" + args.date) || "";
+        return store.getItem("wb-diary-" + args.date) || "";
       case "diary_read":
         return {
-          text: localStorage.getItem("wb-diary-" + args.date) || "",
+          text: store.getItem("wb-diary-" + args.date) || "",
           rev: revOf("diary:" + args.date),
         };
       case "diary_set": {
         const rev = bumpRev("diary:" + args.date, args.rev);
         if (args.text.trim())
-          localStorage.setItem("wb-diary-" + args.date, args.text);
-        else localStorage.removeItem("wb-diary-" + args.date);
+          store.setItem("wb-diary-" + args.date, args.text);
+        else store.removeItem("wb-diary-" + args.date);
         emit("store-changed", { key: "diary", date: args.date, src: args.src, rev }, undefined, ["wb-diary-" + args.date, "wb-revs"]);
         return rev;
       }
@@ -314,12 +332,12 @@ export function createMockTauri() {
       }
       case "diary_all":
         return Object.fromEntries(
-          Object.keys(localStorage)
+          store.keys()
             .filter((k) => k.startsWith("wb-diary-"))
-            .map((k) => [k.slice(9), localStorage.getItem(k)]),
+            .map((k) => [k.slice(9), store.getItem(k)]),
         );
       case "diary_dates":
-        return Object.keys(localStorage)
+        return store.keys()
           .filter((k) => k.startsWith("wb-diary-"))
           .map((k) => k.slice(9))
           .sort();
@@ -418,9 +436,9 @@ export function createMockTauri() {
         set("wb-backup-snapshot", {
           widgets: widgets(),
           diary: Object.fromEntries(
-            Object.keys(localStorage)
+            store.keys()
               .filter((k) => k.startsWith("wb-diary-"))
-              .map((k) => [k, localStorage.getItem(k)]),
+              .map((k) => [k, store.getItem(k)]),
           ),
         });
         return path;
@@ -457,7 +475,7 @@ export function createMockTauri() {
   };
   window.__mock = { emit, invoke, widgets, content: contentItems, menus: [] };
   return {
-    core: { invoke, convertFileSrc: (p) => p },
+    core: { invoke, convertFileSrc: (p) => p, __mock: true },
     event: {
       emit: async (event, payload) => {
         native("emit", event, payload);

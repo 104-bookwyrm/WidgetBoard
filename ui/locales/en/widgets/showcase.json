@@ -1,0 +1,23 @@
+{
+  "hint.showcase": "Click the name to set it and the birthday · drop photos here",
+  "sc.name": "Name",
+  "sc.name_hint": "Who or what is this?",
+  "sc.birthday": "Birthday",
+  "sc.birthday_today": "Birthday today!",
+  "sc.birthday_event": "{name}'s birthday 🎂",
+  "sc.quotes": "Quotes",
+  "sc.quotes_hint": "One line each; they rotate",
+  "sc.accent": "Accent colour",
+  "sc.clear_color": "Clear colour",
+  "sc.cal_sync": "Add birthday to the calendar and D-day",
+  "sc.edit": "Edit",
+  "sc.add_image": "Add an image",
+  "sc.unnamed": "Unnamed",
+  "sc.empty": "Empty showcase",
+  "sc.export": "Export data",
+  "sc.import": "Import data",
+  "sc.exported": "Copied to clipboard",
+  "sc.export_failed": "Couldn't copy",
+  "sc.imported": "Imported",
+  "sc.import_failed": "Couldn't import - check the clipboard JSON"
+}

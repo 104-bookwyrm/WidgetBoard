@@ -1,18 +1,29 @@
-// Tiny i18n: flat JSON files in ./locales (ko = default, en = fallback).
+// Tiny i18n: flat JSON files in ./locales/<lang>/ (ko = default, en = fallback), merged into one map per language.
+// A page loads common, native, its own file and every widget file (widgets/<host>.json).
+import GROUPS from "./widgets/groups.json" with { type: "json" };
+
 let strings = {};
 let fallback = {};
 
-async function fetchLocale(code) {
+const widgetFiles = () => GROUPS.flatMap((g) => g.widgets).map((w) => `widgets/${w}`);
+
+async function fetchPart(code, name) {
   try {
-    return await (await fetch(`locales/${code}.json`)).json();
+    return await (await fetch(`locales/${code}/${name}.json`)).json();
   } catch {
     return {};
   }
 }
 
-export async function loadLang(code) {
-  fallback = await fetchLocale("en");
-  strings = code === "en" ? fallback : await fetchLocale(code);
+async function fetchLocale(code, page) {
+  const parts = await Promise.all(["common", "native", page, ...widgetFiles()].map((n) => fetchPart(code, n)));
+  return Object.assign({}, ...parts);
+}
+
+/** page: "board" | "settings" | "library", the per-page file to load. */
+export async function loadLang(code, page) {
+  fallback = await fetchLocale("en", page);
+  strings = code === "en" ? fallback : await fetchLocale(code, page);
   document.documentElement.lang = code;
   applyStatic();
 }
