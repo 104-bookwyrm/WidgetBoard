@@ -26,7 +26,7 @@
   "help.ledger.change_type.title": "Change widget type",
   "help.ledger.change_type.body": "In Edit layout, right-click a widget and choose Change widget type. The new widget takes the same place. The old content stays in the Library.",
   "help.ledger.modes.title": "Modes and layouts",
-  "help.ledger.modes.body": "Timer has three modes: timer, stopwatch and pomodoro. Image has two layouts: slideshow and grid. Right-click the widget and open Mode or Layout to switch.",
+  "help.ledger.modes.body": "Timer has three modes: timer, stopwatch and pomodoro. Image has two layouts: slideshow and grid. Right-click the widget and open Mode or Layout to switch. Now Playing plays your own audio files under My files.",
   "help.ledger.look.title": "Widget appearance",
   "help.ledger.look.body": "Right-click a widget and choose Appearance to set its font, colours, opacity and frame. In Edit layout you can also set a background image.",
   "help.ledger.themes.title": "Themes",

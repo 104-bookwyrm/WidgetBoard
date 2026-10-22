@@ -841,6 +841,10 @@ body.cvd-safe .widget.invalid {
   border-radius: var(--radius);
   box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
 }
+#wc-presets {
+  display: grid;
+  gap: 12px;
+}
 #welcome h3,
 #welcome p {
   margin: 0;
@@ -851,6 +855,9 @@ body.cvd-safe .widget.invalid {
 #welcome p {
   color: var(--text-muted);
   line-height: 1.5;
+}
+#wc-intro p {
+  margin-bottom: 12px;
 }
 .wc-presets {
   display: grid;

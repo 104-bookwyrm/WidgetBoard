@@ -29,7 +29,9 @@ try {
   assert.equal(await tutorial.locator('.set-nav button[data-page="guide"]').count(), 1);
   assert.equal(await tutorial.locator(".help-level").count(), 3, "the ledger groups every feature into three levels");
   assert.equal(await tutorial.locator(".help-ledger-item").count(), 27, "every ledger entry is visible from the start");
-  assert.equal(await tutorial.locator("#tutorial-whats-new .help-entry").count(), 2, "v0.15.0 exposes both new settings tabs");
+  const fresh = (await import("../ui/help/catalogue.json", { with: { type: "json" } })).default
+    .filter((e) => e.kind === "ledger" && e.since === "0.15.0").length;
+  assert.equal(await tutorial.locator("#tutorial-whats-new .help-entry").count(), fresh, "What's New lists every ledger entry new in v0.15.0");
 
   await tutorial.locator("#tutorial-replay").click();
   assert.deepEqual(await tutorial.evaluate(() => window.__native.at(-1)), [

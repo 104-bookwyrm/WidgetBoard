@@ -46,7 +46,7 @@
   "lay.study": "Study",
   "lay.study_desc": "Focus timer · study time total · to-dos · study diary · exam D-day · calendar",
   "lay.oshi": "Oshi desk",
-  "lay.oshi_desc": "Showcase · collection · D-days · photos · audio",
+  "lay.oshi_desc": "Showcase · goods grid · D-days · photo slideshow · voicelines and songs",
   "lay.deleted": "Deleted “{name}”",
   "upd.not_configured": "No update address yet (README → Updates)",
   "upd.failed": "Update check failed: {e}",

@@ -1,9 +1,9 @@
 # WidgetBoard
 
-Grid-based desktop widgets for Windows: a checklist, calendar, D-days, diary, memos, timer, stopwatch, Now Playing,
-photo slideshows, a world clock, and a set of oshi (최애) shrine widgets - a showcase card, an audio player and a
-collection grid - that live on your desktop, snap to a grid and stay out of the way of your other windows.
-Korean by default, English available. Version 0.12.
+Grid-based desktop widgets for Windows: a checklist, calendar, D-days, diary, memos, a timer with stopwatch and
+pomodoro modes, Now Playing, pictures, a world clock and an oshi (최애) showcase card. They live on your desktop,
+snap to a grid and stay out of the way of your other windows.
+Korean by default, English available. Version 0.15.
 
 Built with Tauri 2: a small Rust core and a plain HTML/CSS/JS interface with no build step. One ~5 MB exe, no
 installer, nothing running in the background except the app itself.
@@ -16,12 +16,12 @@ installer, nothing running in the background except the app itself.
 
 ## Features
 
-- **Thirteen widgets**: checklist (today / week / month, routines, carry-over), month calendar with tags and Korean
-  public holidays, D-day countdowns, a daily diary, sticky memos, timer, stopwatch with a lifetime total, Now Playing
-  for any media app (YouTube, Spotify, Melon…), an image slideshow that can sit frameless on the desktop like a sticker,
-  a world **clock** in any timezone, and three **oshi (최애) shrine** widgets - a **showcase** card (image, name,
-  rotating quotes, birthday countdown), an **audio player** for voicelines and character songs, and a **collection**
-  thumbnail grid for goods and cards.
+- **Ten widgets**: checklist (today / week / month, routines, carry-over), month calendar with tags and Korean
+  public holidays, D-day countdowns, a daily diary, sticky memos, a **timer** that is also a stopwatch (with a
+  lifetime total) and a pomodoro, **Now Playing** for any media app (YouTube, Spotify, Melon…) that also plays your
+  own voicelines and character songs, an **image** widget (slideshow or a thumbnail grid for goods and cards) that can
+  sit frameless on the desktop like a sticker, a world **clock** in any timezone, and an **oshi (최애) showcase**
+  card (image, name, rotating quotes, birthday countdown).
 - **Event reminders**: give a calendar entry a time, a timezone and a link, and it fires a desktop notification at the
   right local moment (handy for streams in another timezone); clicking the notification opens the link. Weekly and
   yearly repeats. Times are correct across timezones and daylight-saving changes.
@@ -54,8 +54,8 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
 
 **Tray icon** (bottom-right, maybe under `^`)
 
-- right-click → **위젯 추가 / Add widget ›** (Checklist, Calendar, D-day, Diary, Memo, Now Playing, Timer, Stopwatch, Pomodoro,
-  Image, Clock, Showcase, Audio, Collection), **레이아웃 편집 / Edit layout**, **테마 / Theme…**,
+- right-click → **위젯 추가 / Add widget ›** grouped as 일정 · Planning (Checklist, Calendar, D-day), 기록 · Notes
+  (Memo, Diary), 시간 · Time (Clock, Timer), 이미지 · Images (Image, Showcase) and Now Playing, **레이아웃 편집 / Edit layout**, **테마 / Theme…**,
   **설정창 / Settings**, **레이아웃 / Layouts…**, **언어 / Language ›**, show/hide, open data folder,
   **설정 파일 열기 / Open settings file** (config.json), check for updates, quit.
   _Theme colours…_ and _Layouts…_ open the matching page of the settings window.
@@ -297,13 +297,19 @@ One page per day, saved automatically as you type.
 
 ### 타이머 · Timer (3×2 / 2×2)
 
+Three modes in one widget: **타이머 (timer)**, **스톱워치 (stopwatch)** and **포모도로 (pomodoro)**. Right-click →
+_모드_ switches between them while the widget is idle; a running or paused mode has to be reset first. Laps and the
+pomodoro dots need a taller widget (3×3).
+
+#### Timer mode
+
 Counts down and rings (sound + blinking) when done.
 
 - Presets underneath (set your own in Settings → 타이머 · 달력), or click the digits and type: `25` = 25 min, `1:30`, `1:00:00`.
 - Scroll over the digits to add/subtract a minute. ▶ start, ❚❚ pause, ↺ reset. Up to 99 hours.
 - Keeps correct time through sleep. Quitting the app (or Windows shutting down) pauses it with the time it had left.
 
-### 스톱워치 · Stopwatch (3×3 / 2×2)
+#### Stopwatch mode
 
 Counts up. Every run is kept in one shared time record, under a category: **집중 (focus)** or **그 외 (other)**.
 Click the category next to the total to switch it.
@@ -318,7 +324,7 @@ Click the category next to the total to switch it.
 - Quitting the app (or Windows shutting down) stops it at that moment. If the app crashed while it ran, the next
   start asks whether that run counts.
 
-### 포모도로 · Pomodoro (3×3 / 2×2)
+#### Pomodoro mode
 
 Focus blocks and breaks: 25 min 집중 (focus), 5 min 짧은 휴식, and a 15 min 긴 휴식 after every 4 focus blocks.
 The dots show where you are in the cycle.
@@ -351,10 +357,19 @@ Player app, VLC - using Windows' own media controls (the same source as the volu
 - **⇄ 2** appears when several players are open (e.g. a YouTube tab and Spotify) - click to switch which one is shown.
 - Layouts: 1 row (title + play/next), 2 rows (artwork beside the text), tall (artwork on top).
 - Only reads while a Now Playing widget exists; it asks Windows once a second and only redraws when something changed.
+- **내 파일 · My files** (the list button) plays your own audio - voicelines, character songs, BGM. Drop audio files
+  (mp3, wav, ogg, flac, m4a…, up to 30 MB each) onto it or use right-click → _트랙 추가_; files are kept in the shared
+  assets folder. The list has shuffle, loop (off / all / one) and volume. Your own files show in the player like any
+  other app, so ⏮ ⏯ ⏭ and the progress bar work on them too.
+- Right-click → _액자 없이_ (frameless) for a narrow strip on the desktop.
 
-### 이미지 · Image - photo & slideshow (2×2 / 1×1)
+### 이미지 · Image (2×2 / 1×1)
 
-One picture, or a **slideshow** of many.
+Your pictures in two layouts. Right-click → _레이아웃_ switches between **슬라이드쇼 (slideshow)** and **모아 보기 (grid)**.
+
+#### Slideshow
+
+One picture, or a slideshow of many.
 
 - Click or drop images onto it - several at once. Hover for controls: ‹ ❚❚ › (previous / pause / next), `3/12`,
   **＋** add more, **🗑** take the current one out of the list, _맞춤 / 채우기_ (fit / fill).
@@ -363,6 +378,14 @@ One picture, or a **slideshow** of many.
 - **Transparent images**: right-click → **액자 없이** (frameless). The widget's background and outline disappear and the
   picture switches to _fit_, so a transparent PNG / WebP / GIF / SVG sits directly on the desktop like a sticker.
   A faint dashed outline shows the widget's edge only while you hover or edit the layout.
+
+#### Grid
+
+A thumbnail grid for goods, figures, merch and cards.
+
+- Drop images, click the empty grid, or right-click → add; double-click a thumbnail to label it. Click a thumbnail to
+  view it full-size (Esc closes); drag it, or press Alt+arrow keys, to reorder. × deletes, with undo.
+- The column count follows the widget width; frameless mode for transparent desktop display.
 
 ### 시계 · Clock (3×2 / 2×1)
 
@@ -381,20 +404,8 @@ quotes and a birthday countdown.
 - The birthday auto-syncs as a yearly calendar entry, so it shows up in the calendar and D-day schedule too.
 - **Export / Import data** (right-click) copies the card as JSON to share or back up.
 
-### 오디오 · Audio Player (2×2 / 2×1)
-
-A small player for local audio - voicelines, character songs, BGM.
-
-- Drop audio files (mp3, wav, ogg, flac, m4a…) onto it or use ＋; files are kept in the shared assets folder.
-- Playlist with shuffle and loop (off / all / one), volume, and a frameless mode for a narrow desktop strip.
-
-### 컬렉션 · Collection (2×3 / 1×2)
-
-A thumbnail grid for goods, figures, merch and cards.
-
-- Drop images, click the empty grid, or right-click → add; double-click a thumbnail to label it. Click a thumbnail to
-  view it full-size (Esc closes); drag it, or press Alt+arrow keys, to reorder. × deletes, with undo.
-- The column count follows the widget width; frameless mode for transparent desktop display.
+Widgets saved by older versions as Stopwatch, Pomodoro, Audio Player or Collection open as the Timer, Now Playing or
+Image widget in the matching mode. Nothing is lost.
 
 ## Customising the look
 
