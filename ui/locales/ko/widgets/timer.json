@@ -24,7 +24,7 @@
   "sum.sw_running": "{now} 측정 중, 총 시간 {total}",
   "sum.sw_stopped": "{now} 정지, 총 시간 {total}",
   "sum.timer_running": "{left} 남음",
-  "sum.timer_done": "타이머 종료",
+  "sum.timer_done": "시간 종료.",
   "sum.timer_paused": "일시정지, {left} 남음",
   "sum.timer_idle": "{dur} 설정됨",
   "hint.timer": "숫자 클릭: 시간 입력 (25, 1:30, 1:00:00), ▶: 시작",

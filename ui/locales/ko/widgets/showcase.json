@@ -1,7 +1,7 @@
 {
   "hint.showcase": "이름 클릭: 이름과 생일 설정, 끌어다 놓기: 사진 추가",
   "sc.name": "이름",
-  "sc.name_hint": "누구인가요?",
+  "sc.name_hint": "누구 혹은 무엇인가요?",
   "sc.birthday": "생일",
   "sc.birthday_today": "오늘 생일!",
   "sc.birthday_event": "{name} 생일 🎂",
@@ -9,7 +9,7 @@
   "sc.quotes_hint": "한 줄에 하나씩, 번갈아 표시됩니다",
   "sc.accent": "강조색",
   "sc.clear_color": "색 지우기",
-  "sc.cal_sync": "생일을 달력과 D-day에 추가",
+  "sc.cal_sync": "생일을 달력과 디데이에 추가",
   "sc.edit": "편집",
   "sc.add_image": "이미지 추가",
   "sc.unnamed": "이름 없음",
