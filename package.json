@@ -5,11 +5,13 @@
   "description": "Dev-only harness for WidgetBoard UI tests. The app itself has no build step.",
   "scripts": {
     "serve": "python -m http.server 8765 --directory ui",
-    "test": "npm run test:smoke && npm run test:persistence && npm run test:mock && npm run test:backups",
+    "test": "npm run test:smoke && npm run test:persistence && npm run test:mock && npm run test:backups && npm run test:grid-placement-lab && npm run test:grid-placement-browser",
     "test:smoke": "node tests/smoke.mjs",
     "test:persistence": "node tests/persistence.mjs",
     "test:mock": "node tests/mock.mjs",
-    "test:backups": "node tests/backups.mjs"
+    "test:backups": "node tests/backups.mjs",
+    "test:grid-placement-lab": "node --test tests/grid-placement-lab.mjs tests/grid-placement-audit.mjs",
+    "test:grid-placement-browser": "node --test tests/grid-placement-lab-browser.mjs"
   },
   "devDependencies": {
     "playwright": "^1.55.0"

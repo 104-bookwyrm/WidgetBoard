@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grid placement laboratory</title>
+    <link rel="stylesheet" href="./grid-placement-lab.css" />
+  </head>
+  <body>
+    <header class="lab-header">
+      <div>
+        <p class="kicker">WidgetBoard engineering instrument</p>
+        <h1>Grid placement laboratory</h1>
+      </div>
+      <div class="session-readout" aria-live="polite">
+        <span class="status-light" id="status-light"></span>
+        <div>
+          <strong id="gesture-state">Ready to drag</strong>
+          <span id="gesture-detail">Choose a rectangle and drag it on either board.</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="control-strip" aria-label="Laboratory controls">
+        <label class="scenario-control">
+          <span>Scenario</span>
+          <select id="scenario"></select>
+        </label>
+        <p id="scenario-note" class="scenario-note"></p>
+        <div class="control-actions">
+          <button id="reset" type="button">Reset scenario</button>
+          <button id="randomize" type="button">Generate layout</button>
+          <label class="seed-control">
+            <span>Seed</span>
+            <input id="seed" type="number" value="17" min="1" max="99999" />
+          </label>
+        </div>
+      </section>
+
+      <section class="comparison" aria-label="Resolver comparison">
+        <article class="engine engine-legacy">
+          <header class="engine-header">
+            <div>
+              <h2>Current resolver</h2>
+              <p>Clear destination first. Shortest move second.</p>
+            </div>
+            <span class="result-chip" id="legacy-status">Idle</span>
+          </header>
+          <div class="board-shell">
+            <div class="board" id="legacy-board" data-engine="legacy" aria-label="Current resolver board"></div>
+          </div>
+          <p class="engine-summary" id="legacy-summary">No gesture has been evaluated.</p>
+        </article>
+
+        <article class="engine engine-face">
+          <header class="engine-header">
+            <div>
+              <h2>Face-directed resolver</h2>
+              <p>Selected face fixes the push direction.</p>
+            </div>
+            <span class="result-chip" id="face-status">Idle</span>
+          </header>
+          <div class="board-shell">
+            <div class="board" id="face-board" data-engine="face" aria-label="Face-directed resolver board"></div>
+          </div>
+          <p class="engine-summary" id="face-summary">No gesture has been evaluated.</p>
+        </article>
+      </section>
+
+      <section class="frozen-actions" id="frozen-actions" hidden>
+        <p>The comparison is frozen at release. Choose a baseline or clear the result.</p>
+        <div>
+          <button id="adopt-legacy" type="button">Continue from current result</button>
+          <button id="adopt-face" class="primary" type="button">Continue from face result</button>
+          <button id="clear-preview" type="button">Clear comparison</button>
+        </div>
+      </section>
+
+      <section class="audit-panel" id="audit-panel" aria-labelledby="audit-title">
+        <header>
+          <div>
+            <h2 id="audit-title">Naturalness audit</h2>
+            <p>Run human expectation cases and a bounded 3 × 3 face matrix without dragging each block.</p>
+          </div>
+          <button id="run-audit" class="primary" type="button">Run checks</button>
+        </header>
+        <div class="audit-summary" aria-live="polite">
+          <div><strong id="audit-total">—</strong><span>total</span></div>
+          <div data-severity="pass"><strong id="audit-pass">—</strong><span>pass</span></div>
+          <div data-severity="review"><strong id="audit-review">—</strong><span>review</span></div>
+          <div data-severity="fail"><strong id="audit-fail">—</strong><span>fail</span></div>
+        </div>
+        <div class="audit-results" id="audit-results">
+          <p>Run the audit to inspect expected movement, locked states, and broad reorganizations.</p>
+        </div>
+      </section>
+
+      <section class="workbench">
+        <article class="trace-panel">
+          <header>
+            <h2>Decision trace</h2>
+            <p>Every movement names its cause.</p>
+          </header>
+          <div class="trace-columns">
+            <section aria-labelledby="legacy-trace-title">
+              <h3 id="legacy-trace-title">Current</h3>
+              <ol id="legacy-trace" class="trace-list"></ol>
+            </section>
+            <section aria-labelledby="face-trace-title">
+              <h3 id="face-trace-title">Face-directed</h3>
+              <ol id="face-trace" class="trace-list"></ol>
+            </section>
+          </div>
+        </article>
+
+        <aside class="inspector" aria-label="Rectangle inspector">
+          <header>
+            <h2>Rectangle inspector</h2>
+            <p id="selected-name">No rectangle selected</p>
+          </header>
+          <div class="dimension-grid">
+            <label><span>X</span><input id="rect-x" type="number" /></label>
+            <label><span>Y</span><input id="rect-y" type="number" /></label>
+            <label><span>Width</span><input id="rect-w" type="number" min="1" /></label>
+            <label><span>Height</span><input id="rect-h" type="number" min="1" /></label>
+          </div>
+          <div class="flag-list">
+            <label><input id="rect-hidden" type="checkbox" /> Hidden reservation</label>
+            <label><input id="rect-fixed" type="checkbox" /> Fixed rectangle</label>
+          </div>
+          <div class="inspector-actions">
+            <button id="add-rect" type="button">Add rectangle</button>
+            <button id="remove-rect" type="button" class="danger">Remove selected</button>
+          </div>
+          <div class="board-size">
+            <h3>Board</h3>
+            <label><span>Columns</span><input id="board-cols" type="number" min="2" max="24" /></label>
+            <label><span>Rows</span><input id="board-rows" type="number" min="2" max="24" /></label>
+          </div>
+          <div class="intent-readout">
+            <h3>Active intent</h3>
+            <dl id="intent-data"></dl>
+          </div>
+          <div class="movement-readout">
+            <h3>Movement facts</h3>
+            <dl id="movement-facts"></dl>
+          </div>
+        </aside>
+      </section>
+
+      <details class="json-panel">
+        <summary>Scenario JSON</summary>
+        <p>Export a failed arrangement or paste one from another run.</p>
+        <textarea id="scenario-json" spellcheck="false" aria-label="Scenario JSON"></textarea>
+        <div>
+          <button id="export-json" type="button">Export current scenario</button>
+          <button id="import-json" type="button">Import scenario</button>
+          <span id="json-message" role="status"></span>
+        </div>
+      </details>
+    </main>
+
+    <script type="module" src="./grid-placement-lab.js"></script>
+  </body>
+</html>
