@@ -868,6 +868,125 @@ body.cvd-safe .widget.invalid {
 #wc-blank {
   justify-self: end;
 }
+.help-popover {
+  position: fixed;
+  left: 50%;
+  bottom: 38px;
+  z-index: 72;
+  width: min(360px, calc(100vw - 32px));
+  box-sizing: border-box;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--c1);
+  border: var(--line-width) var(--line-style) var(--line-color);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.35);
+  font-size: 13px;
+}
+.help-popover h3,
+.help-popover p {
+  margin: 0;
+}
+.help-popover h3 {
+  font-size: 15px;
+}
+.help-popover p {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.help-popover button {
+  justify-self: end;
+}
+/* ponytail: the tray sits at the bottom-right on Windows 11; a top or side taskbar (Windows 10) is not followed */
+.help-tray {
+  left: auto;
+  right: 16px;
+  transform: none;
+}
+.help-tray::after {
+  content: "";
+  position: absolute;
+  right: 24px;
+  bottom: -12px;
+  border: 8px solid transparent;
+  border-top-color: var(--c1);
+  border-bottom: 0;
+}
+.help-tray-pin svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.help-tray-pin .tp-bar {
+  fill: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+.help-tray-pin .tp-other {
+  fill: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+.help-tray-pin .tp-fly rect:first-child {
+  fill: var(--c1);
+  stroke: var(--line-color);
+}
+.help-tray-pin .tp-chev,
+.help-tray-pin .tp-still {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.help-tray-pin .tp-still {
+  display: none; /* the still frame's arrow, for reduced motion */
+  stroke: var(--c2);
+  stroke-dasharray: 2 2;
+}
+.help-tray-pin .tp-cursor {
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 0.8;
+}
+/* 3 loops, then the icon rests on the taskbar */
+.help-tray-pin .tp-drag {
+  animation: tp-drag 2.4s ease-in-out 3 forwards;
+}
+.help-tray-pin .tp-fly {
+  animation: tp-fly 2.4s ease-in-out 3 forwards;
+}
+@keyframes tp-drag {
+  0%, 25% { transform: translate(0, 0); }
+  65%, 100% { transform: translate(8px, 38px); }
+}
+@keyframes tp-fly {
+  0%, 60% { opacity: 1; }
+  75%, 100% { opacity: 0; }
+}
+.guide-pin {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 15;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--c2);
+  border-color: var(--c2);
+  color: var(--on-accent, #fff);
+  font-weight: 700;
+  box-shadow: 0 3px 12px rgb(0 0 0 / 0.3);
+}
+body.reduce-motion .help-tray-pin :is(.tp-drag, .tp-fly) {
+  animation: none;
+}
+body.reduce-motion .help-tray-pin .tp-still {
+  display: inline;
+}
+@media (prefers-reduced-motion: reduce) {
+  .help-tray-pin :is(.tp-drag, .tp-fly) { animation: none; }
+  .help-tray-pin .tp-still { display: inline; }
+}
 #overview-panel h3,
 #layers-panel h3 {
   margin: 0;

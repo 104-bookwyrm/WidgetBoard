@@ -21,11 +21,13 @@ import REGISTRY, { HOSTS } from "./widgets/index.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import GROUPS from "./widgets/groups.json" with { type: "json" };
 import { createMockTauri } from "./mock-tauri.js";
+import { loadCatalogue, readHelp, patchHelp, claimHelp } from "./help.js";
 
 // RULE: every backend call goes through T. Never call window.__TAURI__ directly: the mock (tests, browser
 // preview, the demo) only replaces T, so a direct call reaches real app data from a page that must not touch it.
 // The demo (?demo) runs on an in-memory mock with nothing saved; only the native menus are real.
 const DEMO = new URLSearchParams(location.search).has("demo");
+const DEMO_FOCUS = DEMO ? new URLSearchParams(location.search).get("focus") : null;
 const T = DEMO
   ? {
       ...createMockTauri({ memory: true }),
@@ -74,6 +76,9 @@ let editMode = false;
 let lang = "ko";
 let config = {};
 let reduceMotion = false;
+let helpState = { demoDone: false, hintsSeen: [], typesUsed: [], whatsNewSeen: null };
+let helpCatalogue = [];
+let activeHelp = null;
 /** Reduced motion: the tray setting, or Windows' own "Animation effects: off". */
 const motionReduced = () =>
   reduceMotion || matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -152,7 +157,13 @@ function resolve(moverId, rect) {
         { x: o.x, y: p.y + p.h, c: p.y + p.h - o.y }, // down
         { x: p.x - o.w, y: o.y, c: o.x + o.w - p.x }, // left
         { x: o.x, y: p.y - o.h, c: o.y + o.h - p.y }, // up
-      ].sort((a, b) => a.c - b.c);
+      ];
+      // Prefer a clear destination before creating a chain of pushes. Keep the shortest move within each group.
+      const occupied = (op) => {
+        const cand = { ...o, x: op.x, y: op.y };
+        return [...pos.values()].some((q) => q.id !== o.id && overlaps(cand, q));
+      };
+      opts.sort((a, b) => Number(occupied(a)) - Number(occupied(b)) || a.c - b.c);
       let ok = false;
       for (const op of opts) {
         const cand = { ...o, x: op.x, y: op.y };
@@ -694,6 +705,99 @@ function syncHits() {
       .filter((r) => r.w > 0 && r.h > 0); // hidden by focus mode etc.
     invoke("set_hit_rects", { rects }).catch(console.error);
   }, 160); // after the snap transition settles
+}
+
+// ---------------- contextual help ----------------
+function closeHelp() {
+  if (!activeHelp) return;
+  activeHelp.remove();
+  activeHelp = null;
+  syncHits();
+}
+
+function helpPopover(id, { tray = false } = {}) {
+  closeHelp();
+  const box = document.createElement("div");
+  box.className = `help-popover${tray ? " help-tray" : ""}`;
+  box.dataset.helpId = id;
+  box.dataset.hit = "";
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-labelledby", `help-title-${id}`);
+  const title = document.createElement("h3");
+  title.id = `help-title-${id}`;
+  title.textContent = t(`help.${id}.title`);
+  const body = document.createElement("p");
+  body.textContent = t(`help.${id}.body`);
+  const done = document.createElement("button");
+  done.type = "button";
+  done.textContent = t("help.got_it");
+  done.onclick = closeHelp;
+  box.append(title, body, done);
+  if (tray) {
+    const pin = document.createElement("div");
+    pin.className = "help-tray-pin";
+    pin.setAttribute("aria-hidden", "true");
+    // a mini taskbar: the icon is dragged out of the ^ overflow flyout onto the taskbar
+    pin.innerHTML = `<svg viewBox="0 0 220 72">
+      <rect class="tp-bar" x="0" y="52" width="220" height="20" rx="4"/>
+      <path class="tp-chev" d="M146 65l4-5 4 5"/>
+      <rect class="tp-other" x="186" y="58" width="8" height="8" rx="2"/>
+      <rect class="tp-other" x="202" y="58" width="8" height="8" rx="2"/>
+      <g class="tp-fly"><rect x="128" y="8" width="44" height="32" rx="4"/><rect class="tp-other" x="134" y="20" width="8" height="8" rx="2"/></g>
+      <path class="tp-still" d="M158 35l5 13m-5-3l5 3 2-5"/>
+      <g class="tp-drag"><image href="tutorial/assets/tray-icon.png" x="150" y="16" width="16" height="16"/><path class="tp-cursor" d="M161 26v10l3-3 2 4 2-1-2-4h4z"/></g>
+    </svg>`;
+    done.before(pin);
+  }
+  box.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== "Return") return;
+    if (event.target.closest?.("input, textarea, select")) return;
+    event.preventDefault();
+    closeHelp();
+  });
+  document.body.append(box);
+  activeHelp = box;
+  syncHits();
+  done.focus();
+  return box;
+}
+
+function showHint(id, options) {
+  if (DEMO || !helpCatalogue.some((entry) => entry.kind === "hint" && entry.id === id)) return;
+  const work = claimHelp(invoke, "hintsSeen", id)
+    .then(({ claimed, state }) => {
+      helpState = state;
+      if (claimed) helpPopover(id, options);
+    })
+    .catch(reportError);
+  tracked(work);
+}
+
+function offerGuidePin(type, id) {
+  if (DEMO || !helpCatalogue.some((entry) => entry.kind === "guide" && entry.type === type)) return;
+  const work = claimHelp(invoke, "typesUsed", type)
+      .then(({ claimed, state }) => {
+        helpState = state;
+        if (!claimed) return;
+        const el = mounted.get(id)?.el;
+        if (!el || retired.has(el)) return;
+        const pin = document.createElement("button");
+        pin.type = "button";
+        pin.className = "guide-pin";
+        pin.dataset.guidePin = type;
+        pin.title = t("help.guide_pin");
+        pin.setAttribute("aria-label", t("help.guide_pin"));
+        pin.textContent = "?";
+        pin.onclick = () => {
+          pin.remove();
+          invoke("open_settings", { page: `guide.${type}` }).catch(reportError);
+          syncHits();
+        };
+        el.append(pin);
+        syncHits();
+      })
+      .catch(reportError);
+  tracked(work);
 }
 
 // ---------------- assets ----------------
@@ -1429,6 +1533,7 @@ async function openMenu(w, el, at) {
     await lastMenu?.close();
   } catch {}
   lastMenu = await T.menu.Menu.new({ items });
+  if (DEMO) document.dispatchEvent(new CustomEvent("tutorial-action", { detail: "menu" }));
   await lastMenu.popup();
 }
 
@@ -1661,7 +1766,9 @@ function wireFrame(el, w, def, inst) {
         board.classList.remove("arranging");
         const changed =
           cand.x !== w.x || cand.y !== w.y || cand.w !== w.w || cand.h !== w.h;
+        const pushed = changed && layout && widgets.some((other) => { const pos = layout.get(other.id); return other.id !== w.id && pos && (pos.x !== other.x || pos.y !== other.y); });
         applyLayout(changed ? layout : null, { commit: true }); // invalid drop -> everything snaps back
+        if (DEMO && changed && layout) document.dispatchEvent(new CustomEvent("tutorial-action", { detail: pushed && mode === "move" ? "push" : mode }));
         place(el, w);
         invoke("set_interacting", { on: false });
         syncHits();
@@ -1725,6 +1832,8 @@ function placeWidget(type, room, at) {
   mount(w);
   save(w);
   syncHits();
+  offerGuidePin(type, w.id);
+  if (DEMO) document.dispatchEvent(new CustomEvent("tutorial-action", { detail: "add" }));
 }
 
 // Tray / keyboard add: first free spot.
@@ -1830,7 +1939,10 @@ function applyTheme(css) {
 
 // ---------------- edit mode ----------------
 function setEdit(on) {
+  const changed = editMode !== on;
   editMode = on;
+  if (on && changed && !DEMO && isPrimary) showHint("hint.edit_first");
+  if (DEMO && changed) document.dispatchEvent(new CustomEvent("tutorial-action", { detail: on ? "edit" : "done" }));
   document.body.classList.toggle("edit", on);
   $("#editbar").hidden = !on;
   syncHits();
@@ -1840,7 +1952,8 @@ addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (!$("#font-panel").hidden) return closeFontPanel();
   if (!$("#overview-panel").hidden) return $("#overview-close").click();
-  if (!$("#welcome").hidden) return hideWelcome();
+  if (!$("#welcome").hidden)
+    return !$("#wc-intro").hidden ? welcomePresets() : hideWelcome();
   if (document.body.classList.contains("focus-mode")) return exitFocus();
   if (document.body.classList.contains("kbd-mode"))
     return invoke("set_kbd_mode", { on: false });
@@ -2278,7 +2391,10 @@ function applyColors(el, w) {
   );
 }
 // ---------------- layouts: presets (업무용 / 공부용) + saved arrangements ----------------
-/** [type, w, h, settings override]. Packed from the top-right corner (desktop icons live top-left). */
+/**
+ * [type, w, h, settings override, settings a new widget starts with]. Packed from the top-right corner (desktop
+ * icons live top-left). The override also picks which Library content a slot may reuse; the last item does not.
+ */
 const PRESETS = {
   work: [
     ["calendar", 5, 4, { view: "board" }],
@@ -2289,7 +2405,7 @@ const PRESETS = {
     ["nowplaying", 4, 2],
   ],
   study: [
-    ["timer", 3, 2, { mode: "timer" }],
+    ["timer", 3, 2, { mode: "timer" }, { duration: 3000000, remaining: 3000000 }], // 50 minutes
     ["timer", 3, 2, { mode: "stopwatch" }],
     ["checklist", 3, 4],
     ["diary", 4, 4],
@@ -2304,6 +2420,50 @@ const PRESETS = {
     ["nowplaying", 3, 2, { list: true }],
   ],
 };
+/** Entries a preset adds the first time it is applied, so its widgets show what they are for: [kind, locale key, days from today, time]. */
+const SAMPLES = {
+  work: [
+    ["dday", "lay.sample.deadline", 14],
+    ["todo", "lay.sample.report"],
+    ["todo", "lay.sample.slides"],
+    ["event", "lay.sample.meeting", 1, "10:00"],
+  ],
+  study: [
+    ["dday", "lay.sample.exam", 30],
+    ["todo", "lay.sample.words"],
+    ["todo", "lay.sample.workbook"],
+  ],
+  oshi: [["dday", "lay.sample.debut", -365]], // a past date counts up (D+366) with 100-day milestones
+};
+const SAMPLE_KIND = {
+  dday: (e) => !!e?.dday,
+  todo: (e) => !!e?.todo,
+  event: (e) => !!e && !e.dday && !e.todo && !e._src,
+};
+/** Each kind is added only when the events store has none of it. Once per preset: deleted samples stay deleted. */
+async function seedSamples(name) {
+  const seeded = (await invoke("store_get", { key: "preset_samples" }).catch(() => null)) || [];
+  if (!SAMPLES[name] || seeded.includes(name)) return;
+  const { value, rev } = await invoke("store_read", { key: "events" });
+  const events = Array.isArray(value) ? value : [];
+  const add = SAMPLES[name]
+    .filter(([kind]) => !events.some(SAMPLE_KIND[kind]))
+    .map(([kind, key, days = 0, time = null]) => ({
+      id: crypto.randomUUID(),
+      title: t(key),
+      date: addDays(ymd(), days),
+      tags: [],
+      repeat: null,
+      done: false,
+      ...(kind === "todo" && { todo: true }),
+      ...(kind === "event" && { time }),
+      ...(kind === "dday" && {
+        dday: { mode: days < 0 ? "since" : "until", icon: null, mstep: days < 0 ? 100 : 0, munit: "days", countFrom: "one" },
+      }),
+    }));
+  if (add.length) await tracked(invoke("store_set", { key: "events", value: [...events, ...add], src: "layouts", rev }));
+  await write("store_set", { key: "preset_samples", value: [...seeded, name], src: "layouts" });
+}
 /** Pack slots onto an empty cols×rows grid, right-aligned. Returns [{slot, x, y, w, h}] (slots that don't fit are left out). */
 function packSlots(slots, cols, rows) {
   const placed = [];
@@ -2353,6 +2513,8 @@ async function replaceAll(next, label, { undo = true } = {}) {
   for (const w of before)
     if (isLibrary(w.type) && !next.some((n) => n.id === w.id) && contents.has(w.id))
       await persistContent({ ...w, name: contents.get(w.id).name }, contents.get(w.id).data, { placement: w });
+  // new content (a preset's fresh stopwatch) is stored first, or the reload mounts it with defaults
+  for (const w of next) if (isLibrary(w.type) && !contents.has(w.id)) await persistContent(w, splitContent(w)[1]);
   await write("store_set", {
     key: "layouts_undo",
     value: undo ? before : null,
@@ -2391,7 +2553,7 @@ async function applyPreset(name) {
   const m = metrics();
   const packed = packSlots(slots, m.cols, m.rows);
   const mine = packed.map(({ slot, x, y, w, h }) => {
-    const [type, , , preset] = slot;
+    const [type, , , preset, fresh] = slot;
     const i = slots.indexOf(slot);
     let base;
     if (isLibrary(type)) {
@@ -2402,7 +2564,7 @@ async function applyPreset(name) {
       const here = widgets.find((o) => o.id === id);
       base = id
         ? structuredClone(here ?? { ...contents.get(id).placement, id, type: contents.get(id).type })
-        : { id: crypto.randomUUID(), type, settings: { ...structuredClone(REGISTRY[type].defaults ?? {}), ...preset } };
+        : { id: crypto.randomUUID(), type, settings: { ...structuredClone(REGISTRY[type].defaults ?? {}), ...preset, ...fresh } };
       base.settings ??= {};
       skip.add(base.id);
       bound[i] = base.id;
@@ -2419,6 +2581,7 @@ async function applyPreset(name) {
   });
   if (packed.length < slots.length) toast(t("lay.partial"));
   await write("store_set", { key: "preset_bindings", value: bindings, src: "layouts" });
+  await seedSamples(name).catch(() => {}); // optional: a failed or conflicting write tries again next time
   await replaceAll([...others, ...mine], t("lay." + name));
 }
 /**
@@ -2460,14 +2623,26 @@ async function withLatestContents(layout) {
 }
 
 // first-run card: a preset, or an empty board. Leaving it any way is remembered, so it doesn't come back.
-function hideWelcome() {
+function hideWelcome(deferHint = false) {
   if (!$("#welcome").hidden) write("store_set", { key: "welcomed", value: true, src: "host" }).catch(() => {});
   $("#welcome").hidden = true;
   syncHits();
+  if (!deferHint) showHint("hint.tray_pin", { tray: true });
+}
+function welcomePresets() {
+  $("#wc-intro").hidden = true;
+  $("#wc-presets").hidden = false;
+  syncHits();
+  $("#wc-presets button").focus();
 }
 $("#welcome").onclick = (e) => {
+  if (e.target.closest("#wc-skip")) return welcomePresets();
+  if (e.target.closest("#wc-try")) {
+    invoke("open_demo", { origin: win.label, focus: null }).catch((err) => { reportError(err); welcomePresets(); });
+    return;
+  }
   const b = e.target.closest("[data-preset]");
-  if (b) return hideWelcome(), applyPreset(b.dataset.preset).catch(reportError);
+  if (b) return hideWelcome(true), applyPreset(b.dataset.preset).catch(reportError);
   if (e.target.closest("#wc-blank")) hideWelcome();
 };
 
@@ -2518,7 +2693,27 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     () => setMotion(reduceMotion),
   );
   await loadLang(lang, "board");
-  if (DEMO) await (await import("./demo.js")).mountStage({ T, invoke, toast, groupMenus, isEdit: () => editMode });
+  if (!DEMO)
+    [helpCatalogue, helpState] = await Promise.all([
+      loadCatalogue().catch(() => []),
+      readHelp(invoke).catch(() => helpState),
+    ]);
+  if (DEMO) {
+    await (await import("./demo.js")).mountStage({ T, invoke, toast, groupMenus, isEdit: () => editMode });
+    // sample board into the mock's memory; after the stage so the grid has its final size
+    const place = (slots) => ((m) => packSlots(slots, m.cols, m.rows))(metrics());
+    const def = REGISTRY[DEMO_FOCUS];
+    const focusWidget = def && {
+      id: `demo-guide-${DEMO_FOCUS}`,
+      type: DEMO_FOCUS,
+      w: def.size?.w ?? def.min?.w ?? 2,
+      h: def.size?.h ?? def.min?.h ?? 2,
+      settings: structuredClone(def.defaults ?? {}),
+    };
+    Object.assign(st, await (await import("./tutorial/dataset.js")).loadDataset({
+      invoke, t, display: st.display, place, focusWidget,
+    }).catch(reportError));
+  }
   myDisplay = st.display || "";
   isPrimary = !!st.primary;
   displays = st.displays || [];
@@ -2547,7 +2742,19 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   setTimeout(() => (reflow(), (document.documentElement.dataset.reflowed = "")), 400);
   setEdit(!!st.edit);
   syncHits();
+  if (DEMO) (await import("./tutorial/runner.js")).startTutorial({
+    t,
+    focus: REGISTRY[DEMO_FOCUS] ? DEMO_FOCUS : null,
+    close: () => (T.demoWindow ?? T.webviewWindow.getCurrentWebviewWindow()).close(),
+  });
 
+  await listen("demo-closed", (e) => {
+    if (!DEMO) {
+      helpState = { ...helpState, demoDone: true };
+      tracked(patchHelp(invoke, { demoDone: true }).then((latest) => (helpState = latest)).catch(reportError));
+    }
+    if (e.payload?.origin === win.label && !$("#welcome").hidden) welcomePresets();
+  });
   await listen("add-widget", (e) => (hideWelcome(), addWidget(e.payload)));
   await listen("apply-preset", (e) =>
     applyPreset(e.payload).catch(reportError),
@@ -2650,7 +2857,14 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     });
   else if (st.migrateError) toast(t("toast.migrate_failed"));
   else if (st.configBroken) toast(t("toast.config_bad"));
+  else if (st.justUpdated && helpCatalogue.some((entry) => entry.since === st.justUpdated))
+    invoke("open_settings", { page: "tutorial.new" }).catch(() => toast(t("upd.done", { v: st.justUpdated })));
   else if (st.justUpdated) toast(t("upd.done", { v: st.justUpdated }));
+  else if (!DEMO && st.primary && window.__tutorialDebug === true) {
+    $("#welcome").hidden = false;
+    syncHits();
+    $("#wc-try").focus();
+  }
   else if (!DEMO && st.primary && !widgets.length && !(await invoke("get_all_widgets").catch(() => [])).length) {
     // an empty board is invisible and click-through: offer a start until "empty board" is picked once
     const welcomed = await invoke("store_get", { key: "welcomed" }).catch(() => null);
@@ -2660,6 +2874,10 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       syncHits();
       $("#welcome button").focus();
     }
+  }
+  if (!DEMO && st.primary && !st.justUpdated && $("#welcome").hidden && !editMode && !activeHelp) {
+    const welcomed = await invoke("store_get", { key: "welcomed" }).catch(() => null);
+    if (welcomed) showHint("hint.tray_pin", { tray: true });
   }
 
   await listen("update-available", (e) => {

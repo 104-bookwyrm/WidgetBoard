@@ -24,6 +24,8 @@ release.cmd
 
 # local tooling / scratch
 .claude/
+.playwright-mcp/
+.superpowers/
 .vscode/
 shots/
 # Browser screenshots, native test fixtures, and test logs

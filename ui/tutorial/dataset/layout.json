@@ -1,0 +1,21 @@
+{
+  "version": 3,
+  "widgets": [
+    { "id": "demo-calendar", "type": "calendar", "display": "D1", "x": 0, "y": 0, "w": 4, "h": 4,
+      "settings": { "filter": {}, "view": "mini" } },
+    { "id": "demo-checklist", "type": "checklist", "display": "D1", "x": 4, "y": 0, "w": 3, "h": 4,
+      "settings": { "sync": false, "hideDone": false, "tab": "today", "stamp": false, "stampTilt": "tilt", "stampImg": "" } },
+    { "id": "demo-dday", "type": "dday", "display": "D1", "x": 7, "y": 0, "w": 3, "h": 3,
+      "settings": { "filter": { "status": "all", "tags": [] }, "items": [], "view": "list" } },
+    { "id": "demo-timer", "type": "timer", "display": "D1", "x": 10, "y": 0, "w": 3, "h": 2,
+      "settings": {} },
+    { "id": "demo-nowplaying", "type": "nowplaying", "display": "D1", "x": 0, "y": 4, "w": 4, "h": 2,
+      "settings": { "current": 0, "volume": 0.8, "shuffle": false, "loop": "all", "frameless": false, "list": false } },
+    { "id": "demo-image", "type": "image", "display": "D1", "x": 4, "y": 4, "w": 3, "h": 3,
+      "settings": { "layout": "slideshow", "columns": 0, "fit": "cover", "interval": 10, "playing": true, "shuffle": false, "index": 0, "frameless": false } },
+    { "id": "demo-memo", "type": "memo", "display": "D1", "x": 7, "y": 3, "w": 3, "h": 3, "hidden": true,
+      "settings": {} },
+    { "id": "demo-clock", "type": "clock", "display": "D1", "x": 10, "y": 2, "w": 3, "h": 2,
+      "settings": { "tz": "", "seconds": false } }
+  ]
+}

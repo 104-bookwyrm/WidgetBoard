@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "items": {
+    "demo-timer": {
+      "id": "demo-timer", "type": "timer", "name": "", "tags": [], "rev": 1, "created": 1767603600, "updated": 1767603600, "deletedAt": null,
+      "data": { "mode": "timer", "duration": 300000, "remaining": 300000, "endAt": null, "startedAt": null }
+    },
+    "demo-nowplaying": {
+      "id": "demo-nowplaying", "type": "nowplaying", "name": "", "tags": [], "rev": 1, "created": 1767603600, "updated": 1767603600, "deletedAt": null,
+      "data": { "tracks": [{ "file": "sample-track.wav", "label": "demo.sample.track" }] }
+    },
+    "demo-image": {
+      "id": "demo-image", "type": "image", "name": "", "tags": [], "rev": 1, "created": 1767603600, "updated": 1767603600, "deletedAt": null,
+      "data": { "imgs": ["sample-1.png", "sample-2.png", "sample-3.png"], "labels": {} }
+    },
+    "demo-memo": {
+      "id": "demo-memo", "type": "memo", "name": "", "tags": [], "rev": 1, "created": 1767603600, "updated": 1767603600, "deletedAt": null,
+      "data": { "text": "demo.sample.memo", "color": "yellow" }
+    }
+  }
+}

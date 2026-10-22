@@ -76,6 +76,8 @@
   "set.nav.appearance": "Appearance",
   "set.nav.widgets": "Widgets",
   "set.nav.a11y": "Accessibility",
+  "set.nav.tutorial": "Tutorial",
+  "set.nav.guide": "Guide",
   "set.nav.backup": "Backup & data",
   "set.nav.about": "About & updates",
   "set.general.behavior": "Behaviour",
@@ -148,5 +150,11 @@
   "set.layout_mode": "Layout",
   "set.layout_grid": "Grid (widgets push aside)",
   "set.layout_free": "Free placement",
-  "set.layout_hint": "Free placement: put widgets anywhere, right up to the screen edges, at any size, even overlapping. Dragging sticks to edges, the centre and other widgets; hold Alt to place exactly. Each layout mode keeps its own arrangement."
+  "set.layout_hint": "Free placement: put widgets anywhere, right up to the screen edges, at any size, even overlapping. Dragging sticks to edges, the centre and other widgets; hold Alt to place exactly. Each layout mode keeps its own arrangement.",
+  "set.tutorial.replay": "Replay the practice tour",
+  "set.tutorial.replay_hint": "Review the basics on a sample board. Nothing from the practice board is saved.",
+  "set.tutorial.level": "Level {n}",
+  "set.tutorial.seen": "Seen",
+  "set.tutorial.whats_new": "What's new",
+  "set.guide.try": "Try it"
 }

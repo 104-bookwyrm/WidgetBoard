@@ -1,0 +1,11 @@
+[
+  { "id": "demo-ev-today", "date": "2026-01-05", "time": "14:00", "title": "demo.sample.ev_today", "tags": [], "repeat": null, "done": false },
+  { "id": "demo-ev-later", "date": "2026-01-07", "time": "10:30", "title": "demo.sample.ev_later", "tags": [], "repeat": null, "done": false },
+  { "id": "demo-todo-1", "date": "2026-01-05", "title": "demo.sample.todo_1", "todo": true, "tags": [], "repeat": null, "done": true, "doneOn": "2026-01-05" },
+  { "id": "demo-todo-2", "date": "2026-01-05", "title": "demo.sample.todo_2", "todo": true, "tags": [], "repeat": null, "done": false },
+  { "id": "demo-todo-3", "date": "2026-01-05", "title": "demo.sample.todo_3", "todo": true, "tags": [], "repeat": null, "done": false },
+  { "id": "demo-dd-exam", "date": "2026-01-17", "title": "demo.sample.dd_exam", "tags": [], "repeat": null, "done": false,
+    "dday": { "mode": "until", "icon": null, "mstep": 0, "munit": "days", "countFrom": "one" } },
+  { "id": "demo-dd-birthday", "date": "2025-02-04", "title": "demo.sample.dd_birthday", "tags": [], "repeat": "yearly", "done": false,
+    "dday": { "mode": "until", "icon": null, "mstep": 0, "munit": "days", "countFrom": "one" } }
+]

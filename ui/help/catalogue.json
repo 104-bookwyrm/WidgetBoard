@@ -36,5 +36,6 @@
   {"id":"guide.image","kind":"guide","type":"image","sections":["slideshow","grid"],"since":null},
   {"id":"guide.showcase","kind":"guide","type":"showcase","since":null},
   {"id":"guide.nowplaying","kind":"guide","type":"nowplaying","sections":["windows","files"],"since":null},
-  {"id":"hint.edit_first","kind":"hint","since":null}
+  {"id":"hint.edit_first","kind":"hint","since":null},
+  {"id":"hint.tray_pin","kind":"hint","since":null}
 ]

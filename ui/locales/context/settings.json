@@ -1,0 +1,10 @@
+{
+  "set.nav.tutorial": "Settings sidebar and page title for the feature ledger and tutorial replay.",
+  "set.nav.guide": "Settings sidebar and page title for the per-widget user guide.",
+  "set.tutorial.replay": "Button in Settings > Tutorial that opens the isolated practice demo from the beginning.",
+  "set.tutorial.replay_hint": "Short explanation beside the replay button. It must say that practice data is not saved.",
+  "set.tutorial.level": "Heading for one tutorial ledger level. {n} is the level number 1, 2 or 3.",
+  "set.tutorial.seen": "Accessible status appended to a tutorial entry the user has already encountered.",
+  "set.tutorial.whats_new": "Heading for the current version's newly introduced tutorial entries.",
+  "set.guide.try": "Button on a widget Guide entry that opens an isolated demo focused on that widget type."
+}

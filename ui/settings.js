@@ -2,6 +2,7 @@ import { createMockTauri } from "./mock-tauri.js";
 // Standalone settings window. Plain module, no build step (like the rest of ui/).
 // Reads everything once via get_settings, applies changes instantly, mirrors the app's a11y settings.
 import { loadLang, t, applyStatic } from "./i18n.js";
+import { loadCatalogue, readHelp, patchHelp } from "./help.js";
 import { tzOptions, osZone, syncScheme, appWindow } from "./util.js";
 import {
   sanitize,
@@ -36,6 +37,8 @@ const PAGES = [
   "appearance",
   "widgets",
   "a11y",
+  "tutorial",
+  "guide",
   "backup",
   "about",
 ];
@@ -46,6 +49,9 @@ const LANGS = [
 
 let data = null; // last get_settings result
 let themeCss = ""; // current theme.css text, kept in sync with the board
+let helpCatalogue = [];
+let helpState = null;
+let whatsNewVisible = false;
 const $ = (sel) => document.querySelector(sel);
 const cfgUi = () =>
   data?.config?.ui && typeof data.config.ui === "object" ? data.config.ui : {};
@@ -90,8 +96,12 @@ function applyA11y() {
 }
 
 // ---- page routing ----
-function showPage(page) {
-  if (!PAGES.includes(page)) page = "general";
+function routeOf(route) {
+  const [page, focus = ""] = String(route || "").split(".", 2);
+  return { page: PAGES.includes(page) ? page : "general", focus };
+}
+function showPage(route) {
+  const { page, focus } = routeOf(route);
   for (const sec of document.querySelectorAll(".set-main [data-page]"))
     sec.hidden = sec.dataset.page !== page;
   for (const b of document.querySelectorAll(".set-nav button"))
@@ -101,6 +111,16 @@ function showPage(page) {
   const main = $(".set-main");
   main.scrollTop = 0;
   main.focus();
+  for (const entry of document.querySelectorAll(".help-focus")) entry.classList.remove("help-focus");
+  if (page === "guide" && focus) {
+    const entry = document.querySelector(`[data-guide="${CSS.escape(focus)}"]`);
+    entry?.classList.add("help-focus");
+    entry?.scrollIntoView({ block: "center" });
+  }
+  if (page === "tutorial" && whatsNewVisible && helpState?.whatsNewSeen !== data.version)
+    patchHelp(invoke, { whatsNewSeen: data.version })
+      .then((latest) => (helpState = latest))
+      .catch(console.error);
 }
 function currentPage() {
   return (
@@ -131,6 +151,76 @@ function buildNav() {
     sel.appendChild(o);
   }
   sel.onchange = () => showPage(sel.value);
+}
+
+const GUIDE_SECTION_TITLES = {
+  "calendar.board": "cal.view_board",
+  "calendar.mini": "cal.view_mini",
+  "timer.countdown": "widget.timer",
+  "timer.stopwatch": "widget.stopwatch",
+  "timer.pomodoro": "widget.pomodoro",
+  "image.slideshow": "image.slideshow",
+  "image.grid": "image.grid",
+  "nowplaying.windows": "widget.nowplaying",
+  "nowplaying.files": "np.files",
+};
+
+function helpEntry(entry, className = "") {
+  const article = document.createElement("article");
+  article.className = `help-entry ${className}`.trim();
+  const title = document.createElement("h3");
+  title.textContent = t(`help.${entry.id}.title`);
+  const body = document.createElement("p");
+  body.textContent = t(`help.${entry.id}.body`);
+  article.append(title, body);
+  for (const section of entry.sections || []) {
+    const heading = document.createElement("h4");
+    heading.textContent = t(GUIDE_SECTION_TITLES[`${entry.type}.${section}`]);
+    const detail = document.createElement("p");
+    detail.textContent = t(`help.${entry.id}.${section}`);
+    article.append(heading, detail);
+  }
+  return article;
+}
+
+function renderHelpPages() {
+  const ledger = helpCatalogue.filter((entry) => entry.kind === "ledger");
+  const levels = $("#tutorial-levels");
+  levels.replaceChildren();
+  for (const level of [1, 2, 3]) {
+    const fieldset = document.createElement("fieldset");
+    fieldset.className = "help-level";
+    const legend = document.createElement("legend");
+    legend.textContent = t("set.tutorial.level", { n: level });
+    const grid = document.createElement("div");
+    grid.className = "help-grid";
+    for (const entry of ledger.filter((item) => item.level === level)) {
+      const seen = helpState?.hintsSeen?.includes(entry.id) || (level === 1 && helpState?.demoDone);
+      const article = helpEntry(entry, `help-ledger-item${seen ? " help-seen" : ""}`);
+      if (seen) article.setAttribute("aria-label", `${t(`help.${entry.id}.title`)}, ${t("set.tutorial.seen")}`);
+      grid.append(article);
+    }
+    fieldset.append(legend, grid);
+    levels.append(fieldset);
+  }
+
+  const fresh = ledger.filter((entry) => entry.since === data.version);
+  const whatsNew = $("#tutorial-whats-new");
+  whatsNew.hidden = !whatsNewVisible || !fresh.length;
+  whatsNew.querySelector(".help-grid").replaceChildren(...fresh.map((entry) => helpEntry(entry)));
+
+  const guide = $("#guide-list");
+  guide.replaceChildren();
+  for (const entry of helpCatalogue.filter((item) => item.kind === "guide")) {
+    const article = helpEntry(entry, "help-guide-item");
+    article.dataset.guide = entry.type;
+    const button = document.createElement("button");
+    button.dataset.guideTry = entry.type;
+    button.textContent = t("set.guide.try");
+    button.onclick = () => invoke("open_demo", { origin: win.label, focus: entry.type });
+    article.append(button);
+    guide.append(article);
+  }
 }
 
 // ---- General page ----
@@ -715,8 +805,12 @@ async function init() {
   data = await invoke("get_settings");
   applyTheme(data.theme);
   await loadLang(data.app.lang, "settings");
+  [helpCatalogue, helpState] = await Promise.all([loadCatalogue(), readHelp(invoke)]);
+  whatsNewVisible = helpState.whatsNewSeen !== data.version && helpCatalogue.some((entry) => entry.since === data.version);
   buildNav();
   applyStatic();
+  renderHelpPages();
+  $("#tutorial-replay").onclick = () => invoke("open_demo", { origin: win.label, focus: null });
   applyA11y();
   fillGeneral();
   bindA11y();
@@ -740,6 +834,7 @@ async function init() {
     await loadLang(data.app.lang, "settings");
     buildNav();
     applyStatic();
+    renderHelpPages();
     fillA11y();
     fillAbout();
     fillTimer();

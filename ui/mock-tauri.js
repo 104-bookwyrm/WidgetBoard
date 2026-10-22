@@ -201,6 +201,7 @@ export function createMockTauri({ memory = false } = {}) {
           autostart: !!store.getItem("wb-autostart"),
           // launched 0: every saved run counts as started in this launch, unless a test seeds wb-session
           session: get("wb-session", { launched: 0, closed: null }),
+          justUpdated: window.__mockJustUpdated ?? null,
         };
       case "get_settings":
         return {
@@ -461,6 +462,7 @@ export function createMockTauri({ memory = false } = {}) {
       case "set_zoom":
       case "set_hotkey":
       case "notify":
+      case "open_demo":
       case "open_settings":
       case "open_library":
       case "open_url":

@@ -124,6 +124,12 @@
     <!-- first run on an empty board -->
     <div id="welcome" data-hit hidden role="dialog" aria-labelledby="wc-title">
       <h3 id="wc-title" data-i18n="wc.title"></h3>
+      <div id="wc-intro">
+        <p data-i18n="tut.welcome"></p>
+        <button id="wc-try" data-i18n="tut.try"></button>
+        <button id="wc-skip" data-i18n="tut.skip"></button>
+      </div>
+      <div id="wc-presets" hidden>
       <p data-i18n="wc.body"></p>
       <div class="wc-presets">
         <button data-preset="work">
@@ -137,6 +143,7 @@
         </button>
       </div>
       <button id="wc-blank" data-i18n="wc.blank"></button>
+      </div>
     </div>
 
     <div id="focusbar" data-hit hidden>

@@ -83,5 +83,7 @@
   "help.guide.nowplaying.windows": "It shows the title and cover of whatever Windows is playing, from a browser or a player such as Spotify. Previous, play and next buttons control it. With several players open, the switch button cycles between them.",
   "help.guide.nowplaying.files": "My files plays audio from your own computer. Open it, then add tracks with the plus button or by dropping files. Its header has volume, shuffle and loop.",
   "help.hint.edit_first.title": "Edit layout is on",
-  "help.hint.edit_first.body": "Drag a widget's top strip to move it. Right-click a widget to change its type or open Appearance. Click Done or press Esc to finish."
+  "help.hint.edit_first.body": "Drag a widget's top strip to move it. Right-click a widget to change its type or open Appearance. Click Done or press Esc to finish.",
+  "help.hint.tray_pin.title": "WidgetBoard stays in the taskbar",
+  "help.hint.tray_pin.body": "Right-click its icon to add widgets or edit the layout. Left-click the icon to hide or show every widget. If you don't see it, click ^ on the taskbar and drag the WidgetBoard icon onto the taskbar."
 }

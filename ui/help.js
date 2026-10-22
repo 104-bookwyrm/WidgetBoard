@@ -29,3 +29,20 @@ export async function patchHelp(invoke, patch) {
     }
   }
 }
+
+/** Atomically add one value to a help-state list. Only one window receives claimed=true. */
+export async function claimHelp(invoke, key, value) {
+  for (let tries = 0; ; tries++) {
+    const r = await invoke("store_read", { key: KEY });
+    const state = merged(r.value);
+    const list = Array.isArray(state[key]) ? state[key] : [];
+    if (list.includes(value)) return { claimed: false, state };
+    const next = { ...state, [key]: [...list, value] };
+    try {
+      await invoke("store_set", { key: KEY, value: next, src: "help", rev: r.rev });
+      return { claimed: true, state: next };
+    } catch (e) {
+      if (e !== "conflict" || tries) throw e;
+    }
+  }
+}

@@ -155,3 +155,9 @@ body.demo-board-off > :not(#demo-wallpaper):not(#demo-taskbar):not(#demo-frame):
 .dt-clock small {
   font-size: 11px;
 }
+#tutorial-card { position: fixed; z-index: 1000; left: 50%; bottom: 65px; transform: translateX(-50%); width: min(400px, calc(100% - 32px)); box-sizing: border-box; padding: 16px; border-radius: 12px; background: var(--bg, #252832); color: var(--fg, #fff); box-shadow: 0 4px 24px #0008; }
+#tutorial-card p { margin: 0 0 12px; }
+#tutorial-card div { display: flex; justify-content: flex-end; gap: 8px; }
+#tutorial-card button { padding: 6px 14px; }
+.tutorial-target { outline: 3px solid var(--c2, #82b7ff) !important; outline-offset: 3px; }
+body.demo-board-off > #tutorial-card { visibility: visible; pointer-events: auto; }

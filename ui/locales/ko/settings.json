@@ -76,6 +76,8 @@
   "set.nav.appearance": "모양",
   "set.nav.widgets": "위젯",
   "set.nav.a11y": "접근성",
+  "set.nav.tutorial": "튜토리얼",
+  "set.nav.guide": "가이드",
   "set.nav.backup": "백업 · 데이터",
   "set.nav.about": "정보 · 업데이트",
   "set.general.behavior": "동작",
@@ -148,5 +150,11 @@
   "set.layout_mode": "레이아웃 방식",
   "set.layout_grid": "칸에 맞춤 (밀어내기)",
   "set.layout_free": "자유 배치",
-  "set.layout_hint": "자유 배치: 위젯을 화면 끝까지 원하는 곳에 두고, 크기도 자유롭게, 겹쳐 놓을 수도 있습니다. 끌면 가장자리·가운데·다른 위젯에 맞춰 붙습니다. Alt를 누른 채 드래그하면 붙지 않습니다. 두 방식은 각자의 레이아웃을 기억합니다."
+  "set.layout_hint": "자유 배치: 위젯을 화면 끝까지 원하는 곳에 두고, 크기도 자유롭게, 겹쳐 놓을 수도 있습니다. 끌면 가장자리·가운데·다른 위젯에 맞춰 붙습니다. Alt를 누른 채 드래그하면 붙지 않습니다. 두 방식은 각자의 레이아웃을 기억합니다.",
+  "set.tutorial.replay": "연습 다시 보기",
+  "set.tutorial.replay_hint": "샘플 보드에서 기본 사용법을 다시 살펴봅니다. 연습 보드의 내용은 저장되지 않습니다.",
+  "set.tutorial.level": "레벨 {n}",
+  "set.tutorial.seen": "확인함",
+  "set.tutorial.whats_new": "새로운 기능",
+  "set.guide.try": "체험하기"
 }

@@ -97,6 +97,7 @@ export async function mountStage({ T, invoke, toast, groupMenus, isEdit }) {
     lastMenu = await T.menu.Menu.new({ items: items() });
     // from the keyboard the menu opens at the icon (the mouse can be anywhere), otherwise at the cursor
     const r = tray.getBoundingClientRect();
+    document.dispatchEvent(new CustomEvent("tutorial-action", { detail: "tray" }));
     await lastMenu.popup(atButton && T.dpi ? new T.dpi.LogicalPosition(r.left, r.top) : undefined);
   }
   tray.addEventListener("contextmenu", (e) => {

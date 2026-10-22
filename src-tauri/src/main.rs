@@ -147,6 +147,7 @@ struct AppState {
     // self-update (portable exe): see updater.rs
     update_busy: AtomicBool,
     just_updated: Mutex<Option<String>>, // shown once as a toast after an update installed
+    demo_origin: Mutex<String>, // latest window that requested the reusable tutorial demo
     session: Value, // { launched, closed } in ms: this launch, and the last proper exit before it (closed.json)
 }
 
@@ -876,11 +877,24 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
 /// Margin (logical px) between the demo window and the edges of the monitor's work area.
 const DEMO_MARGIN: f64 = 24.0;
 
+fn demo_query(focus: Option<&str>) -> String {
+    let mut query = String::from("demo");
+    if let Some(f) = focus.filter(|f| widget_ids().contains(f)) {
+        query.push_str("&focus=");
+        query.push_str(f);
+    }
+    query
+}
+
 /// The tutorial demo: a normal opaque window running index.html?demo on the in-memory mock backend.
 /// It gets the user's theme and config as a snapshot (window.__demoInit) and never reads their files itself.
 /// `origin` is the label of the window that asked ("settings", a board); it is told when the demo closes.
 fn open_demo_window(app: &AppHandle, origin: &str, focus: Option<&str>) -> tauri::Result<()> {
+    *app.state::<AppState>().demo_origin.lock().unwrap() = origin.to_string();
     if let Some(w) = app.get_webview_window("demo") {
+        let mut url = w.url()?;
+        url.set_query(Some(&demo_query(focus)));
+        w.navigate(url)?;
         let _ = w.unminimize();
         let _ = w.show();
         return w.set_focus();
@@ -896,12 +910,9 @@ fn open_demo_window(app: &AppHandle, origin: &str, focus: Option<&str>) -> tauri
         config["ui"] = json!({});
     }
     config["ui"]["layoutMode"] = json!("grid"); // push-aside only exists in grid mode
+    config["ui"]["flashAlert"] = json!(true); // reminders and timers show the board's in-window alert, whatever the user set
     let init = format!("window.__demoInit = {};", json!({ "theme": theme, "config": config }));
-    let mut url = String::from("index.html?demo");
-    if let Some(f) = focus.filter(|f| widget_ids().contains(f)) {
-        url.push_str("&focus=");
-        url.push_str(f);
-    }
+    let url = format!("index.html?{}", demo_query(focus));
     let w = WebviewWindowBuilder::new(app, "demo", WebviewUrl::App(url.into()))
         .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
         .title(tr(&lang, "demo.title"))
@@ -931,9 +942,10 @@ fn open_demo_window(app: &AppHandle, origin: &str, focus: Option<&str>) -> tauri
             let _ = w.set_size(tauri::PhysicalSize::new(want_w.max(480), want_h.max(360)));
         }
     }
-    let (handle, origin) = (app.clone(), origin.to_string());
+    let handle = app.clone();
     w.on_window_event(move |e| {
         if let tauri::WindowEvent::Destroyed = e {
+            let origin = handle.state::<AppState>().demo_origin.lock().unwrap().clone();
             let _ = handle.emit("demo-closed", json!({ "origin": origin }));
             if origin == "settings" {
                 if let Some(s) = handle.get_webview_window("settings") {
@@ -1333,7 +1345,12 @@ fn create_boards(app: &AppHandle) -> tauri::Result<()> {
     for (b, m) in list.iter().zip(monitors.iter()) {
         let wa = m.work_area();
         let sf = m.scale_factor();
+        let tutorial_debug = cfg!(debug_assertions)
+            && app.config().identifier == "app.widgetboard.devtest"
+            && std::env::args().any(|arg| arg == "--tutorial-debug");
+        let init = if tutorial_debug { "window.__tutorialDebug = true;" } else { "" };
         let w = WebviewWindowBuilder::new(app, &b.label, WebviewUrl::App("index.html".into()))
+        .initialization_script(init)
         .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
             .title("WidgetBoard")
             // start at the right size so the page never lays out on a wrong-sized board
@@ -2040,6 +2057,7 @@ fn main() {
                 zoom: Mutex::new(1.0),
                 update_busy: AtomicBool::new(false),
                 just_updated: Mutex::new(just_updated),
+                demo_origin: Mutex::new(String::new()),
                 session,
             });
 
@@ -2144,6 +2162,13 @@ mod tests {
     }
 
     #[test]
+    fn demo_query_keeps_only_known_focus_types() {
+        assert_eq!(demo_query(None), "demo");
+        assert_eq!(demo_query(Some("timer")), "demo&focus=timer");
+        assert_eq!(demo_query(Some("retired-widget")), "demo");
+    }
+
+    #[test]
     fn purge_assets_keeps_shared_images() {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../test-artifacts/native").join(format!("wb-purge-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -2211,6 +2236,97 @@ mod tests {
         fs::remove_file(partial.join("layout.json")).unwrap();
         assert_eq!(validate_backup(&partial), Err("damaged:layout.json".into()));
         let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Date-shaped strings under keys the demo loader does not shift (ui/tutorial/dataset.js shifts date, doneOn, doneDates).
+    fn unshifted_dates(v: &Value, key: &str, shifted: &[&str], bad: &mut Vec<String>) {
+        match v {
+            Value::String(s) if valid_date(s) && !shifted.contains(&key) => bad.push(format!("{key}: {s}")),
+            Value::Array(a) => a.iter().for_each(|x| unshifted_dates(x, key, shifted, bad)),
+            Value::Object(o) => o.iter().for_each(|(k, x)| unshifted_dates(x, k, shifted, bad)),
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn tutorial_dataset_is_a_valid_backup() {
+        let ui = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ui");
+        let ds = ui.join("tutorial/dataset");
+        assert_eq!(validate_backup(&ds), Ok(()), "the demo dataset is a whole backup folder");
+        let manifest: Value = read_json(&ds.join("manifest.json")).unwrap();
+        assert!(valid_date(manifest["anchor"].as_str().unwrap_or("")), "manifest.anchor is a YYYY-MM-DD date");
+
+        // layout.json: what persist_widgets writes
+        let layout: Value = read_json(&ds.join("layout.json")).unwrap();
+        assert_eq!(layout["version"], migrate::LAYOUT_SCHEMA);
+        let placements = layout["widgets"].as_array().expect("layout.json widgets");
+        assert!(placements.iter().any(|w| w["hidden"] == true), "one hidden widget, so edit mode shows a ghost");
+        let content_keys: serde_json::Map<String, Value> = serde_json::from_str(include_str!("../../ui/widgets/content-keys.json")).unwrap();
+        let known: Vec<&str> = widget_ids();
+        let mut seen = HashSet::new();
+
+        // content.json: read by content::load (only after validate_backup, so a broken file is never moved aside)
+        assert!(read_json::<Value>(&ds.join("data/content.json")).unwrap()["items"].is_object());
+        let content = content::load(&ds);
+        for w in placements {
+            let (id, ty) = (w["id"].as_str().expect("widget id"), w["type"].as_str().expect("widget type"));
+            assert!(seen.insert(id), "widget id {id} is unique");
+            assert!(known.contains(&ty), "{ty} is a widget type");
+            assert!(w["w"].as_u64().unwrap_or(0) > 0 && w["h"].as_u64().unwrap_or(0) > 0, "{id} has a size to pack with");
+            let keys: Vec<&str> = content_keys.get(ty).and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+            for k in &keys {
+                assert!(w["settings"].get(*k).is_none(), "{id}: content key {k} belongs in content.json, not in the placement");
+            }
+            if keys.is_empty() {
+                assert!(!content.contains_key(id), "{id} is not Library content");
+                continue;
+            }
+            let item = content.get(id).unwrap_or_else(|| panic!("{id} has a content item"));
+            assert_eq!((item["id"].as_str(), item["type"].as_str()), (Some(id), Some(ty)));
+            assert!(item["deletedAt"].is_null() && item["rev"].as_u64().is_some() && item["data"].is_object());
+            for k in item["data"].as_object().unwrap().keys() {
+                assert!(keys.contains(&k.as_str()), "{id}: {k} is not a {ty} content key");
+            }
+            // the loader shifts no timestamp: a timer that ran or is running would show a wrong time
+            for k in ["endAt", "startedAt", "runStart", "workFrom", "away", "since"] {
+                let v = &item["data"][k];
+                assert!(v.is_null() || *v == json!(0), "{id}: {k} is a time the loader does not shift");
+            }
+        }
+        assert_eq!(content.len(), placements.iter().filter(|w| content.contains_key(w["id"].as_str().unwrap())).count(), "no content item without a widget");
+
+        // data/events.json: the shared entry store
+        let events: Vec<Value> = read_json(&ds.join("data/events.json")).expect("events.json is a list");
+        let mut ids = HashSet::new();
+        for e in &events {
+            assert!(ids.insert(e["id"].as_str().expect("event id")), "event ids are unique");
+            assert!(e["title"].is_string() && valid_date(e["date"].as_str().unwrap_or("")), "event needs a title and a date");
+            assert!(e.get("doneOn").is_none_or(|d| valid_date(d.as_str().unwrap_or(""))));
+            assert!(e["doneDates"].as_array().is_none_or(|a| a.iter().all(|d| valid_date(d.as_str().unwrap_or("")))));
+        }
+        let mut bad = vec![];
+        unshifted_dates(&Value::Array(events.clone()), "", &["date", "doneOn", "doneDates"], &mut bad);
+        for f in ["layout.json", "data/content.json"] {
+            unshifted_dates(&read_json::<Value>(&ds.join(f)).unwrap(), "", &[], &mut bad);
+        }
+        assert!(bad.is_empty(), "dates the demo loader does not shift: {bad:?}");
+
+        // files the sample names exist, and every sample text key exists in both languages
+        let assets = ui.join("tutorial/assets");
+        for (_, item) in &content {
+            let data = &item["data"];
+            let names = data["imgs"].as_array().into_iter().flatten().chain(data["tracks"].as_array().into_iter().flatten().map(|t| &t["file"]));
+            for n in names {
+                assert!(assets.join(n.as_str().unwrap()).exists(), "asset {n} is missing from ui/tutorial/assets");
+            }
+        }
+        let text = format!("{}{}{}", fs::read_to_string(ds.join("layout.json")).unwrap(), fs::read_to_string(ds.join("data/events.json")).unwrap(), fs::read_to_string(ds.join("data/content.json")).unwrap());
+        for lang in ["en", "ko"] {
+            let board: HashMap<String, String> = serde_json::from_str(&fs::read_to_string(ui.join(format!("locales/{lang}/board.json"))).unwrap()).unwrap();
+            for key in text.split('"').filter(|s| s.starts_with("demo.sample.")) {
+                assert!(board.contains_key(key), "locales/{lang}/board.json lacks {key}");
+            }
+        }
     }
 
     #[test]
