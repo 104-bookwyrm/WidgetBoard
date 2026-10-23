@@ -95,7 +95,7 @@
   "set.about.licenses_body": "가독성 글꼴은 SIL 오픈 폰트 라이선스(OFL)로 포함되어 있습니다: Atkinson Hyperlegible, Lexend, OpenDyslexic.",
   "set.timer.alarm": "알람",
   "set.timer.presets": "빠른 시작 버튼",
-  "set.timer.presets_hint": "타이머 위젯에 표시되는 버튼입니다. 시간은 25(분), 30:00(분:초), 1:30:00(시:분:초)처럼 적으세요. 이름은 공란으로 두셔도 괜찮습니다.",
+  "set.timer.presets_hint": "타이머 위젯 우클릭 메뉴 > ‘빠른 시작’에 표시됩니다. 시간은 25(분), 30:00(분:초), 1:30:00(시:분:초)처럼 적으세요. 이름은 공란으로 두셔도 괜찮습니다.",
   "set.timer.add_preset": "버튼 추가",
   "set.timer.label_ph": "이름",
   "set.timer.time": "시간",

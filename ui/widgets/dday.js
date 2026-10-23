@@ -34,7 +34,7 @@ export default {
       mask-image: linear-gradient(to right, #000 88%, transparent); }
     .dd-row.dd-auto { cursor: default; touch-action: auto; }
     .dd-row.dd-auto .dd-av { background: color-mix(in srgb, var(--c3) 14%, transparent); color: var(--text-muted); }
-    .dd-sep { font-size: var(--fs-meta); color: var(--text-faint); padding: 6px 4px 2px; }
+    .dd-sep { border-top: var(--line-width) var(--line-style) var(--line-color); margin: 4px 4px; opacity: .6; }
     .dd-filter .chip { max-width: 9em; overflow: hidden; text-overflow: ellipsis; flex: none; }
     .dd-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1);
       scrollbar-width: thin; }
@@ -54,8 +54,7 @@ export default {
     .dd-d { font-weight: 700; font-family: var(--font-num, var(--font)); color: var(--c2); white-space: nowrap; font-variant-numeric: tabular-nums; flex: none; }
     .dd-d.today { background: var(--c2); color: var(--on-accent); padding: 0 .5em; border-radius: 999px; }
     .dd-d.past { color: var(--text-faint); }
-    .dd-empty { color: var(--text-faint); font-size: var(--fs-small); padding: 8px 4px; }
-    .dd-add { flex: none; font-size: var(--fs-small); }
+    .dd-empty { margin: auto; padding: 4px 10px; font-size: 1.3em; line-height: 1; color: var(--text-muted); }
     .dd-ghost { position: fixed; z-index: 100; pointer-events: none; background: var(--c1);
       border-radius: var(--r-inner); box-shadow: 0 6px 22px rgb(0 0 0 / .45); opacity: .95; font-family: var(--font); }
     .dd-editor { position: absolute; inset: 0; z-index: 6; padding: calc(var(--head-h) + 4px) calc(var(--pad) + 2px) calc(var(--pad) + 2px); box-sizing: border-box;
@@ -187,7 +186,6 @@ export default {
           <div class="dd-filter"></div>
         </div>
         <div class="dd-list"></div>
-        <button class="dd-add">+ ${t("dday.add")}</button>
         <div class="dd-editor" hidden></div>
       </div>`;
     const box = root.firstElementChild;
@@ -351,8 +349,8 @@ export default {
               <div class="dd-d ${cls}">${esc(dLabel(it))}</div></div>`;
             })
             .join("") +
-          (auto.length ? (vis.length ? `<div class="dd-sep">${esc(t("ck.from_calendar"))}</div>` : "") + autoRows(auto) : "")
-        : `<div class="dd-empty">${t("dday.empty")}</div>`;
+          (auto.length ? (vis.length ? `<div class="dd-sep" role="separator"></div>` : "") + autoRows(auto) : "")
+        : `<button class="dd-empty" data-a="add" title="${esc(t("dday.add"))}" aria-label="${esc(t("dday.add"))}">+</button>`;
     }
 
     bar.addEventListener("click", (e) => {
@@ -494,7 +492,7 @@ export default {
     });
 
     // ---- editor ----
-    box.querySelector(".dd-add").onclick = () => openEditor(null);
+    list.addEventListener("click", (e) => e.target.closest("[data-a=add]") && openEditor(null));
     function openEditor(existing) {
       const it = existing
         ? { ...existing }
@@ -672,6 +670,7 @@ export default {
     return {
       destroy: () => endDrag?.(),
       menu: () => [
+        { text: t("dday.add"), action: () => openEditor(null) },
         {
           text: (s.cal ? "✓ " : "") + t("dday.menu_cal"),
           action: () => ((s.cal = !s.cal), api.save(), render()),

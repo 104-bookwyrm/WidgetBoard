@@ -1,0 +1,8 @@
+{
+  "timer.mode_busy": "Toast when the user picks Stopwatch / Pomodoro / Timer in Change widget type while the current one is running or paused partway. Tells them to stop and reset it first.",
+  "timer.presets_menu": "Timer widget right-click submenu listing the quick-start durations (Settings › Timer). Picking one sets that time and starts the timer. Short.",
+  "sw.cat_menu": "Stopwatch right-click submenu to pick the time category (Focus / Other). One word.",
+  "sw.reset_total_menu": "Stopwatch right-click item: the category total starts counting from zero now. Nothing is deleted; the log keeps all past time. Short.",
+  "sw.laps_menu": "Stopwatch right-click submenu listing the recorded laps. {n} is how many. Short.",
+  "pomo.settings_menu": "Pomodoro right-click item that opens its settings panel (lengths, rounds, auto-start). Ends with an ellipsis like other items that open a panel."
+}

@@ -30,12 +30,6 @@
   "ck.add.today": "Add a to-do for today… (Enter)",
   "ck.add.week": "Add a weekly task… (Enter)",
   "ck.add.month": "Add a monthly task… (Enter)",
-  "ck.empty.today": "Nothing to do today. Type a task in the box below.",
-  "ck.empty.week": "Add tasks you do every week (e.g. recycling, laundry)",
-  "ck.empty.month": "Add tasks you do every month (e.g. pay the bills)",
-  "ck.all_done.today": "All done for today 🎉",
-  "ck.all_done.week": "This week's tasks done 🎉",
-  "ck.all_done.month": "This month's tasks done 🎉",
   "sum.ck": "{done} of {n} tasks done today",
   "sum.ck_empty": "No tasks today",
   "hint.checklist": "Click a box to finish · F2 to edit"

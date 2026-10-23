@@ -27,20 +27,15 @@ const css = `
       font-variant-numeric: tabular-nums; cursor: text; }
     .t-display input { width: 5.5ch; font: inherit; text-align: center; background: none;
       border: 0; border-bottom: 2px solid var(--c2); outline: none; }
-    .t-presets, .t-ctrl { display: flex; gap: var(--space-3); max-width: 100%; flex: none; }
-    .t-presets { overflow-x: auto; scrollbar-width: none; justify-content: safe center; }
-    .t-presets button { font-size: var(--fs-small); padding: 1px 8px; white-space: nowrap; flex: none; }
-    .t-ctrl button { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    .t-ctrl .ico { display: none; }
-    @container (max-width: 12em) { .t-ctrl .ico { display: inline; } .t-ctrl .lbl { display: none; } }
-    .timer.running .t-presets { visibility: hidden; }
+    .t-ctrl { display: flex; gap: var(--space-3); max-width: 100%; flex: none; }
+    /* icon-only: the label stays as the button's title (tooltip and screen-reader name) */
+    .t-ctrl .lbl { display: none; }
     .timer.ringing .t-display { color: var(--c2); animation: t-blink .7s steps(2) infinite; }
     body.reduce-motion .timer.ringing .t-display { text-decoration: underline; text-decoration-thickness: 3px; }
     @keyframes t-blink { 50% { opacity: .3; } }
     .t-cap { font-size: var(--fs-small); font-weight: 600; padding: 2px 10px; border-radius: 999px; flex: none; max-width: 100%;
       background: var(--c2); color: var(--on-accent, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    /* em-based, so larger text hides extras sooner instead of overflowing */
-    @container (max-height: 10.5em) { .t-presets { display: none; } }
+    /* em-based, so larger text hides the buttons sooner instead of overflowing */
     @container (max-height: 5.5em) { .t-ctrl { display: none; } }
   `;
 
@@ -50,7 +45,6 @@ function countdown(root, s, api) {
   root.innerHTML = `
     <div class="timer">
       <div class="t-display" title="${t("timer.hint")}"></div>
-      <div class="t-presets"></div>
       <div class="t-cap" role="status" hidden></div>
       <div class="t-ctrl"><button class="primary" data-a="go"></button><button data-a="reset" title="${t("timer.reset")}"><span class="ico">${icon("reset")}</span><span class="lbl">${t("timer.reset")}</span></button></div>
     </div>`;
@@ -158,40 +152,23 @@ function countdown(root, s, api) {
   box.addEventListener("pointerdown", stopRing);
   go.onclick = () => (s.endAt ? pause() : start());
   box.querySelector("[data-a=reset]").onclick = () => setDuration(s.duration);
-  // Presets come from config.json (timer.presets: [{ label, time }]); label may be empty.
+  // Presets come from config.json (timer.presets: [{ label, time }]); label may be empty. They live in the
+  // right-click menu (빠른 시작): picking one sets that time and starts it.
   const DEFAULT_PRESETS = [
     { time: "1" },
     { time: "5" },
     { time: "10" },
     { time: "25" },
   ];
-  const esc = (x) =>
-    String(x).replace(
-      /[&<>"]/g,
-      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
-    );
-  function renderPresets() {
+  function presets() {
     const list = api.config?.timer?.presets;
-    box.querySelector(".t-presets").innerHTML = (
-      Array.isArray(list) ? list : DEFAULT_PRESETS
-    )
-      .map((p) => {
-        const ms = parse(String(p?.time ?? ""));
-        if (!ms) return "";
-        const label =
-          p.label ||
-          (ms % 60000 === 0 ? t("timer.min", { n: ms / 60000 }) : fmt(ms));
-        return `<button data-ms="${ms}">${esc(label)}</button>`;
-      })
-      .join("");
+    return (Array.isArray(list) ? list : DEFAULT_PRESETS).flatMap((p) => {
+      const ms = parse(String(p?.time ?? ""));
+      if (!ms) return [];
+      const label = p.label || (ms % 60000 === 0 ? t("timer.min", { n: ms / 60000 }) : fmt(ms));
+      return [{ text: label, action: () => (setDuration(ms), start()) }];
+    });
   }
-  renderPresets();
-  api.onConfig(renderPresets);
-  api.wheelScrollX?.(box.querySelector(".t-presets"));
-  box.querySelector(".t-presets").onclick = (e) => {
-    const ms = +e.target.closest("button")?.dataset.ms;
-    if (ms) setDuration(ms);
-  };
   disp.addEventListener("wheel", (e) => {
     if (s.endAt) return;
     e.preventDefault();
@@ -239,6 +216,10 @@ function countdown(root, s, api) {
     destroy() {
       clearInterval(tick);
       clearInterval(ringTimer);
+    },
+    menu: () => {
+      const items = presets();
+      return items.length ? [{ text: t("timer.presets_menu"), items }] : [];
     },
     summary: () =>
       s.endAt
@@ -334,17 +315,14 @@ export default {
       destroy: stop,
       resized: () => inner.resized?.(),
       summary: () => inner.summary(),
-      menu: () => [
-        {
-          text: t("timer.mode"),
-          items: Object.keys(MODES).map((m) => ({
-            text: (s.mode === m ? "✓ " : "") + t("widget." + m),
-            enabled: s.mode === m || !busy(), // a running or paused mode cannot be left
-            action: () => switchTo(m),
-          })),
-        },
-        ...(inner.menu ? [{ item: "Separator" }, ...inner.menu()] : []),
-      ],
+      menu: () => inner.menu?.() ?? [],
+      // the board's change-type menu lists the modes as widgets; picking one switches here (true = handled)
+      showType(type) {
+        if (!Object.hasOwn(MODES, type)) return false;
+        if (s.mode !== type && busy()) api.toast?.(t("timer.mode_busy")); // a running or paused mode cannot be left
+        else switchTo(type);
+        return true;
+      },
     };
   },
 };

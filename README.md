@@ -101,7 +101,10 @@ circle). Clicks are caught by the whole widget rectangle, including transparent 
 **Read summary** appears when its accessibility setting is enabled. Inside a text box you get the normal
 copy/paste menu; right-click the widget's header or edge to open the widget menu.
 
-**In Edit layout**, that menu also offers background image set/remove and **Move to display**.
+**In Edit layout**, that menu also offers background image set/remove, **Move to display** and
+**Change widget type ›**. Changing type keeps the widget's position and appearance. Each type retains its own
+content, so switching back restores the memo text, timer settings or photo list. A larger type may need more grid space.
+Timer, Stopwatch and Pomodoro switch in place (stop and reset a running one first).
 
 Closing shows **Undo** for 7 seconds. The widget also goes to the [closed widgets bin](#names-hiding-and-closed-widgets).
 
@@ -222,7 +225,7 @@ Default size / minimum size in grid cells (1 cell = 80 px by default).
 
 ### 체크리스트 · Checklist (3×4 / 2×2)
 
-Your to-dos, in three tabs. Every tab shows progress (`2/5` and a bar) and says when everything is done.
+Your to-dos, in three tabs. A bar shows each tab's progress; hover a tab or the bar for the count.
 
 - **오늘 · Today** - type and press Enter to add a to-do for today.
   - Unfinished to-dos **carry over** to the next day, marked `↪ 9/25` with the day they were first written.
@@ -272,7 +275,7 @@ A month calendar for to-dos and appointments, in two views (switch with ▦ / �
 
 Countdowns, listed like a Discord member list: round icon, name, date and tag, and **D-54 / D-Day / D+3**.
 
-- **+ D-day 추가**: name, date, optional tag, icon, and mode - _countdown_ (D-12, D+3) or _anniversary_ (N일째,
+- **Right-click → D-day 추가** (or the **+** in an empty list): name, date, optional tag, icon, and mode - _countdown_ (D-12, D+3) or _anniversary_ (N일째,
   counting the start date as day 1).
 - **Milestones** (anniversary mode): mark the 100-day steps (백일: D+100, D+200, D+300…) or month anniversaries, with
   the next one counted down. Korean day-1 counting is the default; a hidden per-item option counts from zero.
@@ -299,28 +302,29 @@ One page per day, saved automatically as you type.
 
 ### 타이머 · Timer (3×2 / 2×2)
 
-Three modes in one widget: **타이머 (timer)**, **스톱워치 (stopwatch)** and **포모도로 (pomodoro)**. Right-click →
-_모드_ switches between them while the widget is idle; a running or paused mode has to be reset first. Laps and the
-pomodoro dots need a taller widget (3×3).
+**타이머 (timer)**, **스톱워치 (stopwatch)** and **포모도로 (pomodoro)** are listed as three widgets. In Edit layout,
+_다른 위젯으로 바꾸기_ switches between them in place; a running or paused one has to be reset first. The faces show
+only the time and icon buttons (hover a button for its name); everything else is in the right-click menu.
 
 #### Timer mode
 
 Counts down and rings (sound + blinking) when done.
 
-- Presets underneath (set your own in Settings → 타이머 · 달력), or click the digits and type: `25` = 25 min, `1:30`, `1:00:00`.
+- Right-click → **빠른 시작** sets a preset time and starts it (set your own in Settings → 타이머 · 달력), or click the
+  digits and type: `25` = 25 min, `1:30`, `1:00:00`.
 - Scroll over the digits to add/subtract a minute. ▶ start, ❚❚ pause, ↺ reset. Up to 99 hours.
 - Keeps correct time through sleep. Quitting the app (or Windows shutting down) pauses it with the time it had left.
 
 #### Stopwatch mode
 
-Counts up. Every run is kept in one shared time record, under a category: **집중 (focus)** or **그 외 (other)**.
-Click the category next to the total to switch it.
+Counts up in whole seconds. Every run is kept in one shared time record, under a category: **집중 (focus)** or
+**그외 (other)**; right-click → _분류_ switches it.
 
-- ▶ start / ❚❚ stop. While running, **랩** records laps (shown when the widget is tall enough); when stopped,
-  **초기화** clears this run - the total is kept.
-- **총 시간 (total)** is all the time in the stopwatch's category, from every stopwatch and pomodoro. Two focus
-  stopwatches show the same focus total.
-- ↺ next to the total counts it from now on (click twice within 3 s). Nothing is deleted from the record.
+- ▶ start / ❚❚ stop. While running, ⚑ records a lap (right-click → _랩 기록_ lists them); when stopped, ↺ clears
+  this run - the total is kept.
+- **총 시간 (total)** is all the time in the stopwatch's category, from every stopwatch and pomodoro; hover the time to
+  see it. Two focus stopwatches show the same focus total.
+- Right-click → _총 시간 새로 세기_ counts the total from now on. Nothing is deleted from the record.
 - Keeps counting through sleep. If the PC slept for a while (Settings → 타이머 · 달력 → 자리 비움 확인, 30 min by
   default) it asks whether that time counts: **포함** keeps it, **빼기** takes it out.
 - Quitting the app (or Windows shutting down) stops it at that moment. If the app crashed while it ran, the next
@@ -329,12 +333,12 @@ Click the category next to the total to switch it.
 #### Pomodoro mode
 
 Focus blocks and breaks: 25 min 집중 (focus), 5 min 짧은 휴식, and a 15 min 긴 휴식 after every 4 focus blocks.
-The dots show where you are in the cycle.
+The pill shows the phase; hover it for the round and today's count.
 
 - ▶ start, ❚❚ pause, ⏭ skip to the next phase, ↺ start the cycle over. It rings at the end of each phase
   (same sound settings as the timer); click the widget to stop the ringing.
-- Click the line at the bottom for settings: the lengths, focus blocks per long break, and starting the next phase
-  automatically.
+- Right-click → _포모도로 설정…_: the lengths, focus blocks per long break, and starting the next phase automatically
+  (on by default; the ⟳ button beside skip toggles it too).
 - All focus time goes to the shared time record as focus, including a block you pause or skip partway, so every
   focus stopwatch's **총 시간** includes it.
 - Keeps correct time through sleep, and asks about long sleeps during a focus block like the stopwatch does.

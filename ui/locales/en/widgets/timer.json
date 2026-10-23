@@ -4,7 +4,7 @@
   "timer.resume": "Resume",
   "timer.reset": "Reset",
   "timer.min": "{n}m",
-  "timer.mode": "Mode",
+  "timer.mode_busy": "Stop and reset it first to switch.",
   "timer.hint": "Click to type (25 · 1:30 · 1:00:00), scroll to adjust by a minute",
   "sw.start": "Start",
   "sw.stop": "Stop",
@@ -12,10 +12,6 @@
   "sw.lap": "Lap",
   "sw.reset": "Reset",
   "sw.total": "Total",
-  "sw.total_hint": "All time counted in this category, by stopwatches and pomodoros",
-  "sw.reset_total": "Count the total from now on. Earlier time stays in the record.",
-  "sw.sure": "Sure?",
-  "sw.cat_hint": "Category: click to switch. Pomodoro focus blocks count as focus.",
   "away.text": "{t} away while counting.",
   "away.crash": "WidgetBoard closed unexpectedly while this was counting (since {since}).",
   "away.keep": "Keep",
@@ -49,5 +45,10 @@
   "pomo.caption_muted": "🔕 Phase over (sound off) - click to dismiss",
   "sum.pomo_running": "{phase}, {left} left",
   "sum.pomo_paused": "{phase} paused, {left} left",
-  "sum.pomo_idle": "{phase} {left} ready, {n} today"
+  "sum.pomo_idle": "{phase} {left} ready, {n} today",
+  "timer.presets_menu": "Quick start",
+  "sw.cat_menu": "Category",
+  "sw.reset_total_menu": "Restart the total",
+  "sw.laps_menu": "Laps ({n})",
+  "pomo.settings_menu": "Pomodoro settings…"
 }

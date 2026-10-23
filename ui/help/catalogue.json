@@ -11,6 +11,7 @@
   {"id":"ledger.close","kind":"ledger","level":2,"since":null},
   {"id":"ledger.library","kind":"ledger","level":2,"since":null},
   {"id":"ledger.deleted","kind":"ledger","level":2,"since":null},
+  {"id":"ledger.change_type","kind":"ledger","level":2,"since":null},
   {"id":"ledger.modes","kind":"ledger","level":2,"since":"0.15.0"},
   {"id":"ledger.look","kind":"ledger","level":2,"since":null},
   {"id":"ledger.themes","kind":"ledger","level":2,"since":null},

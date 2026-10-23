@@ -1305,7 +1305,13 @@ function restoreClosed() {
   syncHits();
 }
 
-const widgetName = (w) => w.name || t("widget." + w.type);
+/** The widget a user sees: an old alias shows as its host; a timer is a stopwatch or pomodoro by its mode
+ *  (the modes are storage, the menus list them as widgets). */
+function shownType(w) {
+  const host = HOSTS[w.type] ?? w.type;
+  return host === "timer" ? ({ ...REGISTRY[w.type]?.defaults, ...w.settings }.mode || host) : host;
+}
+const widgetName = (w) => w.name || t("widget." + shownType(w));
 /** Header hint: the host widget's, for the mode or layout it shows (a mode switch saves, which refreshes it). */
 function hintOf(w) {
   const type = HOSTS[w.type] ?? w.type;
@@ -1348,6 +1354,70 @@ function locate(id) {
   setTimeout(() => el.classList.remove("w-locate"), 1700);
 }
 
+/**
+ * Change a widget's type (timer → stopwatch …): the old widget closes (its content stays in the Library) and a
+ * new one takes its place. Position, monitor, background and font stay.
+ */
+function changeType(w, type) {
+  const def = REGISTRY[type];
+  if (!def || type === w.type) return;
+  const from = { type: w.type, settings: w.settings };
+  const m = mounted.get(w.id);
+  m?.inst.destroy?.(); // flushes the last edit into w
+  m?.inst.unsub?.();
+  clearTimeout(pending.get(w.id));
+  pending.delete(w.id);
+  unsaved.delete(w.id);
+  retire(m);
+  mounted.delete(w.id);
+  closeContent(structuredClone(w));
+  w.id = crypto.randomUUID();
+  w.type = type;
+  w.settings = { ...structuredClone(def.defaults ?? {}), ...carried(from, type) };
+  delete w.name;
+  delete w.stash;
+  const min = def.min ?? { w: 1, h: 1 };
+  if (w.w < min.w || w.h < min.h) {
+    const g = metrics();
+    const r = {
+      w: clamp(Math.max(w.w, min.w), 1, g.cols),
+      h: clamp(Math.max(w.h, min.h), 1, g.rows),
+    };
+    r.x = clamp(w.x, 0, g.cols - r.w);
+    r.y = clamp(w.y, 0, g.rows - r.h);
+    const lay = resolve(w.id, r);
+    if (lay) applyLayout(lay, { commit: true });
+    else (Object.assign(w, r), toast(t("toast.overlap")));
+  }
+  mount(w);
+  save(w);
+  syncHits();
+  announce(t("a11y.type_changed", { name: t("widget." + type) }));
+}
+
+// Switching inside Images keeps the pictures (imgs), their labels, fit and frameless.
+// Switching between Now Playing and its "audioplayer" alias keeps the tracks and playback settings.
+// ponytail: Time widgets' run states don't map.
+// "collection" is no longer in groups.json (it is the Image widget's alias), so it counts as an Images member here.
+function carried(from, type) {
+  const media = (k) => k === "audioplayer" || k === "nowplaying";
+  if (media(from.type) && media(type)) {
+    const s = from.settings ?? {};
+    const out = {};
+    for (const k of ["tracks", "current", "volume", "shuffle", "loop"]) if (k in s) out[k] = structuredClone(s[k]);
+    return out;
+  }
+  const images = (k) => groupOf(k)?.id === "images";
+  if (!images(from.type) || !images(type)) return {};
+  const s = from.settings ?? {};
+  const to = REGISTRY[type].defaults ?? {};
+  const out = { frameless: !!s.frameless, imgs: Array.isArray(s.imgs) ? [...s.imgs] : [] };
+  for (const k of ["labels", "fit"]) if (k in to && s[k]) out[k] = structuredClone(s[k]);
+  return out;
+}
+
+// an old type (HOSTS) sits in its host's group
+const groupOf = (type) => GROUPS.find((g) => g.widgets.includes(HOSTS[type] ?? type));
 // Menu items for widget types; pick(type) runs on click.
 const typeItems = (types, pick) =>
   types.filter((k) => REGISTRY[k]).map((k) => ({ text: t("widget." + k), action: () => pick(k) }));
@@ -1380,6 +1450,8 @@ const displayName = (d) =>
 let lastMenu;
 async function openMenu(w, el, at) {
   const own = mounted.get(w.id)?.inst.menu?.() ?? [];
+  // a widget that holds the picked type as a mode (timer → stopwatch) switches in place; anything else is replaced
+  const pickType = (k) => (mounted.get(w.id)?.inst.showType?.(k) ? applyName(w) : changeType(w, k));
   const ownBlock = own.length ? [...own, { item: "Separator" }] : [];
   // free mode: widgets under the pointer, to select one that is covered (art programs: pick a layer)
   const under = at
@@ -1431,6 +1503,15 @@ async function openMenu(w, el, at) {
             },
           ]
         : []),
+      {
+        // siblings in the same group first, then every other group
+        text: t("menu.change_type"),
+        items: [
+          ...typeItems(groupOf(w.type)?.widgets.filter((k) => k !== shownType(w)) ?? [], pickType),
+          ...(groupOf(w.type)?.widgets.length > 1 ? [{ item: "Separator" }] : []),
+          { text: t("menu.other_types"), items: groupMenus(pickType, groupOf(w.type)) },
+        ],
+      },
       ...(others.length
         ? [
             {

@@ -95,7 +95,7 @@
   "set.about.licenses_body": "Readable fonts are bundled under the SIL Open Font License (OFL): Atkinson Hyperlegible, Lexend, OpenDyslexic.",
   "set.timer.alarm": "Alarm",
   "set.timer.presets": "Quick-start buttons",
-  "set.timer.presets_hint": "Buttons shown on the timer widget. Time: minutes (25), m:ss (1:30) or h:mm:ss (1:00:00). Label is optional.",
+  "set.timer.presets_hint": "Shown in the timer's right-click menu › Quick start. Time: minutes (25), m:ss (1:30) or h:mm:ss (1:00:00). Label is optional.",
   "set.timer.add_preset": "Add button",
   "set.timer.label_ph": "Label (optional)",
   "set.timer.time": "Time",

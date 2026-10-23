@@ -36,9 +36,6 @@ const css = `
     .pm-phase { font-weight: 600; padding: 1px 10px; border-radius: 999px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       background: var(--c2); color: var(--on-accent, #fff); }
     .pm.brk .pm-phase { background: color-mix(in srgb, var(--c3) 22%, transparent); color: var(--c3); }
-    .pm-dots { letter-spacing: 2px; color: var(--c2); white-space: nowrap; }
-    .pm-dots i { font-style: normal; opacity: .3; }
-    .pm-dots i.on { opacity: 1; }
     .pm-time { font-size: min(calc(108cqw / var(--len, 5)), 32cqh); font-weight: 600; line-height: 1; white-space: nowrap; flex: none;
       font-family: var(--font-num, var(--font)); font-variant-numeric: tabular-nums; }
     .pm.running.work .pm-time { color: var(--c2); }
@@ -46,14 +43,9 @@ const css = `
     body.reduce-motion .pm.ringing .pm-phase { animation: none; outline: 3px solid var(--c2); }
     @keyframes pm-blink { 50% { opacity: .3; } }
     .pm-ctrl { display: flex; gap: var(--space-3); flex: none; max-width: 100%; }
-    .pm-ctrl button { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    .pm-ctrl .ico { display: none; }
-    .pm-ctrl [data-a=skip] .lbl, .pm-ctrl [data-a=reset] .lbl, .pm-ctrl [data-a=auto] .lbl { display: none; }
-    .pm-ctrl [data-a=skip] .ico, .pm-ctrl [data-a=reset] .ico, .pm-ctrl [data-a=auto] .ico { display: inline; }
+    /* icon-only: the label stays as the button's title (tooltip and screen-reader name) */
+    .pm-ctrl .lbl { display: none; }
     .pm-ctrl [data-a=auto][aria-pressed=true] { color: var(--c2); border-color: var(--c2); }
-    .pm-link { font-size: var(--fs-small); padding: 1px 8px; max-width: 100%; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      color: var(--text-muted); background: none; border-color: transparent; font-variant-numeric: tabular-nums; }
-    .pm-link:hover { border-color: var(--line-color); }
     .pm-cap { font-size: var(--fs-small); font-weight: 600; padding: 2px 10px; border-radius: 999px; flex: none; max-width: 100%;
       background: var(--c2); color: var(--on-accent, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pm-set { position: absolute; inset: calc(var(--head-h) + 2px) 6px 6px; z-index: 7; padding: 10px; overflow-y: auto; scrollbar-width: thin;
@@ -72,10 +64,7 @@ const css = `
       border-radius: calc(var(--radius) * .4); padding: 3px 6px; outline: none; min-width: 0; }
     .pm-set input[type=number]:focus { border-color: var(--c2); }
     .pm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(7em, 1fr)); gap: var(--space-3); }
-    @container (max-width: 12em) { .pm-ctrl [data-a=go] .ico { display: inline; } .pm-ctrl [data-a=go] .lbl { display: none; } }
     @container (max-width: 13em) { .pm-ctrl [data-a=auto] { display: none; } } /* four buttons don't fit; the settings panel keeps it */
-    @container (max-height: 12em) { .pm-link { display: none; } }
-    @container (max-height: 8em) { .pm-top .pm-dots { display: none; } }
     @container (max-height: 6em) { .pm-ctrl, .pm-top { display: none; } }
   `;
 
@@ -100,7 +89,7 @@ export function pomodoro(root, s, api) {
 
   root.innerHTML = `
     <div class="pm">
-      <div class="pm-top"><span class="pm-phase"></span><span class="pm-dots" aria-hidden="true"></span></div>
+      <div class="pm-top"><span class="pm-phase"></span></div>
       <div class="pm-time" role="timer"></div>
       <div class="pm-cap" role="status" hidden></div>
       <div class="tl-away" role="status" hidden></div>
@@ -110,7 +99,6 @@ export function pomodoro(root, s, api) {
         <button data-a="reset" title="${t("pomo.reset")}"><span class="ico">${icon("reset")}</span><span class="lbl">${t("pomo.reset")}</span></button>
         <button data-a="auto" title="${t("pomo.auto")}"><span class="ico">${icon("repeat")}</span><span class="lbl">${t("pomo.auto")}</span></button>
       </div>
-      <button class="pm-link" data-a="settings"></button>
       <div class="pm-set" hidden></div>
     </div>`;
   const box = root.firstElementChild;
@@ -146,9 +134,6 @@ export function pomodoro(root, s, api) {
     time.style.setProperty("--len", Math.max(5, time.textContent.length));
     const phase = t("pomo." + s.phase);
     if (q(".pm-phase").textContent !== phase) q(".pm-phase").textContent = phase;
-    const dots = Array.from({ length: s.every }, (_, i) => `<i class="${i < s.round ? "on" : ""}">●</i>`).join("");
-    if (q(".pm-dots").innerHTML !== dots) q(".pm-dots").innerHTML = dots;
-    q(".pm-dots").title = t("pomo.round", { n: Math.min(s.round, s.every), total: s.every });
     box.classList.toggle("running", !!s.endAt);
     box.classList.toggle("work", s.phase === "work");
     box.classList.toggle("brk", s.phase !== "work");
@@ -159,11 +144,9 @@ export function pomodoro(root, s, api) {
     );
     q("[data-a=auto]").setAttribute("aria-pressed", s.auto);
   }
-  function renderLink() {
-    const b = q(".pm-link");
-    const text = t("pomo.today", { n: s.done });
-    if (b.textContent !== text) b.textContent = text;
-    b.title = t("pomo.settings");
+  // the round and today's count are the phase pill's tooltip, not text on the face
+  function renderTip() {
+    q(".pm-phase").title = `${t("pomo.round", { n: Math.min(s.round, s.every), total: s.every })} · ${t("pomo.today", { n: s.done })}`;
   }
   function renderAway() {
     const a = q(".tl-away");
@@ -236,7 +219,7 @@ export function pomodoro(root, s, api) {
     api.save();
     run();
     render();
-    renderLink();
+    renderTip();
     stopRing();
     box.classList.add("ringing");
     if (!sound) return;
@@ -315,7 +298,7 @@ export function pomodoro(root, s, api) {
   }
   function closeSettings() {
     q(".pm-set").hidden = true;
-    q(".pm-link").focus();
+    q("[data-a=go]").focus();
   }
   q(".pm-set").addEventListener("change", (e) => {
     const f = e.target.dataset.f;
@@ -329,7 +312,7 @@ export function pomodoro(root, s, api) {
     }
     api.save();
     render();
-    renderLink();
+    renderTip();
   });
   q(".pm-set").addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
@@ -351,7 +334,6 @@ export function pomodoro(root, s, api) {
       render();
     }
     else if (a === "reset") reset();
-    else if (a === "settings") openSettings();
     else if (a === "set-close") closeSettings();
     else if (a === "away-keep" || a === "away-cut") answerAway(a === "away-keep");
   });
@@ -359,7 +341,7 @@ export function pomodoro(root, s, api) {
     s.day = today();
     s.done = 0;
     api.save();
-    renderLink();
+    renderTip();
   });
 
   // Running from before this launch: the app closed properly then (pause there), or crashed (pause at this launch
@@ -379,13 +361,14 @@ export function pomodoro(root, s, api) {
   } else if (s.endAt && s.endAt <= Date.now()) finish(false); // ended while asleep: count it, show it, no sound
   run();
   render();
-  renderLink();
+  renderTip();
   renderAway();
   return {
     destroy() {
       clearInterval(tick);
       clearInterval(ringTimer);
     },
+    menu: () => [{ text: t("pomo.settings_menu"), action: openSettings }],
     summary: () => {
       const phase = t("pomo." + s.phase);
       return s.endAt

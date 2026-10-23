@@ -30,12 +30,6 @@
   "ck.add.today": "오늘 할 일 추가",
   "ck.add.week": "이번 주 할 일 추가",
   "ck.add.month": "이번 달 할 일 추가",
-  "ck.empty.today": "오늘 할 일이 없습니다. 아래 입력란에 추가하세요.",
-  "ck.empty.week": "이번 주 할 일을 추가해 보세요.",
-  "ck.empty.month": "이번 달 할 일을 추가해 보세요.",
-  "ck.all_done.today": "오늘 할 일을 모두 끝냈어요 🎉",
-  "ck.all_done.week": "이번 주 할 일을 모두 끝냈어요 🎉",
-  "ck.all_done.month": "이번 달 할 일을 모두 끝냈어요 🎉",
   "sum.ck": "오늘 할 일 {n}개 중 {done}개 완료",
   "sum.ck_empty": "오늘 할 일이 없습니다.",
   "hint.checklist": "클릭: 완료, F2: 수정"

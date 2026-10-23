@@ -51,10 +51,8 @@ export default {
     .ck-tabs button { flex: 1; min-width: 0; padding: 1px 4px; font-size: var(--fs-meta); white-space: nowrap; overflow: hidden;
       text-overflow: ellipsis; color: var(--text-muted); }
     .ck-tabs button.on { background: var(--c2); border-color: var(--c2); color: var(--on-accent); opacity: 1; }
-    .ck-tabs small { font-variant-numeric: tabular-nums; }
     .ck-head { display: flex; align-items: baseline; gap: var(--space-3); flex: none; min-width: 0; }
     .ck-date { flex: 1; min-width: 0; font-weight: 600; text-wrap: balance; word-break: keep-all; } /* a week range with its year wraps, never cut */
-    .ck-count { font-size: var(--fs-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; }
     .ck-sync { padding: 0 6px; font-size: var(--fs-meta); flex: none; color: var(--text-faint); }
     .ck-sync.on { color: var(--c3); }
     .ck-bar { height: 4px; border-radius: 2px; flex: none; background: color-mix(in srgb, var(--c3) 12%, transparent); overflow: hidden; }
@@ -72,8 +70,6 @@ export default {
     .ck-btn { padding: 0 5px; font-size: var(--fs-meta); opacity: 0; flex: none; }
     .ck-row:hover .ck-btn { opacity: .75; }
     .ck-btn.on { color: color-mix(in srgb, var(--c2) 90%, var(--c1)); }
-    .ck-empty { color: var(--text-faint); font-size: var(--fs-small); padding: 6px 4px; }
-    .ck-alldone { color: var(--c2); font-size: var(--fs-small); padding: 4px; text-align: center; }
     .ck-add { flex: none; width: 100%; box-sizing: border-box; }
     .ck-stamp { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 4; }
     .ck-stamp .mark { transform: rotate(var(--rot, -8deg)); animation: ck-stamp-in .25s ease-out; }
@@ -84,7 +80,7 @@ export default {
       font-weight: 800; line-height: 1.15; padding: .5em; opacity: .9; }
     @keyframes ck-stamp-in { from { transform: rotate(var(--rot, -8deg)) scale(1.5); opacity: 0; } }
     body.reduce-motion .ck-stamp .mark { animation: none; }
-    @container (max-width: 12em) { .ck-meta, .ck-tabs small { display: none; } }
+    @container (max-width: 12em) { .ck-meta { display: none; } }
   `,
   mount(root, s, api) {
     const { t, lang } = api;
@@ -98,7 +94,7 @@ export default {
       <div class="ck">
         <div class="ck-tabs">${TABS.map((k) => `<button data-tab="${k}"></button>`).join("")}</div>
         <div class="ck-head">
-          <span class="ck-date"></span><span class="ck-count"></span>
+          <span class="ck-date"></span>
           <button class="ck-sync" data-a="sync">${icon("calendar")}</button>
         </div>
         <div class="ck-bar"><i></i></div>
@@ -187,13 +183,13 @@ export default {
         const r = rowsFor(b.dataset.tab);
         const n = r.filter((x) => x.done).length;
         b.classList.toggle("on", b.dataset.tab === s.tab);
-        b.innerHTML = `${esc(t("ck.tab." + b.dataset.tab))}${r.length ? ` <small>${n}/${r.length}</small>` : ""}`;
-        b.title = t("ck.tab_hint." + b.dataset.tab);
+        b.textContent = t("ck.tab." + b.dataset.tab);
+        b.title = t("ck.tab_hint." + b.dataset.tab) + (r.length ? ` · ${n}/${r.length}` : "");
       }
       const rows = rowsFor(s.tab);
       const done = rows.filter((r) => r.done).length;
       q(".ck-date").textContent = periodLabel(s.tab);
-      q(".ck-count").textContent = rows.length ? `${done}/${rows.length}` : "";
+      q(".ck-bar").title = rows.length ? `${done}/${rows.length}` : "";
       q(".ck-bar i").style.width = rows.length
         ? `${(done / rows.length) * 100}%`
         : "0";
@@ -228,13 +224,7 @@ export default {
               ${when}${repeatBtn}
               <button class="ck-btn" data-a="del" title="${esc(t("dday.delete"))}">${icon("x")}</button></div>`;
           })
-          .join("") +
-        (!rows.length
-          ? `<div class="ck-empty">${esc(t("ck.empty." + s.tab))}</div>`
-          : "") +
-        (rows.length && done === rows.length
-          ? `<div class="ck-alldone">${esc(t("ck.all_done." + s.tab))}</div>`
-          : "");
+          .join("");
 
       // "day well done" stamp — only the Today tab, only when everything's ticked
       box.querySelector(".ck-stamp")?.remove();
