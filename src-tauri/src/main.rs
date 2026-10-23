@@ -51,8 +51,9 @@ fn widget_ids() -> Vec<&'static str> {
 }
 
 /// Tray menu order (same file the demo reads): (id, label key) per entry, "-" is a separator.
-/// Ids must be ones `build_menu` knows (TRAY_PLAIN plus the special-cased add, edit, lang).
-const TRAY_PLAIN: &[&str] = &["library", "search", "theme", "settings", "layouts", "toggle", "folder", "config", "update", "quit"];
+/// Ids must be ones `build_menu` knows (TRAY_PLAIN plus the special-cased add and edit).
+/// Kept short on purpose: language, theme, data folder and update checks live in Settings.
+const TRAY_PLAIN: &[&str] = &["toggle", "library", "settings", "quit"];
 fn tray_menu() -> &'static Vec<(String, String)> {
     static M: OnceLock<Vec<(String, String)>> = OnceLock::new();
     M.get_or_init(|| {
@@ -1131,6 +1132,11 @@ fn open_config_file(state: State<AppState>) {
     open_path(&state.dir.join("config.json"));
 }
 
+#[tauri::command]
+fn open_data_folder(state: State<AppState>) {
+    open_path(&state.dir);
+}
+
 // ---------- behaviour ----------
 
 /// Boards are ordinary windows (normal z-order); editing / keyboard mode lifts them to the top so nothing hides them.
@@ -1895,24 +1901,13 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
 
     let edit = CheckMenuItem::with_id(app, "edit", t("tray.edit_layout"), true, st.edit.load(Ordering::Relaxed), None::<&str>)?;
 
-    let lang_items = LOCALES
-        .iter()
-        .map(|(code, _)| {
-            let name = locales().get(code).and_then(|m| m.get("_name")).cloned().unwrap_or(code.to_string());
-            CheckMenuItem::with_id(app, format!("lang:{code}"), name, true, *code == s.lang, None::<&str>)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    let lang_refs: Vec<&dyn IsMenuItem<Wry>> = lang_items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
-    let lang = Submenu::with_items(app, t("tray.language"), true, &lang_refs)?;
-
-    // order and labels come from ui/tray-menu.json; add, edit and lang are special items
+    // order and labels come from ui/tray-menu.json; add and edit are special items
     let mut items: Vec<Box<dyn IsMenuItem<Wry>>> = Vec::new();
     for (id, label) in tray_menu() {
         match id.as_str() {
             "-" => items.push(Box::new(PredefinedMenuItem::separator(app)?)),
             "add" => items.push(Box::new(add.clone())),
             "edit" => items.push(Box::new(edit.clone())),
-            "lang" => items.push(Box::new(lang.clone())),
             plain if TRAY_PLAIN.contains(&plain) => items.push(Box::new(MenuItem::with_id(app, plain, t(label), true, None::<&str>)?)),
             _ => {}
         }
@@ -1941,41 +1936,16 @@ fn on_menu(app: &AppHandle, id: &str) {
         }
         return;
     }
-    if let Some(code) = id.strip_prefix("lang:") {
-        st.settings.lock().unwrap().lang = code.to_string();
-        st.persist_settings();
-        if let (Some(tray), Ok(menu)) = (app.tray_by_id(TRAY_ID), build_menu(app)) {
-            let _ = tray.set_menu(Some(menu));
-        }
-        retitle_windows(app, code);
-        let _ = app.emit("lang-changed", code);
-        return;
-    }
     match id {
         "edit" => apply_edit_mode(app, !st.edit.load(Ordering::Relaxed)),
         "settings" => {
             let _ = open_settings_window(app, "general");
         }
-        "layouts" => {
-            let _ = open_library_window(app, "layouts");
-        }
         "library" => {
             let _ = open_library_window(app, "items");
         }
-        "search" => {
-            let _ = open_library_window(app, "search");
-        }
-        "theme" => {
-            let _ = open_settings_window(app, "appearance");
-        }
         "toggle" => toggle_boards(app),
-        "folder" => open_path(&st.dir),
-        "config" => open_path(&st.dir.join("config.json")),
         "quit" => app.exit(0),
-        "update" => {
-            let h = app.clone();
-            std::thread::spawn(move || run_update_check(&h, true));
-        }
         "update-available" => {
             let _ = open_settings_window(app, "about");
         }
@@ -2093,6 +2063,7 @@ fn main() {
             list_assets,
             list_fonts,
             open_config_file,
+            open_data_folder,
             media_subscribe,
             media_control,
             save_config,
@@ -2153,7 +2124,7 @@ mod tests {
             if id == "-" {
                 continue;
             }
-            assert!(TRAY_PLAIN.contains(&id.as_str()) || ["add", "edit", "lang"].contains(&id.as_str()), "build_menu does not know tray id {id}");
+            assert!(TRAY_PLAIN.contains(&id.as_str()) || ["add", "edit"].contains(&id.as_str()), "build_menu does not know tray id {id}");
             for (code, src) in LOCALES {
                 let m: HashMap<String, String> = serde_json::from_str(src).unwrap();
                 assert!(m.contains_key(label), "{code}.json lacks tray label {label}");

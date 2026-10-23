@@ -99,6 +99,7 @@
   "demo.sample.artist": "Sample Artist",
   "tut.title": "Tutorial",
   "tut.next": "Next",
+  "tut.back": "Back",
   "tut.skip": "Skip tutorial",
   "tut.finish": "Finish",
   "tut.t1.tray": "WidgetBoard lives in the taskbar. Right-click its icon. Left-click hides or shows all widgets.",

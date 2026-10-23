@@ -2745,6 +2745,10 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   if (DEMO) (await import("./tutorial/runner.js")).startTutorial({
     t,
     focus: REGISTRY[DEMO_FOCUS] ? DEMO_FOCUS : null,
+    setEdit: (on) => {
+      if (on) document.body.classList.remove("demo-board-off"); // a hidden board (tray left-click) would hide the grid too
+      if (on !== editMode) invoke("set_edit_mode", { on });
+    },
     close: () => (T.demoWindow ?? T.webviewWindow.getCurrentWebviewWindow()).close(),
   });
 

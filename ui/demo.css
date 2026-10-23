@@ -159,5 +159,6 @@ body.demo-board-off > :not(#demo-wallpaper):not(#demo-taskbar):not(#demo-frame):
 #tutorial-card p { margin: 0 0 12px; }
 #tutorial-card div { display: flex; justify-content: flex-end; gap: 8px; }
 #tutorial-card button { padding: 6px 14px; }
+#tutorial-card #tutorial-skip { margin-right: auto; }
 .tutorial-target { outline: 3px solid var(--c2, #82b7ff) !important; outline-offset: 3px; }
 body.demo-board-off > #tutorial-card { visibility: visible; pointer-events: auto; }

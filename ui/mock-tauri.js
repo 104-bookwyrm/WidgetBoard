@@ -455,6 +455,7 @@ export function createMockTauri({ memory = false } = {}) {
         return;
       case "open_theme_file":
       case "open_config_file":
+      case "open_data_folder":
       case "open_backups_folder":
         native(cmd);
         return;

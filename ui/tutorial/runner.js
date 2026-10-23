@@ -1,8 +1,9 @@
+// [key, highlighted element, edit mode the step needs]: render() sets it, so Next and Back never land on a grid step without the grid
 const steps = [
-  ["tray", "#demo-tray"], ["edit", "#demo-tray"], ["grid", "#editbar"],
-  ["move", ".widget:not(.hidden) .w-head"], ["resize", ".widget:not(.hidden) .w-resize"],
-  ["push", ".widget:not(.hidden)"], ["menu", ".widget:not(.hidden)"],
-  ["add", "#board"], ["done", "#edit-done"], ["end", null],
+  ["tray", "#demo-tray", false], ["edit", "#demo-tray", false], ["grid", "#editbar", true],
+  ["move", ".widget:not(.hidden) .w-head", true], ["resize", ".widget:not(.hidden) .w-resize", true],
+  ["push", ".widget:not(.hidden)", true], ["menu", ".widget:not(.hidden)", true],
+  ["add", "#board", true], ["done", "#edit-done", true], ["end", null, false],
 ];
 
 const isReturn = (event) => event.key === "Enter" || event.key === "Return";
@@ -34,7 +35,7 @@ function startGuide({ t, close, focus }) {
   document.addEventListener("keydown", onKey);
 }
 
-export function startTutorial({ t, close, focus = null }) {
+export function startTutorial({ t, close, setEdit, focus = null }) {
   if (focus) return startGuide({ t, close, focus });
   let index = 0;
   let target;
@@ -43,7 +44,7 @@ export function startTutorial({ t, close, focus = null }) {
   card.setAttribute("role", "region");
   card.setAttribute("aria-label", t("tut.title"));
   card.setAttribute("aria-live", "polite");
-  card.innerHTML = '<p id="tutorial-count"></p><p id="tutorial-text"></p><div><button id="tutorial-skip" type="button"></button><button id="tutorial-next" type="button"></button></div>';
+  card.innerHTML = '<p id="tutorial-count"></p><p id="tutorial-text"></p><div><button id="tutorial-skip" type="button"></button><button id="tutorial-back" type="button"></button><button id="tutorial-next" type="button"></button></div>';
   document.body.append(card);
   const finish = () => {
     document.removeEventListener("tutorial-action", onAction);
@@ -54,16 +55,21 @@ export function startTutorial({ t, close, focus = null }) {
   };
   const render = () => {
     target?.classList.remove("tutorial-target");
-    const [key, selector] = steps[index];
+    const [key, selector, edit] = steps[index];
+    setEdit(edit);
     target = selector && document.querySelector(selector);
     target?.classList.add("tutorial-target");
     card.querySelector("#tutorial-count").textContent = `${index + 1} / ${steps.length}`;
     card.querySelector("#tutorial-text").textContent = t(`tut.t1.${key}`);
     card.querySelector("#tutorial-next").textContent = t(index === steps.length - 1 ? "tut.finish" : "tut.next");
     card.querySelector("#tutorial-skip").textContent = t("tut.skip");
+    const back = card.querySelector("#tutorial-back");
+    back.textContent = t("tut.back");
+    back.hidden = index === 0;
   };
   const next = () => { if (index === steps.length - 1) finish(); else { index++; render(); } };
   card.querySelector("#tutorial-next").onclick = next;
+  card.querySelector("#tutorial-back").onclick = () => { if (index > 0) { index--; render(); } };
   card.querySelector("#tutorial-skip").onclick = finish;
   const onAction = (event) => {
     if (event.detail === steps[index][0] || (event.detail === "push" && steps[index][0] === "move")) next();

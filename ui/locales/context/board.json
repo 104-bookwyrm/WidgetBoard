@@ -14,6 +14,7 @@
   "demo.sample.artist": "Artist name of the pretend track on the demo board's Now Playing widget. It must read as an obvious placeholder, 2 words.",
   "tut.title": "Tutorial demo: title instruction or control label.",
   "tut.next": "Tutorial demo: next instruction or control label.",
+  "tut.back": "Tutorial demo: button that returns to the previous step.",
   "tut.skip": "Tutorial demo: skip instruction or control label.",
   "tut.finish": "Tutorial demo: finish instruction or control label.",
   "tut.t1.tray": "Tutorial demo: tray instruction or control label.",

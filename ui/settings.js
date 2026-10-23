@@ -606,6 +606,8 @@ function confirmRestore(row, path) {
 function bindBackup() {
   $("#backup-open").onclick = () =>
     invoke("open_backups_folder").catch(() => {});
+  $("#backup-folder").onclick = () =>
+    invoke("open_data_folder").catch(() => {});
   $("#backup-config").onclick = () =>
     invoke("open_config_file").catch(() => {});
   $("#backup-now").onclick = () => {

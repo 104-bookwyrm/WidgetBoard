@@ -11,7 +11,7 @@
     },
     "demo-image": {
       "id": "demo-image", "type": "image", "name": "", "tags": [], "rev": 1, "created": 1767603600, "updated": 1767603600, "deletedAt": null,
-      "data": { "imgs": ["sample-1.png", "sample-2.png", "sample-3.png"], "labels": {} }
+      "data": { "imgs": ["sample-1.jpg", "sample-2.jpg", "sample-3.jpg"], "labels": {} }
     },
     "demo-memo": {
       "id": "demo-memo", "type": "memo", "name": "", "tags": [], "rev": 1, "created": 1767603600, "updated": 1767603600, "deletedAt": null,

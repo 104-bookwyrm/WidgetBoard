@@ -6,5 +6,6 @@
   "set.tutorial.level": "Heading for one tutorial ledger level. {n} is the level number 1, 2 or 3.",
   "set.tutorial.seen": "Accessible status appended to a tutorial entry the user has already encountered.",
   "set.tutorial.whats_new": "Heading for the current version's newly introduced tutorial entries.",
-  "set.guide.try": "Button on a widget Guide entry that opens an isolated demo focused on that widget type."
+  "set.guide.try": "Button on a widget Guide entry that opens an isolated demo focused on that widget type.",
+  "set.backup.open_folder": "Settings > Backup and data: button that opens the WidgetBoard data folder in File Explorer. Replaces the old tray item."
 }

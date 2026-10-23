@@ -81,7 +81,7 @@ export async function loadDataset({ invoke, t, display, place, focusWidget = nul
     canPrev: true,
     canSeek: true,
     sessions: 1,
-    thumb: `${ASSETS}/sample-cover.png`,
+    thumb: `${ASSETS}/sample-cover.jpg`,
   };
   return { widgets, assetsDir: ASSETS };
 }
