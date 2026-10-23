@@ -1,7 +1,7 @@
 // Timer widget with three modes (s.mode): "timer" (countdown, below), "stopwatch" (stopwatch.js), "pomodoro" (pomodoro.js).
-// Each mode is its own renderer in its own host element, so its listeners go away with it. Switching is allowed only
-// while the current mode is at rest (busy()), and resets the keys the modes share (remaining, endAt, startedAt, runId,
-// cuts, away); every other key belongs to one mode and is kept.
+// Each mode is its own renderer in its own host element, so its listeners go away with it. A switch first halts the
+// current mode (a running one stops and its time goes to the record), then resets the keys the modes share (remaining,
+// endAt, startedAt, runId, cuts, away); every other key belongs to one mode and is kept.
 import { icon } from "../icons.js";
 import { fmt, beep, unlockAudio } from "./timekit.js";
 import { stopwatch, swMode } from "./stopwatch.js";
@@ -217,6 +217,11 @@ function countdown(root, s, api) {
       clearInterval(tick);
       clearInterval(ringTimer);
     },
+    // before a switch to another mode: stop as the pause button would
+    halt() {
+      stopRing();
+      if (s.endAt) pause();
+    },
     menu: () => {
       const items = presets();
       return items.length ? [{ text: t("timer.presets_menu"), items }] : [];
@@ -237,8 +242,6 @@ const timerMode = {
   min: { w: 2, h: 2 },
   defaults: { duration: 300000, remaining: 300000, endAt: null, startedAt: null },
   css,
-  /** Not safe to switch away: counting down, or paused partway. */
-  busy: (s) => !!(s.endAt || (s.remaining > 0 && s.remaining < s.duration)),
   /** The keys shared between modes, at rest: the full duration. */
   idle: (s) => ({
     remaining: s.duration > 0 ? s.duration : timerMode.defaults.duration,
@@ -301,9 +304,10 @@ export default {
       inner.destroy?.();
       scoped.off();
     };
-    const busy = () => MODES[s.mode].busy(s);
+    // a running mode stops first (its time goes to the record), then the shared keys reset
     const switchTo = (mode) => {
-      if (s.mode === mode || busy()) return;
+      if (s.mode === mode) return;
+      inner.halt?.();
       stop();
       host.remove();
       Object.assign(s, MODES[mode].idle(s), { mode });
@@ -319,8 +323,7 @@ export default {
       // the board's change-type menu lists the modes as widgets; picking one switches here (true = handled)
       showType(type) {
         if (!Object.hasOwn(MODES, type)) return false;
-        if (s.mode !== type && busy()) api.toast?.(t("timer.mode_busy")); // a running or paused mode cannot be left
-        else switchTo(type);
+        switchTo(type);
         return true;
       },
     };

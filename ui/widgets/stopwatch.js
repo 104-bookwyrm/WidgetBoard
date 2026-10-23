@@ -28,6 +28,9 @@ const css = `
     .sw-ctrl { display: flex; gap: var(--space-3); flex: none; max-width: 100%; }
     /* icon-only: the label stays as the button's title (tooltip and screen-reader name) */
     .sw-ctrl .lbl { display: none; }
+    /* the keep / take-out question needs the room while it is asked */
+    .sw:has(.tl-away:not([hidden])) { gap: 3cqh; }
+    .sw:has(.tl-away:not([hidden])) .sw-main { font-size: min(calc(108cqw / var(--len, 5)), 20cqh); }
     @container (max-height: 5.5em) { .sw-ctrl { display: none; } }
   `;
 
@@ -226,6 +229,11 @@ export function stopwatch(root, s, api) {
   load();
   return {
     destroy: () => clearInterval(tick),
+    // before a switch to another mode: the run ends and goes to the record; an open keep / take-out question keeps it
+    halt() {
+      if (s.startedAt) stop();
+      if (s.away) answerAway(true);
+    },
     menu: () => [
       {
         text: t("sw.cat_menu"),
@@ -259,8 +267,6 @@ export const swMode = {
   // total: the pre-log total, carried into the log once (see carryId)
   defaults: { startedAt: null, elapsed: 0, total: 0, laps: [], cat: "focus", since: 0, runId: null, cuts: [], away: null },
   css,
-  /** Not safe to switch away: a run is going, or its keep / take-out question is unanswered. */
-  busy: (s) => !!(s.startedAt || s.runId || s.away),
   /** The keys shared between modes, at rest. */
   idle: () => ({ remaining: 0, endAt: null, startedAt: null, runId: null, cuts: [], away: null }),
 };

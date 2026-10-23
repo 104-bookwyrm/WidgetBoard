@@ -104,7 +104,7 @@ copy/paste menu; right-click the widget's header or edge to open the widget menu
 **In Edit layout**, that menu also offers background image set/remove, **Move to display** and
 **Change widget type ›**. Changing type keeps the widget's position and appearance. Each type retains its own
 content, so switching back restores the memo text, timer settings or photo list. A larger type may need more grid space.
-Timer, Stopwatch and Pomodoro switch in place (stop and reset a running one first).
+Timer, Stopwatch and Pomodoro switch in place; a running one stops first and its time stays in the record.
 
 Closing shows **Undo** for 7 seconds. The widget also goes to the [closed widgets bin](#names-hiding-and-closed-widgets).
 
@@ -303,7 +303,7 @@ One page per day, saved automatically as you type.
 ### 타이머 · Timer (3×2 / 2×2)
 
 **타이머 (timer)**, **스톱워치 (stopwatch)** and **포모도로 (pomodoro)** are listed as three widgets. In Edit layout,
-_다른 위젯으로 바꾸기_ switches between them in place; a running or paused one has to be reset first. The faces show
+_다른 위젯으로 바꾸기_ switches between them in place; a running one stops first, and its time stays in the record. The faces show
 only the time and icon buttons (hover a button for its name); everything else is in the right-click menu.
 
 #### Timer mode

@@ -368,6 +368,12 @@ export function pomodoro(root, s, api) {
       clearInterval(tick);
       clearInterval(ringTimer);
     },
+    // before a switch to another mode: pause (focus time so far goes to the record); an open question keeps it
+    halt() {
+      stopRing();
+      if (s.endAt) pause();
+      if (s.away) answerAway(true);
+    },
     menu: () => [{ text: t("pomo.settings_menu"), action: openSettings }],
     summary: () => {
       const phase = t("pomo." + s.phase);
@@ -385,11 +391,6 @@ export const pmMode = {
   min: { w: 2, h: 2 },
   defaults: DEFAULTS,
   css,
-  /** Not safe to switch away: a phase is running or paused partway, or its keep / take-out question is unanswered. */
-  busy: (s) => {
-    const len = (Number(s[s.phase]) || DEFAULTS[s.phase] || DEFAULTS.work) * 60000;
-    return !!(s.endAt || s.workFrom != null || s.away || (s.remaining > 0 && s.remaining < len));
-  },
   /** The keys shared between modes, at rest: the current phase untouched. */
   idle: (s) => {
     const phase = PHASES.includes(s.phase) ? s.phase : "work";
