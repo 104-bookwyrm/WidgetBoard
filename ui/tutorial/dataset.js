@@ -24,7 +24,7 @@ const getJson = async (path) => {
  * `invoke` is app.js's backend call, `t` its translator, `display` this board's monitor id and `place(slots)` the
  * board's packSlots on the current grid. Returns what load_state would: { widgets, assetsDir }.
  */
-export async function loadDataset({ invoke, t, display, place, focusWidget = null }) {
+export async function loadDataset({ invoke, t, display, place, focusWidget = null, only = false }) {
   const [manifest, layout, events, content] = await Promise.all(
     ["manifest.json", "layout.json", "data/events.json", "data/content.json"].map(getJson),
   );
@@ -57,6 +57,7 @@ export async function loadDataset({ invoke, t, display, place, focusWidget = nul
     const sample = index >= 0 ? samples.splice(index, 1)[0] : structuredClone(focusWidget);
     delete sample.hidden;
     samples.unshift(sample);
+    if (only) samples.length = 1; // the gallery preview: just this widget
   }
   const entries = samples.map((source) => ({ source, slot: [source.type, source.w, source.h] }));
   const bySlot = new Map(entries.map((entry) => [entry.slot, entry.source]));

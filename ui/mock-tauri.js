@@ -31,10 +31,19 @@ export function createMockTauri({ memory = false } = {}) {
         removeItem: (k) => localStorage.removeItem(k),
         keys: () => Object.keys(localStorage),
       };
-  // the demo window passes the user's theme and config in as a snapshot (set by Rust's open_demo)
-  if (memory && window.__demoInit) {
-    mem.set("wb-theme", String(window.__demoInit.theme ?? ""));
-    mem.set("wb-config", JSON.stringify(window.__demoInit.config ?? {}));
+  // the demo window gets the user's theme and config as a snapshot (set by Rust's open_demo); a widget-menu
+  // preview frame gets the same snapshot from the page around it (library.js sets __previewInit)
+  const parentInit = () => {
+    try {
+      return window.parent !== window ? window.parent.__previewInit : null;
+    } catch {
+      return null; // a parent on another origin
+    }
+  };
+  const init = memory ? window.__demoInit ?? parentInit() : null;
+  if (init) {
+    mem.set("wb-theme", String(init.theme ?? ""));
+    mem.set("wb-config", JSON.stringify(init.config ?? {}));
   }
   const get = (key, fallback = null) =>
     JSON.parse(store.getItem(key) ?? JSON.stringify(fallback));

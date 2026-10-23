@@ -27,7 +27,9 @@ import { loadCatalogue, readHelp, patchHelp, claimHelp } from "./help.js";
 // preview, the demo) only replaces T, so a direct call reaches real app data from a page that must not touch it.
 // The demo (?demo) runs on an in-memory mock with nothing saved; only the native menus are real.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const DEMO_FOCUS = DEMO ? new URLSearchParams(location.search).get("focus") : null;
+// ?demo&preview=<type>: one live sample widget, centred, no stage or tutorial (the widget gallery shows it in a frame)
+const PREVIEW = DEMO ? new URLSearchParams(location.search).get("preview") : null;
+const DEMO_FOCUS = DEMO ? PREVIEW || new URLSearchParams(location.search).get("focus") : null;
 const T = DEMO
   ? {
       ...createMockTauri({ memory: true }),
@@ -2699,9 +2701,12 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       readHelp(invoke).catch(() => helpState),
     ]);
   if (DEMO) {
-    await (await import("./demo.js")).mountStage({ T, invoke, toast, groupMenus, isEdit: () => editMode });
+    if (PREVIEW) document.body.classList.add("preview");
+    else await (await import("./demo.js")).mountStage({ T, invoke, toast, groupMenus, isEdit: () => editMode });
     // sample board into the mock's memory; after the stage so the grid has its final size
-    const place = (slots) => ((m) => packSlots(slots, m.cols, m.rows))(metrics());
+    const place = (slots) => ((m) => PREVIEW
+      ? slots.map((s) => ({ slot: s, w: s[1], h: s[2], x: Math.max(0, (m.cols - s[1]) >> 1), y: Math.max(0, (m.rows - s[2]) >> 1) }))
+      : packSlots(slots, m.cols, m.rows))(metrics());
     const def = REGISTRY[DEMO_FOCUS];
     const focusWidget = def && {
       id: `demo-guide-${DEMO_FOCUS}`,
@@ -2711,7 +2716,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       settings: structuredClone(def.defaults ?? {}),
     };
     Object.assign(st, await (await import("./tutorial/dataset.js")).loadDataset({
-      invoke, t, display: st.display, place, focusWidget,
+      invoke, t, display: st.display, place, focusWidget, only: !!PREVIEW,
     }).catch(reportError));
   }
   myDisplay = st.display || "";
@@ -2742,7 +2747,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   setTimeout(() => (reflow(), (document.documentElement.dataset.reflowed = "")), 400);
   setEdit(!!st.edit);
   syncHits();
-  if (DEMO) (await import("./tutorial/runner.js")).startTutorial({
+  if (DEMO && !PREVIEW) (await import("./tutorial/runner.js")).startTutorial({
     t,
     focus: REGISTRY[DEMO_FOCUS] ? DEMO_FOCUS : null,
     setEdit: (on) => {

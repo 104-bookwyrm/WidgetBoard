@@ -5,6 +5,8 @@ import { loadLang, t, applyStatic } from "./i18n.js";
 import { sanitize, copyText } from "./theme.js";
 import { syncScheme, esc, assetUrl, fold, appWindow } from "./util.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
+import GROUPS from "./widgets/groups.json" with { type: "json" };
+import CATALOGUE from "./help/catalogue.json" with { type: "json" };
 import { COLORS } from "./widgets/memo.js";
 import { fmt as fmtTimer } from "./widgets/timer.js";
 import { fmtTotal } from "./widgets/stopwatch.js";
@@ -35,7 +37,9 @@ let events = null; // calendar events, loaded on the first search
 let filter = "all"; // "all" | a type | "deleted"
 let assetsDir = "";
 let lang = "ko";
-let tab = "items"; // "items" | "layouts"
+let tab = "items"; // "items" | "browse" | "layouts"
+let version = "";
+let browsing = GROUPS[0].widgets[0]; // the widget type shown in Browse
 let renaming = null; // id being renamed
 let confirming = null; // id asking "delete permanently?"
 
@@ -213,12 +217,62 @@ $(".lay-save").addEventListener("click", async () => {
 $(".lay-undo").addEventListener("click", () => toBoard("undo-layout"));
 
 function showTab(name) {
-  tab = name === "layouts" ? "layouts" : "items";
+  tab = ["layouts", "browse"].includes(name) ? name : "items";
   for (const b of document.querySelectorAll(".lib-tabs [data-tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   $(".lib-items").hidden = tab !== "items";
+  $(".lib-browse").hidden = tab !== "browse";
   $(".lib-layouts").hidden = tab !== "layouts";
   if (tab === "layouts") renderLayouts();
+  if (tab === "browse") renderBrowse();
 }
+
+// ---- Browse: every widget type, live, in the middle. The card only says what the widget can't show by itself. ----
+// gal.<type>.1, .2, ... are optional; most widgets borrow a design people know and have none.
+const notes = (type) => {
+  const out = [];
+  for (let i = 1; t(`gal.${type}.${i}`) !== `gal.${type}.${i}`; i++) out.push(t(`gal.${type}.${i}`));
+  return out;
+};
+const isNew = (type) => !!version && CATALOGUE.some((e) => e.kind === "guide" && e.type === type && e.since === version);
+// the preview frame's snapshot of the user's look, as Rust's open_demo builds it (the frame reads it, never real data)
+function setPreviewInit(theme, config) {
+  const c = structuredClone(config && typeof config === "object" ? config : {});
+  c.ui = { ...(c.ui ?? {}), layoutMode: "grid", flashAlert: true };
+  window.__previewInit = { theme, config: c };
+}
+function renderBrowse() {
+  const list = $(".gal-list");
+  list.replaceChildren();
+  for (const group of GROUPS) {
+    const h = document.createElement("h3");
+    h.textContent = t(`group.${group.id}`);
+    list.append(h);
+    for (const type of group.widgets) {
+      const b = document.createElement("button");
+      b.dataset.type = type;
+      b.textContent = t(`widget.${type}`);
+      if (isNew(type)) b.insertAdjacentHTML("beforeend", `<span class="gal-new">${esc(t("lib.gal_new"))}</span>`);
+      if (type === browsing) b.setAttribute("aria-current", "true");
+      list.append(b);
+    }
+  }
+  const group = GROUPS.find((g) => g.widgets.includes(browsing));
+  $(".gal-group").textContent = group ? t(`group.${group.id}`) : "";
+  $(".gal-card h2").textContent = t(`widget.${browsing}`);
+  $(".gal-notes").replaceChildren(...notes(browsing).map((n) => Object.assign(document.createElement("li"), { textContent: n })));
+  const frame = $(".gal-stage iframe");
+  frame.title = t(`widget.${browsing}`);
+  const src = `index.html?demo&preview=${encodeURIComponent(browsing)}&lang=${encodeURIComponent(lang)}`;
+  if (frame.getAttribute("src") !== src) frame.src = src;
+}
+$(".gal-list").addEventListener("click", (e) => {
+  const type = e.target.closest("[data-type]")?.dataset.type;
+  if (type && type !== browsing) (browsing = type), renderBrowse();
+});
+$(".gal-add").addEventListener("click", () => {
+  toBoard("add-widget", browsing);
+  flash(t("lib.gal_added", { name: t(`widget.${browsing}`) }));
+});
 $(".lib-tabs").addEventListener("click", (e) => {
   const name = e.target.closest("[data-tab]")?.dataset.tab;
   if (name) showTab(name);
@@ -399,9 +453,11 @@ function applyTheme(css) {
 
 (async function init() {
   const data = await invoke("get_settings");
+  version = data.version || "";
   assetsDir = data.assetsDir || "";
   lang = data.app.lang;
   applyTheme(data.theme);
+  setPreviewInit(data.theme, data.config);
   await loadLang(data.app.lang, "library");
   applyStatic();
   await load();
@@ -413,18 +469,23 @@ function applyTheme(css) {
   });
   // which page the tray / menu asked for: items, search (cursor in the box) or layouts
   const openPage = (page) => {
-    showTab(page === "layouts" ? "layouts" : "items");
+    showTab(["layouts", "browse"].includes(page) ? page : "items");
     if (page === "search") $(".lib-search").focus();
   };
   await listen("library-page", openPage);
   openPage(new URLSearchParams(location.search).get("page") || "items");
-  await listen("theme-changed", applyTheme);
+  await listen("theme-changed", (css) => {
+    applyTheme(css);
+    setPreviewInit(css, window.__previewInit?.config);
+    if (tab === "browse") $(".gal-stage iframe").contentWindow?.location.reload();
+  });
   await listen("lang-changed", async (code) => {
     lang = code;
     await loadLang(code, "library");
     applyStatic();
     render();
     if (tab === "layouts") renderLayouts();
+    if (tab === "browse") renderBrowse();
   });
   addEventListener("focus", load); // widgets closed or opened on the board since
   document.addEventListener("keydown", (e) => {

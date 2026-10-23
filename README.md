@@ -365,7 +365,7 @@ Player app, VLC - using Windows' own media controls (the same source as the volu
 
 ### 이미지 · Image (2×2 / 1×1)
 
-Your pictures in two layouts. Right-click → _레이아웃_ switches between **슬라이드쇼 (slideshow)** and **모아 보기 (grid)**.
+Your pictures in two layouts. Right-click → _레이아웃_ switches between **슬라이드쇼 (slideshow)** and **갤러리 (grid)**.
 
 #### Slideshow
 
@@ -603,7 +603,7 @@ A key made before that is upgraded once with `node tools/release.mjs encrypt`. F
 
 **Tests**: a small set, kept short on purpose (about 30 s). `tests/smoke.mjs` checks the bugs that keep coming
 back: every widget type mounts, a save survives a reload, grid and free moves, the time record, stopping on close,
-the timer ringing, the Settings and Library windows opening, and both languages having the same keys. It never
+the timer ringing, the Settings and widget menu windows opening, and both languages having the same keys. It never
 checks displayed text, so copy can change freely. Anything else is debugged when it breaks.
 Run `npm install`, `npx playwright install chromium`, then `npm test`. The tests serve UI files through Playwright
 without a background server. Set `PW_CHROMIUM` to use another Chromium executable. Rust unit tests (`cargo test`

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title data-i18n="lib.title">보관함</title>
+    <title data-i18n="lib.title">위젯 메뉴</title>
     <link rel="stylesheet" href="default-theme.css" />
     <link rel="stylesheet" href="base.css" />
     <style>
@@ -242,6 +242,86 @@
         text-align: center;
         padding: 40px 0;
       }
+      /* Browse: widget list | the live widget, centred | a short card */
+      .lib-browse {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 150px minmax(0, 1fr) 220px;
+      }
+      .gal-list {
+        overflow-y: auto;
+        padding: 6px 8px 12px;
+        border-right: var(--line-width) var(--line-style) var(--line-color);
+      }
+      .gal-list h3 {
+        margin: 12px 8px 4px;
+        font-size: 0.8em;
+        font-weight: normal;
+        color: var(--text-muted);
+      }
+      .gal-list button {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 6px 8px;
+        border: 0;
+        border-radius: 6px;
+        background: none;
+        text-align: start;
+      }
+      .gal-list button[aria-current="true"] {
+        background: var(--c2);
+        color: #fff;
+      }
+      .gal-new {
+        margin-left: auto;
+        padding: 0 6px;
+        border-radius: 999px;
+        background: var(--c2);
+        color: #fff;
+        font-size: 0.75em;
+      }
+      .gal-stage {
+        position: relative;
+        min-width: 0;
+      }
+      .gal-stage iframe {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: transparent;
+      }
+      .gal-card {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 16px;
+        overflow-y: auto;
+        border-left: var(--line-width) var(--line-style) var(--line-color);
+      }
+      .gal-card h2 {
+        margin: 0;
+        font-size: 1.3em;
+      }
+      .gal-group {
+        margin: 0;
+        color: var(--text-muted);
+        font-size: 0.85em;
+      }
+      .gal-notes {
+        margin: 4px 0 0;
+        padding-left: 1.1em;
+      }
+      .gal-notes li + li {
+        margin-top: 6px;
+      }
+      .gal-add {
+        margin-top: auto;
+      }
       .lib-flash {
         position: fixed;
         bottom: 16px;
@@ -258,6 +338,7 @@
   <body class="app-window">
     <div class="lib-tabs" role="tablist">
       <button role="tab" data-tab="items" data-i18n="lib.items_tab"></button>
+      <button role="tab" data-tab="browse" data-i18n="lib.browse_tab"></button>
       <button role="tab" data-tab="layouts" data-i18n="lib.layouts_tab"></button>
     </div>
     <div class="lib-items">
@@ -266,6 +347,16 @@
       </div>
       <nav class="lib-chips" role="toolbar"></nav>
       <main class="lib-grid" aria-live="polite"></main>
+    </div>
+    <div class="lib-browse" hidden>
+      <nav class="gal-list" data-i18n-aria-label="lib.browse_tab"></nav>
+      <div class="gal-stage"><iframe title=""></iframe></div>
+      <aside class="gal-card" aria-live="polite">
+        <p class="gal-group"></p>
+        <h2></h2>
+        <ul class="gal-notes"></ul>
+        <button class="gal-add primary" data-i18n="lib.gal_add"></button>
+      </aside>
     </div>
     <main class="lib-layouts" hidden>
       <p class="hint" data-i18n="lay.help"></p>

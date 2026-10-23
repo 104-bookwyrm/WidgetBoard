@@ -11,7 +11,7 @@
   "image.shuffle": "셔플",
   "image.layout": "레이아웃",
   "image.slideshow": "슬라이드쇼",
-  "image.grid": "모아 보기",
+  "image.grid": "갤러리",
   "sum.image_empty": "사진 없음",
   "hint.image": "끌어다 놓기 또는 우클릭: 사진 추가",
   "hint.image_grid": "끌어다 놓기: 사진 추가, 드래그: 순서 변경, 더블클릭: 이름 붙이기",

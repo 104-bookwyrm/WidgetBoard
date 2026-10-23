@@ -25,8 +25,8 @@
   "group.time": "시간",
   "group.images": "이미지",
   "group.media": "미디어",
-  "tray.library": "보관함 · 검색…",
-  "lib.title": "보관함",
+  "tray.library": "위젯 메뉴…",
+  "lib.title": "위젯 메뉴",
   "widget.pomodoro": "포모도로",
   "demo.title": "위젯보드 체험"
 }

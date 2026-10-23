@@ -25,8 +25,8 @@
   "group.time": "Time",
   "group.images": "Images",
   "group.media": "Media",
-  "tray.library": "Library and search…",
-  "lib.title": "Library",
+  "tray.library": "Widget menu…",
+  "lib.title": "Widget menu",
   "widget.pomodoro": "Pomodoro",
   "demo.title": "WidgetBoard demo"
 }

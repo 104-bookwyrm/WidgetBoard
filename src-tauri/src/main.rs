@@ -969,9 +969,9 @@ async fn open_demo(app: AppHandle, origin: String, focus: Option<String>) -> Res
 }
 
 /// The Library: every content item, on the board or not, plus Recently deleted.
-/// `page`: "items" (default), "search" (cursor in the search box) or "layouts" (the Layouts tab).
+/// `page`: "items" (default), "search" (cursor in the search box), "browse" or "layouts" (those tabs).
 fn open_library_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
-    let page = if ["search", "layouts"].contains(&page) { page } else { "items" };
+    let page = if ["search", "layouts", "browse"].contains(&page) { page } else { "items" };
     if let Some(w) = app.get_webview_window("library") {
         let _ = w.unminimize();
         let _ = app.emit_to("library", "library-page", page);
@@ -981,7 +981,7 @@ fn open_library_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
     let w = WebviewWindowBuilder::new(app, "library", WebviewUrl::App(format!("library.html?page={page}").into()))
         .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
         .title(tr(&lang, "lib.title"))
-        .inner_size(760.0, 560.0)
+        .inner_size(960.0, 620.0)
         .min_inner_size(420.0, 360.0)
         .resizable(true)
         .center()
