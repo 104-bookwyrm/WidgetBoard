@@ -1,9 +1,5 @@
 {
   "dday.add": "디데이 추가",
-  "dday.view_list": "카운트다운",
-  "dday.view_schedule": "일정",
-  "dday.badge": "디데이",
-  "dday.schedule_empty": "다가오는 일정이 없습니다. 달력에 일정을 추가하면 여기에 표시됩니다.",
   "dday.empty": "디데이가 없습니다. 아래 버튼으로 추가하세요.",
   "dday.name": "이름",
   "dday.tag": "태그",
@@ -30,5 +26,6 @@
   "dday.need_name": "이름과 날짜를 입력하세요.",
   "dday.hidden_by_filter": "저장했습니다. 현재 필터 때문에 목록에 보이지 않습니다.",
   "sum.dday_empty": "디데이가 없습니다.",
-  "hint.dday": "클릭: 수정, 드래그: 순서 변경"
+  "hint.dday": "클릭: 수정, 드래그: 순서 변경",
+  "dday.menu_cal": "달력 일정 표시"
 }

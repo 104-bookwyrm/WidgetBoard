@@ -24,7 +24,7 @@ const DEFAULTS = {
   short: 5,
   long: 15,
   every: 4,
-  auto: false,
+  auto: true, // the next phase starts by itself (toggle beside skip)
   day: null,
   done: 0, // focus blocks finished on `day`
 };
@@ -48,8 +48,9 @@ const css = `
     .pm-ctrl { display: flex; gap: var(--space-3); flex: none; max-width: 100%; }
     .pm-ctrl button { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
     .pm-ctrl .ico { display: none; }
-    .pm-ctrl [data-a=skip] .lbl, .pm-ctrl [data-a=reset] .lbl { display: none; }
-    .pm-ctrl [data-a=skip] .ico, .pm-ctrl [data-a=reset] .ico { display: inline; }
+    .pm-ctrl [data-a=skip] .lbl, .pm-ctrl [data-a=reset] .lbl, .pm-ctrl [data-a=auto] .lbl { display: none; }
+    .pm-ctrl [data-a=skip] .ico, .pm-ctrl [data-a=reset] .ico, .pm-ctrl [data-a=auto] .ico { display: inline; }
+    .pm-ctrl [data-a=auto][aria-pressed=true] { color: var(--c2); border-color: var(--c2); }
     .pm-link { font-size: var(--fs-small); padding: 1px 8px; max-width: 100%; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       color: var(--text-muted); background: none; border-color: transparent; font-variant-numeric: tabular-nums; }
     .pm-link:hover { border-color: var(--line-color); }
@@ -72,6 +73,7 @@ const css = `
     .pm-set input[type=number]:focus { border-color: var(--c2); }
     .pm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(7em, 1fr)); gap: var(--space-3); }
     @container (max-width: 12em) { .pm-ctrl [data-a=go] .ico { display: inline; } .pm-ctrl [data-a=go] .lbl { display: none; } }
+    @container (max-width: 13em) { .pm-ctrl [data-a=auto] { display: none; } } /* four buttons don't fit; the settings panel keeps it */
     @container (max-height: 12em) { .pm-link { display: none; } }
     @container (max-height: 8em) { .pm-top .pm-dots { display: none; } }
     @container (max-height: 6em) { .pm-ctrl, .pm-top { display: none; } }
@@ -92,7 +94,7 @@ export function pomodoro(root, s, api) {
   s.runStart = s.endAt ? ts(s.runStart) : null;
   s.cuts = Array.isArray(s.cuts) ? s.cuts.filter((c) => Array.isArray(c) && c[1] > c[0]) : [];
   if (!(s.away && s.away.to > s.away.from)) s.away = null;
-  s.auto = !!s.auto;
+  s.auto = s.auto !== false;
   s.done = Math.max(0, Math.round(+s.done || 0));
   if (s.day !== today()) (s.day = today()), (s.done = 0);
 
@@ -106,6 +108,7 @@ export function pomodoro(root, s, api) {
         <button class="primary" data-a="go"></button>
         <button data-a="skip" title="${t("pomo.skip")}"><span class="ico">${icon("next")}</span><span class="lbl">${t("pomo.skip")}</span></button>
         <button data-a="reset" title="${t("pomo.reset")}"><span class="ico">${icon("reset")}</span><span class="lbl">${t("pomo.reset")}</span></button>
+        <button data-a="auto" title="${t("pomo.auto")}"><span class="ico">${icon("repeat")}</span><span class="lbl">${t("pomo.auto")}</span></button>
       </div>
       <button class="pm-link" data-a="settings"></button>
       <div class="pm-set" hidden></div>
@@ -154,6 +157,7 @@ export function pomodoro(root, s, api) {
       s.endAt ? "timer.pause" : s.remaining > 0 && s.remaining < len() ? "timer.resume" : "timer.start",
       s.endAt ? "pause" : "play",
     );
+    q("[data-a=auto]").setAttribute("aria-pressed", s.auto);
   }
   function renderLink() {
     const b = q(".pm-link");
@@ -341,6 +345,11 @@ export function pomodoro(root, s, api) {
     const a = e.target.closest("[data-a]")?.dataset.a;
     if (a === "go") s.endAt ? pause() : start();
     else if (a === "skip") skip();
+    else if (a === "auto") {
+      s.auto = !s.auto;
+      api.save();
+      render();
+    }
     else if (a === "reset") reset();
     else if (a === "settings") openSettings();
     else if (a === "set-close") closeSettings();

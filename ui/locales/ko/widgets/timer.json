@@ -1,6 +1,6 @@
 {
   "timer.start": "시작",
-  "timer.pause": "일시정지",
+  "timer.pause": "정지",
   "timer.resume": "계속",
   "timer.reset": "초기화",
   "timer.min": "{n}분",

@@ -1,9 +1,5 @@
 {
   "dday.add": "Add D-day",
-  "dday.view_list": "Countdowns",
-  "dday.view_schedule": "Schedule",
-  "dday.badge": "D-day",
-  "dday.schedule_empty": "No upcoming events. Entries you add to the calendar show here.",
   "dday.empty": "No D-days yet. Add one with the button below.",
   "dday.name": "Name",
   "dday.tag": "Tag (optional)",
@@ -30,5 +26,6 @@
   "dday.need_name": "Enter a name and a date",
   "dday.hidden_by_filter": "Saved, but hidden by the current filter",
   "sum.dday_empty": "No D-days",
-  "hint.dday": "Click a row to edit · drag to reorder"
+  "hint.dday": "Click a row to edit · drag to reorder",
+  "dday.menu_cal": "Show calendar entries"
 }

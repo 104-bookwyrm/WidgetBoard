@@ -37,9 +37,12 @@ const css = `
       font-variant-numeric: tabular-nums; }
     .sw-laps div { display: flex; justify-content: space-between; gap: var(--space-4); padding: 1px 4px; color: var(--text-muted); }
     .sw-laps div span:first-child { color: var(--text-faint); }
+    /* a short widget hides the lap list: the latest lap stays as one line */
+    .sw-last { display: none; }
+    .sw-last div { justify-content: center; }
     @container (max-width: 12em) { .sw-ctrl .ico { display: inline; } .sw-ctrl .lbl { display: none; } }
-    @container (max-height: 14em) { .sw-laps { display: none; } }
-    @container (max-height: 6.5em) { .sw-total { display: none; } }
+    @container (max-height: 14em) { .sw-laps { display: none; } .sw-last.has { display: block; flex: none; } }
+    @container (max-height: 6.5em) { .sw-total, .sw-last.has { display: none; } }
   `;
 
 export function stopwatch(root, s, api) {
@@ -70,6 +73,7 @@ export function stopwatch(root, s, api) {
         <button data-a="lap"></button>
       </div>
       <div class="sw-laps"></div>
+      <div class="sw-laps sw-last"></div>
     </div>`;
   const box = root.firstElementChild;
   const q = (c) => box.querySelector(c);
@@ -109,13 +113,12 @@ export function stopwatch(root, s, api) {
     a.hidden = !s.away;
   }
   function renderLaps() {
+    const row = (l) =>
+      `<div><span>#${Number(l.n) || ""}</span><span>+${fmtSession(l.split)}</span><span>${fmtSession(l.at)}</span></div>`;
     q(".sw-laps").hidden = !s.laps.length; // keeps the clock centred until there are laps
-    q(".sw-laps").innerHTML = s.laps
-      .map(
-        (l) =>
-          `<div><span>#${Number(l.n) || ""}</span><span>+${fmtSession(l.split)}</span><span>${fmtSession(l.at)}</span></div>`,
-      )
-      .join("");
+    q(".sw-laps").innerHTML = s.laps.map(row).join("");
+    q(".sw-last").classList.toggle("has", !!s.laps.length);
+    q(".sw-last").innerHTML = s.laps.length ? row(s.laps[0]) : "";
   }
 
   let tick,

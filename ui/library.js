@@ -34,7 +34,7 @@ let placed = new Set(); // content ids with a placement on some board
 let query = ""; // search box
 let diary = null; // { date: text }, loaded on the first search
 let events = null; // calendar events, loaded on the first search
-let filter = "all"; // "all" | a type | "deleted"
+let selected = null; // id of the item whose card shows (its type's items fill the middle)
 let assetsDir = "";
 let lang = "ko";
 let tab = "items"; // "items" | "browse" | "layouts"
@@ -62,20 +62,20 @@ function preview(c) {
       return `<div class="lib-preview memo"${bg ? ` style="background:${bg}"` : ` style="color:inherit"`}>${esc(d.text ?? "")}</div>`;
     }
     case "image":
-      return `<div class="lib-preview">${img(d.imgs, t("lib.images", { n: (d.imgs ?? []).length }))}</div>`;
+      return `<div class="lib-preview media">${img(d.imgs, t("lib.images", { n: (d.imgs ?? []).length }))}</div>`;
     case "collection":
-      return `<div class="lib-preview">${img(d.imgs ?? d.items, t("lib.items", { n: (d.imgs ?? d.items ?? []).length }))}</div>`;
+      return `<div class="lib-preview media">${img(d.imgs ?? d.items, t("lib.items", { n: (d.imgs ?? d.items ?? []).length }))}</div>`;
     case "showcase":
-      return `<div class="lib-preview">${img(d.imgs, d.name ?? "")}</div>`;
+      return `<div class="lib-preview media">${img(d.imgs, d.name ?? "")}</div>`;
     case "audioplayer":
     case "nowplaying":
       return `<div class="lib-preview">${esc(t("lib.tracks", { n: (d.tracks ?? []).length }))}\n${esc((d.tracks ?? []).map((x) => x.label).slice(0, 3).join("\n"))}</div>`;
     case "timer":
-      return `<div class="lib-preview"><span class="big">${fmtTimer(d.endAt ? Math.max(0, d.endAt - Date.now()) : (d.remaining ?? d.duration ?? 0))}</span></div>`;
+      return `<div class="lib-preview clock"><span class="big">${fmtTimer(d.endAt ? Math.max(0, d.endAt - Date.now()) : (d.remaining ?? d.duration ?? 0))}</span></div>`;
     case "stopwatch":
-      return `<div class="lib-preview"><span class="big">${fmtTotal(d.elapsed ?? 0)}</span>\n${esc(t("time." + (d.cat || "focus")))}</div>`;
+      return `<div class="lib-preview clock"><span class="big">${fmtTotal(d.elapsed ?? 0)}</span>\n${esc(t("time." + (d.cat || "focus")))}</div>`;
     case "pomodoro":
-      return `<div class="lib-preview"><span class="big">${fmtTimer(d.endAt ? Math.max(0, d.endAt - Date.now()) : (d.remaining ?? 0))}</span>\n${esc(t("pomo." + (d.phase || "work")))}</div>`;
+      return `<div class="lib-preview clock"><span class="big">${fmtTimer(d.endAt ? Math.max(0, d.endAt - Date.now()) : (d.remaining ?? 0))}</span>\n${esc(t("pomo." + (d.phase || "work")))}</div>`;
   }
   return `<div class="lib-preview"></div>`;
 }
@@ -122,22 +122,33 @@ function resultRows() {
   );
 }
 
-function actions(c) {
-  const b = (act, label, cls = "") => `<button data-act="${act}" class="${cls}">${esc(label)}</button>`;
-  if (c.deletedAt) {
-    if (confirming === c.id)
-      return `<span class="badge">${esc(t("lib.erase_confirm"))}</span>${b("erase-yes", t("lib.erase"), "primary")}${b("erase-no", t("lib.cancel"))}`;
-    return b("restore", t("lib.restore"), "primary") + b("erase", t("lib.erase"));
-  }
-  const where = placed.has(c.id)
-    ? `<span class="badge">${esc(t("lib.on_board"))}</span>${b("locate", t("lib.locate"))}`
-    : b("show", t("lib.show"), "primary");
-  const history = c.type === "memo" ? b("history", t("lib.history")) : "";
-  return where + history + b("rename", t("lib.rename")) + b("delete", t("lib.delete"));
-}
-
 const when = (secs) =>
   new Date(secs * 1000).toLocaleString(lang === "ko" ? "ko-KR" : "en-US", { dateStyle: "medium", timeStyle: "short" });
+
+// The card beside the grid: the selected item's name (click to rename), where it is, and what can be done with it.
+// The main action sits at the bottom; the rest are quiet links.
+function cardHtml(c) {
+  const b = (act, label, cls = "") => `<button data-act="${act}" class="${cls}">${esc(label)}</button>`;
+  const name =
+    renaming === c.id
+      ? `<input class="lib-name" maxlength="40" value="${esc(c.name || "")}" placeholder="${esc(title(c))}">`
+      : `<h2><button class="mine-name" data-act="rename" title="${esc(t("lib.rename"))}">${esc(title(c))}</button></h2>`;
+  if (c.deletedAt) {
+    const links =
+      confirming === c.id
+        ? `<span class="ask">${esc(t("lib.erase_confirm"))}</span>${b("erase-yes", t("lib.erase"), "danger")}${b("erase-no", t("lib.cancel"))}`
+        : b("erase", t("lib.erase"), "danger");
+    return `<p class="kind">${esc(t("lib.deleted"))} · ${esc(t("widget." + c.type))}</p>${name}
+      <p class="meta">${esc(t("lib.deleted_at", { when: when(c.deletedAt) }))}</p>
+      <div class="mine-links">${links}</div>${b("restore", t("lib.restore"), "primary")}`;
+  }
+  const on = placed.has(c.id);
+  return `<p class="kind">${esc(t("widget." + c.type))}</p>${name}
+    <p class="where"><span class="dot ${on ? "on" : ""}"></span>${esc(t(on ? "lib.on_board" : "lib.off_board"))}</p>
+    ${c.updated ? `<p class="meta">${esc(t("lib.updated_at", { when: when(c.updated) }))}</p>` : ""}
+    <div class="mine-links">${c.type === "memo" ? b("history", t("lib.history")) : ""}${b("delete", t("lib.delete"), "danger")}</div>
+    ${on ? b("locate", t("lib.locate"), "primary") : b("show", t("lib.show"), "primary")}`;
+}
 
 // ---- memo History: the archived versions of one memo ----
 async function openHistory(c) {
@@ -278,42 +289,75 @@ $(".lib-tabs").addEventListener("click", (e) => {
   if (name) showTab(name);
 });
 
+// ---- 내 위젯: groups by type (Recently deleted last) | every item of the selected one's group | its card ----
+const group = (c) => (c.deletedAt ? "deleted" : c.type);
+const TYPE_ORDER = Object.keys(CONTENT_KEYS);
+/** Groups in list order, each sorted newest first; a search keeps only matching items. */
+function groups() {
+  const out = [];
+  const keys = [...TYPE_ORDER, ...new Set(items.map((c) => c.type).filter((ty) => !TYPE_ORDER.includes(ty))), "deleted"];
+  for (const key of keys) {
+    const list = items
+      .filter((c) => group(c) === key && (!query || matchesItem(c)))
+      .sort((a, b) => (key === "deleted" ? b.deletedAt - a.deletedAt : b.updated - a.updated));
+    if (list.length) out.push({ key, list });
+  }
+  return out;
+}
+
 function render() {
-  const live = items.filter((c) => !c.deletedAt);
-  const deleted = items.filter((c) => c.deletedAt);
-  const chip = (key, label, n) =>
-    `<button data-filter="${key}" aria-pressed="${filter === key}">${esc(label)}${n != null ? ` ${n}` : ""}</button>`;
-  $(".lib-chips").innerHTML =
-    chip("all", t("lib.all"), live.length) +
-    Object.keys(CONTENT_KEYS)
-      .filter((ty) => live.some((c) => c.type === ty))
-      .map((ty) => chip(ty, t("widget." + ty), live.filter((c) => c.type === ty).length))
-      .join("") +
-    chip("deleted", t("lib.deleted"), deleted.length);
-  const shown = (
-    filter === "deleted"
-      ? deleted.sort((a, b) => b.deletedAt - a.deletedAt)
-      : live.filter((c) => filter === "all" || c.type === filter).sort((a, b) => b.updated - a.updated)
-  ).filter((c) => !query || matchesItem(c));
-  const rows = filter === "deleted" ? "" : resultRows();
-  const empty = query ? "lib.no_results" : filter === "deleted" ? "lib.deleted_empty" : "lib.empty";
-  $(".lib-grid").innerHTML = (shown.length || rows
-    ? shown
-        .map(
-          (c) => `<article class="lib-card" data-id="${esc(c.id)}">
-            ${renaming === c.id ? `<input class="lib-name" value="${esc(c.name || "")}" placeholder="${esc(title(c))}">` : `<h3 title="${esc(title(c))}">${esc(title(c))}</h3>`}
-            ${title(c) === t("widget." + c.type) ? "" : `<div class="lib-type">${esc(t("widget." + c.type))}</div>`}
-            ${preview(c)}
-            <div class="lib-actions">${actions(c)}</div>
-          </article>`,
-        )
-        .join("")
-    : `<p class="lib-empty">${esc(t(empty))}</p>`) + rows;
+  const gs = groups();
+  const all = gs.flatMap((g) => g.list);
+  if (!all.some((c) => c.id === selected)) selected = all[0]?.id ?? null;
+  const cur = all.find((c) => c.id === selected);
+  const label = (key) => t(key === "deleted" ? "lib.deleted" : "widget." + key);
+  $(".mine-rows").innerHTML = gs
+    .map(
+      ({ key, list }) =>
+        `<h3>${esc(label(key))}<span>${list.length}</span></h3>` +
+        list
+          .map(
+            (c) => `<button data-id="${esc(c.id)}" class="${c.deletedAt ? "gone" : ""}" ${c.id === selected ? 'aria-current="true"' : ""}>${
+              c.deletedAt ? "" : `<span class="dot ${placed.has(c.id) ? "on" : ""}" title="${esc(t(placed.has(c.id) ? "lib.on_board" : "lib.off_board"))}"></span>`
+            }<span class="t">${esc(title(c))}</span></button>`,
+          )
+          .join(""),
+    )
+    .join("");
+
+  // the middle: while searching, every match (then diary and calendar hits); otherwise the selected item's group
+  const shown = query ? all : (gs.find((g) => g.key === group(cur ?? {}))?.list ?? []);
+  const rows = resultRows();
+  const head = query ? t("lib.results") : cur ? label(group(cur)) : "";
+  $(".lib-grid").innerHTML =
+    shown.length || rows
+      ? (shown.length ? `<h2>${esc(head)} ${shown.length}</h2>` : "") +
+        shown
+          .map(
+            (c) => `<article class="lib-card ${c.deletedAt ? "gone" : ""}" data-id="${esc(c.id)}" tabindex="0" role="button" ${c.id === selected ? 'aria-current="true"' : ""} aria-label="${esc(title(c))}">
+              ${preview(c)}<h3 title="${esc(title(c))}">${esc(title(c))}</h3></article>`,
+          )
+          .join("") +
+        rows
+      : `<p class="lib-empty">${esc(t(query ? "lib.no_results" : "lib.empty"))}</p>`;
+
+  const card = $(".mine-card");
+  card.hidden = !cur;
+  card.innerHTML = cur ? cardHtml(cur) : "";
   if (renaming) {
     const input = $(".lib-name");
     input?.focus();
     input?.select();
   }
+}
+
+/** Select an item: its row, its card in the middle (scrolled into view) and the card on the right. */
+function select(id) {
+  if (id === selected) return;
+  selected = id;
+  confirming = renaming = null;
+  render();
+  $(`.lib-card[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
 async function load() {
@@ -325,7 +369,6 @@ async function load() {
   boardWidgets = widgets;
   placed = new Set(widgets.map((w) => w.id));
   if (query) await loadSearchData();
-  if (filter !== "all" && filter !== "deleted" && !items.some((c) => c.type === filter && !c.deletedAt)) filter = "all";
   render();
 }
 
@@ -351,21 +394,14 @@ async function put(c, patch) {
   await load();
 }
 
-$(".lib-chips").addEventListener("click", (e) => {
-  const f = e.target.closest("[data-filter]")?.dataset.filter;
-  if (!f) return;
-  filter = f;
-  confirming = renaming = null;
-  render();
-});
-
 $(".lib-search").addEventListener("input", async (e) => {
   query = e.target.value.trim();
   if (query && !diary) await loadSearchData();
   render();
 });
 
-$(".lib-grid").addEventListener("click", async (e) => {
+// pick an item from the list or the middle; double-click a card for its main action
+$(".lib-items").addEventListener("click", async (e) => {
   // a diary/calendar result: that widget opens the date and is pointed out
   const go = e.target.closest("[data-goto]");
   if (go) {
@@ -376,9 +412,18 @@ $(".lib-grid").addEventListener("click", async (e) => {
     emit("goto-date", { type, date: go.dataset.date });
     return;
   }
-  const act = e.target.closest("[data-act]")?.dataset.act;
+  const pick = e.target.closest(".mine-rows [data-id], .lib-card");
+  if (pick) return select(pick.dataset.id);
+  const act = e.target.closest(".mine-card [data-act]")?.dataset.act;
+  if (act) await run(act, items.find((x) => x.id === selected));
+});
+$(".lib-grid").addEventListener("dblclick", (e) => {
   const c = items.find((x) => x.id === e.target.closest(".lib-card")?.dataset.id);
-  if (!act || !c) return;
+  if (c) run(c.deletedAt ? "restore" : placed.has(c.id) ? "locate" : "show", c);
+});
+
+async function run(act, c) {
+  if (!c) return;
   switch (act) {
     case "show": {
       // the board of its last monitor puts it back where it was (or a free spot on the primary)
@@ -398,8 +443,19 @@ $(".lib-grid").addEventListener("click", async (e) => {
       render();
       break;
     case "delete":
-      await put(c, { deletedAt: Math.floor(Date.now() / 1000) });
+    case "erase-yes": {
+      // stay in the group: the next item (or the one before) takes the selection
+      const list = groups().find((g) => g.key === group(c))?.list ?? [];
+      const i = list.indexOf(c);
+      selected = (list[i + 1] ?? list[i - 1])?.id ?? null;
+      confirming = null;
+      if (act === "delete") await put(c, { deletedAt: Math.floor(Date.now() / 1000) });
+      else {
+        await invoke("content_erase", { id: c.id }).catch((err) => flash(String(err)));
+        await load();
+      }
       break;
+    }
     case "restore":
       await put(c, { deletedAt: null });
       break;
@@ -411,13 +467,8 @@ $(".lib-grid").addEventListener("click", async (e) => {
       confirming = null;
       render();
       break;
-    case "erase-yes":
-      confirming = null;
-      await invoke("content_erase", { id: c.id }).catch((err) => flash(String(err)));
-      await load();
-      break;
   }
-});
+}
 
 // rename: Enter saves, Escape cancels, leaving the field saves
 async function commitName(input) {
@@ -427,7 +478,12 @@ async function commitName(input) {
   if (c && name !== (c.name || "")) await put(c, { name });
   else render();
 }
-$(".lib-grid").addEventListener("keydown", (e) => {
+$(".lib-items").addEventListener("keydown", (e) => {
+  // a card in the middle acts like a button
+  if (e.target.matches(".lib-card") && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    return select(e.target.dataset.id);
+  }
   if (!e.target.matches(".lib-name")) return;
   if (e.key === "Enter") commitName(e.target);
   if (e.key === "Escape") {
@@ -436,7 +492,7 @@ $(".lib-grid").addEventListener("keydown", (e) => {
     render();
   }
 });
-$(".lib-grid").addEventListener("focusout", (e) => {
+$(".lib-items").addEventListener("focusout", (e) => {
   if (e.target.matches(".lib-name") && renaming) commitName(e.target);
 });
 

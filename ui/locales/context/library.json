@@ -24,5 +24,9 @@
   "gal.showcase.1": "Widget menu > Browse: short note 1 for Showcase, shown beside the live widget. One sentence. Quoted names must match the app's labels.",
   "gal.showcase.2": "Widget menu > Browse: short note 2 for Showcase, shown beside the live widget. One sentence. Quoted names must match the app's labels.",
   "gal.nowplaying.1": "Widget menu > Browse: short note 1 for Now Playing, shown beside the live widget. One sentence. Quoted names must match the app's labels.",
-  "gal.nowplaying.2": "Widget menu > Browse: short note 2 for Now Playing, shown beside the live widget. One sentence. Quoted names must match the app's labels."
+  "gal.nowplaying.2": "Widget menu > Browse: short note 2 for Now Playing, shown beside the live widget. One sentence. Quoted names must match the app's labels.",
+  "lib.off_board": "Widget window, My widgets: status line for an item that is kept but not shown on any board (the opposite of lib.on_board). A short phrase.",
+  "lib.results": "Widget window, My widgets: heading over the items that match the search box. A short phrase.",
+  "lib.updated_at": "Widget window, My widgets: line on the selected item's card saying when its content last changed. {when} is a date and time already formatted.",
+  "lib.deleted_at": "Widget window, My widgets: line on a recently deleted item's card saying when it was deleted. {when} is a date and time already formatted."
 }

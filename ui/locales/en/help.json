@@ -23,8 +23,6 @@
   "help.ledger.library.body": "The widget menu lists the content of every widget, on the board or not. Open it from the tray menu or a widget's right-click menu. Show on board puts an item back.",
   "help.ledger.deleted.title": "Recently deleted",
   "help.ledger.deleted.body": "Delete in the widget menu moves an item to Recently deleted. Restore brings it back. Delete permanently removes it for good.",
-  "help.ledger.change_type.title": "Change widget type",
-  "help.ledger.change_type.body": "In Edit layout, right-click a widget and choose Change widget type. The new widget takes the same place. The old content stays in the widget menu.",
   "help.ledger.modes.title": "Modes and layouts",
   "help.ledger.modes.body": "Timer has three modes: timer, stopwatch and pomodoro. Image has two layouts: slideshow and grid. Right-click the widget and open Mode or Layout to switch. Now Playing plays your own audio files under My files.",
   "help.ledger.look.title": "Widget appearance",

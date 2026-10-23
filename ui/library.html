@@ -34,11 +34,146 @@
         background: var(--c2);
         color: #fff;
       }
+      /* 내 위젯, laid out like Browse: items by type | every item of that type | the selected one's card */
       .lib-items {
         flex: 1;
         min-height: 0;
+        display: grid;
+        grid-template-columns: 190px minmax(0, 1fr) 220px;
+      }
+      .mine-list {
         display: flex;
         flex-direction: column;
+        min-height: 0;
+        border-right: var(--line-width) var(--line-style) var(--line-color);
+      }
+      .mine-top {
+        padding: 10px 8px 4px;
+      }
+      .mine-rows {
+        overflow-y: auto;
+        padding: 0 8px 12px;
+      }
+      .mine-rows h3 {
+        display: flex;
+        margin: 12px 8px 4px;
+        font-size: 0.8em;
+        font-weight: normal;
+        color: var(--text-muted);
+      }
+      .mine-rows h3 span {
+        margin-left: auto;
+      }
+      .mine-rows button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 8px;
+        border: 0;
+        border-radius: 6px;
+        background: none;
+        text-align: start;
+      }
+      .mine-rows button .t {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mine-rows button[aria-current="true"] {
+        background: var(--c2);
+        color: #fff;
+      }
+      .mine-rows .gone {
+        color: var(--text-muted);
+      }
+      /* filled dot = on the board, ring = kept here only */
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex: none;
+        box-sizing: border-box;
+        border: 1.5px solid currentColor;
+        opacity: 0.55;
+      }
+      .dot.on {
+        background: currentColor;
+        opacity: 0.9;
+      }
+      .mine-card {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 16px;
+        overflow-y: auto;
+        border-left: var(--line-width) var(--line-style) var(--line-color);
+      }
+      .mine-card p {
+        margin: 0;
+      }
+      .mine-card .kind {
+        color: var(--text-muted);
+        font-size: 0.85em;
+      }
+      .mine-card h2 {
+        margin: 0;
+        font-size: 1.3em;
+      }
+      .mine-name {
+        all: unset;
+        cursor: text;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+      .mine-name:hover,
+      .mine-name:focus-visible {
+        outline: 1px dashed var(--line-color);
+        outline-offset: 2px;
+      }
+      .mine-card .where {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.9em;
+      }
+      .mine-card .meta {
+        color: var(--text-muted);
+        font-size: 0.85em;
+      }
+      .mine-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+      }
+      .mine-links button {
+        background: none;
+        border-color: transparent;
+        color: var(--text-muted);
+        padding: 2px 6px;
+      }
+      .mine-links button:hover {
+        border-color: var(--line-color);
+        color: var(--c3);
+      }
+      .mine-links .danger:hover {
+        color: var(--danger);
+        border-color: var(--danger);
+      }
+      .mine-links .ask {
+        font-size: 0.85em;
+        width: 100%;
+      }
+      .mine-card > .primary {
+        margin-top: auto;
+      }
+      .mine-card input {
+        font: inherit;
+        width: 100%;
+        box-sizing: border-box;
       }
       .lib-layouts {
         flex: 1;
@@ -110,29 +245,26 @@
         margin: 4px 0;
         font: inherit;
       }
-      .lib-top {
-        padding: 12px 16px 0;
-      }
       .lib-search {
         width: 100%;
         box-sizing: border-box;
         font: inherit;
-        padding: 6px 10px;
-      }
-      .lib-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        padding: 8px 16px;
+        padding: 4px 8px;
       }
       .lib-results {
         grid-column: 1 / -1;
         margin: 8px 0 0;
       }
-      .lib-results h2 {
-        font-size: 0.9em;
+      .lib-results h2,
+      .lib-grid > h2 {
+        font-size: 0.85em;
+        font-weight: normal;
         color: var(--text-muted);
         margin: 0 0 4px;
+      }
+      .lib-grid > h2 {
+        grid-column: 1 / -1;
+        margin: 0;
       }
       .lib-row {
         display: flex;
@@ -156,85 +288,93 @@
         background: color-mix(in srgb, var(--c2) 35%, transparent);
         color: inherit;
       }
-      .lib-chips button[aria-pressed="true"] {
-        background: var(--c2);
-        color: #fff;
-      }
+      /* every item of the selected type at once; the selected one is outlined */
       .lib-grid {
-        flex: 1;
+        min-width: 0;
         overflow-y: auto;
-        padding: 8px 16px 16px;
+        padding: 16px 20px 20px;
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
         grid-auto-rows: min-content;
-        gap: 10px;
+        gap: 14px;
+        align-content: start;
       }
       .lib-card {
         display: flex;
         flex-direction: column;
         gap: 6px;
-        padding: 10px;
-        border-radius: var(--radius, 8px);
-        border: var(--line-width) var(--line-style) var(--line-color);
-        background: color-mix(in srgb, var(--c3) 4%, var(--c1));
-        min-height: 150px;
+        min-width: 0;
+        cursor: pointer;
+      }
+      .lib-card[aria-current="true"] .lib-preview {
+        outline: 3px solid var(--c2);
+        outline-offset: 3px;
+      }
+      .lib-card:focus-visible {
+        outline: none;
+      }
+      .lib-card:focus-visible .lib-preview {
+        box-shadow: 0 0 0 2px var(--c3);
       }
       .lib-card h3 {
-        margin: 0;
-        font-size: 1em;
+        margin: 0 2px;
+        font-size: 0.85em;
+        font-weight: normal;
+        color: var(--text-muted);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .lib-card input {
-        font: inherit;
-        width: 100%;
-        box-sizing: border-box;
-      }
       .lib-preview {
-        flex: 1;
-        min-height: 60px;
+        aspect-ratio: 1;
+        box-sizing: border-box;
+        padding: 12px;
+        overflow: hidden;
+        border-radius: var(--radius, 8px);
+        border: var(--line-width) var(--line-style) var(--line-color);
+        background: color-mix(in srgb, var(--c3) 4%, var(--c1));
         color: var(--text-muted);
         font-size: 0.9em;
-        overflow: hidden;
+        line-height: 1.55;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
-        display: -webkit-box;
-        -webkit-line-clamp: 4;
-        -webkit-box-orient: vertical;
+        transition: transform 0.12s;
+      }
+      .lib-card:hover .lib-preview {
+        transform: translateY(-2px);
       }
       .lib-preview.memo {
         color: #2a2a2a;
+        border-color: transparent;
+      }
+      .lib-preview.media {
         padding: 6px;
-        border-radius: 4px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
       }
       .lib-preview img {
         width: 100%;
-        height: 80px;
+        min-height: 0;
+        flex: 1;
         object-fit: cover;
         border-radius: 4px;
         display: block;
       }
+      .lib-preview.clock {
+        display: grid;
+        place-content: center;
+        text-align: center;
+      }
       .lib-preview .big {
-        font-size: 1.6em;
+        font-size: 2em;
         font-weight: 600;
         color: var(--c3);
         font-variant-numeric: tabular-nums;
       }
-      .lib-type {
-        font-size: 0.8em;
-        color: var(--text-faint);
-      }
-      .lib-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: center;
-      }
-      .lib-actions .badge {
-        font-size: 0.8em;
-        color: var(--c2);
-        margin-inline-end: auto;
+      .lib-card.gone .lib-preview {
+        opacity: 0.55;
+        filter: grayscale(0.6);
       }
       .lib-empty {
         grid-column: 1 / -1;
@@ -342,11 +482,12 @@
       <button role="tab" data-tab="layouts" data-i18n="lib.layouts_tab"></button>
     </div>
     <div class="lib-items">
-      <div class="lib-top">
-        <input class="lib-search" type="search" data-i18n-placeholder="lib.search" />
-      </div>
-      <nav class="lib-chips" role="toolbar"></nav>
+      <nav class="mine-list">
+        <div class="mine-top"><input class="lib-search" type="search" data-i18n-placeholder="lib.search" /></div>
+        <div class="mine-rows"></div>
+      </nav>
       <main class="lib-grid" aria-live="polite"></main>
+      <aside class="mine-card"></aside>
     </div>
     <div class="lib-browse" hidden>
       <nav class="gal-list" data-i18n-aria-label="lib.browse_tab"></nav>

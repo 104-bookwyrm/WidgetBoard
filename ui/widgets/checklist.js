@@ -1,8 +1,9 @@
 // Checklist with three tabs, all over the shared entry store (data/events.json, the calendar's and D-day's too):
-//  • 오늘 (today)  - one-off to-dos (unfinished ones carry over, ↪), daily routines (🔁),
-//                    and optionally today's calendar entries (📅, ticked in both places)
-//  • 이번 주 (week) - weekly quotas: due on the week's last day, ticked once per week
-//  • 이번 달 (month)- monthly quotas: due on the month's last day, ticked once per month
+//  • 오늘 (today)  - one-off to-dos (unfinished ones carry over, ↪), daily routines (🔁)
+//  • 이번 주 (week) - one-off to-dos dated this week, and weekly quotas: due on the week's last day, ticked once a week
+//  • 이번 달 (month)- the same for this month, with monthly quotas
+// Every tab also lists the shared entries (calendar, d-days) dated in its period (📅, ticked in both places),
+// unless 달력 연동 is off; tags in `hideTags` keep entries out of this widget only.
 // Entries added here carry `todo: true` (only they carry over); quotas carry `quota: true`.
 // Week start: Settings → 한 주 시작 (util.js weekFirstDay; 기본 = Sunday). Each widget remembers its own tab.
 import {
@@ -37,6 +38,7 @@ export default {
   defaults: {
     sync: true,
     hideDone: false,
+    hideTags: [], // entries with any of these tags stay out of this checklist
     tab: "today",
     stamp: false, // "day well done" stamp when every Today item is finished
     stampTilt: "tilt", // tilt | random | straight
@@ -51,7 +53,7 @@ export default {
     .ck-tabs button.on { background: var(--c2); border-color: var(--c2); color: var(--on-accent); opacity: 1; }
     .ck-tabs small { font-variant-numeric: tabular-nums; }
     .ck-head { display: flex; align-items: baseline; gap: var(--space-3); flex: none; min-width: 0; }
-    .ck-date { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ck-date { flex: 1; min-width: 0; font-weight: 600; text-wrap: balance; word-break: keep-all; } /* a week range with its year wraps, never cut */
     .ck-count { font-size: var(--fs-meta); color: var(--text-muted); font-variant-numeric: tabular-nums; flex: none; }
     .ck-sync { padding: 0 6px; font-size: var(--fs-meta); flex: none; color: var(--text-faint); }
     .ck-sync.on { color: var(--c3); }
@@ -88,6 +90,7 @@ export default {
     const { t, lang } = api;
     s.sync = s.sync !== false;
     s.hideDone = !!s.hideDone;
+    s.hideTags = Array.isArray(s.hideTags) ? s.hideTags.filter((g) => typeof g === "string") : [];
     if (!TABS.includes(s.tab)) s.tab = "today";
     let events = []; // the whole shared store; checklist rows are its `todo` entries plus today's entries
 
@@ -113,42 +116,69 @@ export default {
     const todos = () => events.filter((e) => e.todo && typeof e.title === "string");
 
     // ---- rows per tab ----
+    // Every tab shows every shared entry dated in its period (calendar entries and d-days, once each, on their
+    // first day in it), unless 달력 연동 is off or a hidden tag is on it. A repeat as short as the period or
+    // shorter (daily in a week, daily/weekly in a month) would be there all the time, so it stays out.
+    const hidden = (e) => (e.tags || []).some((g) => s.hideTags.includes(g));
+    const TOO_OFTEN = { today: [], week: ["daily"], month: ["daily", "weekly"] };
+    function period(tab) {
+      const d = today();
+      if (tab === "today") return [d, d];
+      if (tab === "week") return [weekFirstDay(d), addDays(weekFirstDay(d), 6)];
+      const first = d.slice(0, 8) + "01";
+      return [first, addDays(addDays(first, 31).slice(0, 8) + "01", -1)];
+    }
     function rowsFor(tab) {
       const d = today();
+      const [from, to] = period(tab);
+      const cal = [];
+      if (s.sync)
+        for (const e of events) {
+          if (e.todo || e.quota || hidden(e) || TOO_OFTEN[tab].includes(e.repeat)) continue;
+          for (let x = from; x <= to; x = addDays(x, 1))
+            if (occursOn(e, x)) {
+              cal.push({ kind: "cal", item: e, day: x, done: eventDone(e, x) });
+              break;
+            }
+        }
+      cal.sort(
+        (a, b) =>
+          a.day.localeCompare(b.day) ||
+          (a.item.time ? 0 : 1) - (b.item.time ? 0 : 1) ||
+          (a.item.time || "").localeCompare(b.item.time || ""),
+      );
       if (tab === "today") {
-        const cal = s.sync
-          ? events
-              .filter((e) => !e.todo && occursOn(e, d) && !e.dday) // d-day items are countdowns, not to-dos
-              .sort(
-                (a, b) =>
-                  (a.time ? 0 : 1) - (b.time ? 0 : 1) ||
-                  (a.time || "").localeCompare(b.time || ""),
-              )
-              .map((e) => ({ kind: "cal", item: e, done: eventDone(e, d) }))
-          : [];
         const own = todos()
           .filter(
             (i) =>
-              i.repeat === "daily" ||
-              (!i.repeat &&
-                (i.date === d || i.doneOn === d || (!i.done && i.date < d))),
+              !hidden(i) &&
+              (i.repeat === "daily" ||
+                (!i.repeat &&
+                  (i.date === d || i.doneOn === d || (!i.done && i.date < d)))),
           )
           .map((i) => ({ kind: "own", item: i, done: isDone(i) }));
         return [...cal, ...own];
       }
-      return todos()
-        .filter((i) => i.quota && i.repeat === REPEAT_OF_TAB[tab])
+      // one-off to-dos dated in the period, then this period's quotas
+      const own = todos()
+        .filter((i) => !hidden(i) && !i.repeat && i.date >= from && i.date <= to)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((i) => ({ kind: "own", item: i, day: i.date, done: isDone(i) }));
+      const quotas = todos()
+        .filter((i) => i.quota && i.repeat === REPEAT_OF_TAB[tab] && !hidden(i))
         .map((i) => ({ kind: "own", item: i, done: isDone(i) }));
+      return [...cal, ...own, ...quotas];
     }
     function periodLabel(tab) {
       const d = today();
-      if (tab === "today")
-        return fmt({ month: "long", day: "numeric", weekday: "short" }, d);
+      const day = (x) => fmt({ month: "long", day: "numeric", weekday: "short" }, x);
+      if (tab === "today") return day(d);
       if (tab === "week") {
         const a = weekFirstDay(d);
-        return `${fmt({ month: "numeric", day: "numeric" }, a)} – ${fmt({ month: "numeric", day: "numeric" }, addDays(a, 6))}`;
+        const nb = (x) => day(x).replace(/ /g, "\u00a0"); // a wrapped range breaks between the two dates only
+        return t("ck.week_range", { a: nb(a), b: nb(addDays(a, 6)) });
       }
-      return fmt({ year: "numeric", month: "long" }, d);
+      return fmt({ month: "long" }, d);
     }
 
     function render() {
@@ -168,7 +198,6 @@ export default {
         ? `${(done / rows.length) * 100}%`
         : "0";
       const sync = q(".ck-sync");
-      sync.hidden = s.tab !== "today";
       sync.classList.toggle("on", s.sync);
       sync.title = t(s.sync ? "ck.sync_on" : "ck.sync_off");
       q(".ck-add").placeholder = t("ck.add." + s.tab);
@@ -176,13 +205,18 @@ export default {
       const shown = s.hideDone ? rows.filter((r) => !r.done) : rows;
       q(".ck-list").innerHTML =
         shown
-          .map(({ kind, item, done }) => {
+          .map(({ kind, item, done, day }) => {
+            // week / month rows say which day they fall on
+            const when =
+              day && s.tab !== "today"
+                ? `<span class="ck-meta">${esc(fmt({ day: "numeric", weekday: "short" }, day))}</span>`
+                : "";
             if (kind === "cal")
-              return `<div class="ck-row ck-cal ${done ? "done" : ""}" data-cal="${esc(item.id)}" title="${esc(t("ck.from_calendar"))}">
+              return `<div class="ck-row ck-cal ${done ? "done" : ""}" data-cal="${esc(item.id)}" data-day="${esc(day)}" title="${esc(t("ck.from_calendar"))}">
               <input type="checkbox" ${done ? "checked" : ""}>
               ${item.time ? `<span class="ck-time">${esc(item.time)}</span>` : ""}
-              <span class="ck-cal-ico">${icon("calendar")}</span><span class="ck-title">${esc(item.title)}</span></div>`;
-            const carried = !item.repeat && item.date < d;
+              <span class="ck-cal-ico">${icon("calendar")}</span><span class="ck-title">${esc(item.title)}</span>${when}</div>`;
+            const carried = s.tab === "today" && !item.repeat && item.date < d;
             const repeatBtn =
               s.tab === "today"
                 ? `<button class="ck-btn ${item.repeat ? "on" : ""}" data-a="repeat" title="${esc(t(item.repeat ? "ck.repeat_off" : "ck.repeat_on"))}">${icon("repeat")}</button>`
@@ -191,7 +225,7 @@ export default {
               <input type="checkbox" ${done ? "checked" : ""}>
               <span class="ck-title" title="${esc(item.title)} - ${esc(t("cal.edit_hint"))}">${esc(item.title)}</span>
               ${carried ? `<span class="ck-meta" title="${esc(t("ck.carried"))}">${icon("carried")} ${esc(fmt({ month: "numeric", day: "numeric" }, item.date))}</span>` : ""}
-              ${repeatBtn}
+              ${when}${repeatBtn}
               <button class="ck-btn" data-a="del" title="${esc(t("dday.delete"))}">${icon("x")}</button></div>`;
           })
           .join("") +
@@ -233,7 +267,8 @@ export default {
       const on = e.target.checked;
       const ev = cal(e.target);
       if (ev) {
-        setEventDone(ev, today(), on); // a repeating entry: today's occurrence only
+        // a repeating entry: only the occurrence this row shows
+        setEventDone(ev, e.target.closest("[data-day]").dataset.day || today(), on);
         saveEvents();
         return render();
       }
@@ -359,6 +394,17 @@ export default {
         render();
       } catch {}
     }
+    // every tag in the shared store (plus hidden ones no entry uses any more, so they can be turned back on)
+    const tagMenu = () => {
+      const tags = [...new Set([...events.flatMap((e) => e.tags || []), ...s.hideTags])].sort();
+      if (!tags.length) return [];
+      const flip = (g) => {
+        s.hideTags = s.hideTags.includes(g) ? s.hideTags.filter((x) => x !== g) : [...s.hideTags, g];
+        api.save();
+        render();
+      };
+      return [{ text: t("ck.menu_hide_tags"), items: tags.map((g) => ({ text: (s.hideTags.includes(g) ? "✓ " : "") + "#" + g, action: () => flip(g) })) }];
+    };
     const stampMenu = () => ({
       text: t("ck.stamp"),
       items: [
@@ -410,6 +456,7 @@ export default {
       menu: () => [
         menuToggle("sync", "ck.menu_sync_off", "ck.menu_sync_on"),
         menuToggle("hideDone", "ck.menu_show_done", "ck.menu_hide_done"),
+        ...tagMenu(),
         {
           text: t("ck.menu_clear_done"),
           action: () => {

@@ -101,9 +101,7 @@ circle). Clicks are caught by the whole widget rectangle, including transparent 
 **Read summary** appears when its accessibility setting is enabled. Inside a text box you get the normal
 copy/paste menu; right-click the widget's header or edge to open the widget menu.
 
-**In Edit layout**, that menu also offers background image set/remove, **Move to display** and
-**Change widget type ›**. Changing type keeps the widget's position and appearance. Each type retains its own
-content, so switching back restores the memo text, timer settings or photo list. A larger type may need more grid space.
+**In Edit layout**, that menu also offers background image set/remove and **Move to display**.
 
 Closing shows **Undo** for 7 seconds. The widget also goes to the [closed widgets bin](#names-hiding-and-closed-widgets).
 
@@ -230,14 +228,17 @@ Your to-dos, in three tabs. Every tab shows progress (`2/5` and a bar) and says 
   - Unfinished to-dos **carry over** to the next day, marked `↪ 9/25` with the day they were first written.
     Finished ones disappear the next day.
   - 🔁 turns a to-do into a **daily routine**: it shows every day, and ticking it only counts for that day.
-  - 📅 (on by default) also lists **today's calendar entries**. Ticking one here ticks it in the calendar, and the
-    other way round.
-- **이번 주 · This week** - tasks you do once a week (recycling, laundry). Each is due on the week's last day, where the
-  calendar and the D-day schedule show it. Tick them any day of the week; they untick themselves when a new week
-  starts (Sunday by default; Monday in Settings → 일반).
-- **이번 달 · This month** - tasks you do once a month (bills, backups), due on the month's last day; they untick on
-  the 1st.
-- To-dos are calendar entries too: they show on their day in the calendar and count down in the D-day schedule.
+- **이번 주 · This week** - everything dated this week (a one-off dentist visit on Saturday included), plus tasks you do
+  once a week (recycling, laundry). Those are due on the week's last day, where the calendar and the D-day list show
+  them. Tick them any day of the week; they untick themselves when a new week starts (Sunday by default; Monday in
+  Settings → 일반).
+- **이번 달 · This month** - everything dated this month, plus tasks you do once a month (bills, backups), due on the
+  month's last day; they untick on the 1st.
+- 📅 (on by default) lists **calendar entries and D-days** in every tab, on the day they fall. Ticking one here ticks it
+  in the calendar, and the other way round. An entry that repeats as often as the tab's period or more (daily in a
+  week, weekly in a month) stays out of that tab. Right-click → _숨길 태그 / Hide tags_ keeps tagged entries out of
+  this checklist only.
+- To-dos are calendar entries too: they show on their day in the calendar and count down in the D-day list.
   Daily routines stay in the checklist.
 - Double-click a task to edit it (erase the text to delete), ✕ to delete.
 - **Day-well-done stamp**: when every Today item is done, a "참 잘했어요 / Well done!" stamp drops onto the list. Right-click →
@@ -277,8 +278,9 @@ Countdowns, listed like a Discord member list: round icon, name, date and tag, a
   the next one counted down. Korean day-1 counting is the default; a hidden per-item option counts from zero.
 - **Icons**: click the circle to pick any image you've uploaded before (several D-days can share one; it's stored once),
   upload a new one, or use none (the first letter of the name is shown).
-- **Two views** (🗓 / ≡): the **countdown** list, or a **schedule** of everything coming up - D-days, calendar entries
-  and checklist to-dos together, soonest first. Daily routines and ticked entries stay out of it.
+- **Everything coming up**: below your D-days, every upcoming calendar entry and checklist to-do counts down
+  (D-x), soonest first. Past ones, daily routines and ticked entries stay out. Right-click → _달력 일정 표시 / Show
+  calendar entries_ turns this off.
 - **매년 반복** (every year): a birthday or anniversary counts down to its next occurrence. A Showcase's birthday is
   listed here on its own; change its name and date in the Showcase.
 - Click a row to edit or delete it. **Drag a row** to reorder.
@@ -401,7 +403,7 @@ A shrine card for a favourite character or person (오시 · oshi): a big image 
 quotes and a birthday countdown.
 
 - Click the image to add or change pictures; right-click sets the name, quotes, birthday, accent colour and frameless mode.
-- The birthday auto-syncs as a yearly calendar entry, so it shows up in the calendar and D-day schedule too.
+- The birthday auto-syncs as a yearly calendar entry, so it shows up in the calendar and D-day list too.
 - **Export / Import data** (right-click) copies the card as JSON to share or back up.
 
 Widgets saved by older versions as Stopwatch, Pomodoro, Audio Player or Collection open as the Timer, Now Playing or

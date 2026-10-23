@@ -1,0 +1,4 @@
+{
+  "ck.week_range": "Checklist header on the This week tab: the first and last day of the week, each already formatted like the Today tab header (month, day, short weekday). Use the range mark your language puts between two dates.",
+  "ck.menu_hide_tags": "Checklist right-click submenu listing every tag (#name). A ticked tag keeps entries with that tag out of this checklist only; the entries stay in the calendar and other widgets. Short menu label, no full stop."
+}

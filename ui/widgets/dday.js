@@ -1,5 +1,5 @@
-// D-day list: Discord-member-list style rows with circular icons. Two views: the countdown
-// LIST (filter by status/tag, drag to reorder) and a SCHEDULE of upcoming shared events.
+// D-day list: Discord-member-list style rows with circular icons (filter by status/tag, drag to reorder).
+// Below the d-days: every upcoming calendar entry as a D-x countdown (never past), unless turned off in the menu.
 // D-day items live in the shared `events` store (unified with the calendar): each is an event
 // carrying a `dday:{mode,icon,mstep,munit,countFrom}` marker, so an item shows in both widgets.
 import {
@@ -23,7 +23,7 @@ export default {
   size: { w: 3, h: 4 },
   min: { w: 2, h: 2 },
   // `items` persists only to carry legacy (pre-unify) data forward one last time; the live data is `events`.
-  defaults: { items: [], filter: { status: "all", tags: [] }, view: "list" },
+  defaults: { items: [], filter: { status: "all", tags: [] }, cal: true },
   css: `
     .dd { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
       display: flex; flex-direction: column; gap: var(--space-3); }
@@ -32,9 +32,9 @@ export default {
     .dd-top .dd-filter { flex: 1; min-width: 0; }
     .dd-filter { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; flex: none;
       mask-image: linear-gradient(to right, #000 88%, transparent); }
-    .dd-badge { font-size: var(--fs-meta); color: color-mix(in srgb, var(--c2) 80%, var(--c1)); border: 1px solid var(--c2); border-radius: var(--r-inner);
-      padding: 0 3px; margin-left: 4px; vertical-align: middle; }
-    .dd-row.dd-sched { cursor: default; touch-action: auto; }
+    .dd-row.dd-auto { cursor: default; touch-action: auto; }
+    .dd-row.dd-auto .dd-av { background: color-mix(in srgb, var(--c3) 14%, transparent); color: var(--text-muted); }
+    .dd-sep { font-size: var(--fs-meta); color: var(--text-faint); padding: 6px 4px 2px; }
     .dd-filter .chip { max-width: 9em; overflow: hidden; text-overflow: ellipsis; flex: none; }
     .dd-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1);
       scrollbar-width: thin; }
@@ -107,7 +107,8 @@ export default {
     if (!s.filter || typeof s.filter !== "object") s.filter = {};
     if (!STATUSES.includes(s.filter.status)) s.filter.status = "all";
     if (!Array.isArray(s.filter.tags)) s.filter.tags = [];
-    if (!["list", "schedule"].includes(s.view)) s.view = "list";
+    delete s.view; // the old schedule view: its rows are in the list now
+    s.cal = s.cal !== false;
 
     // ---- shared-store data layer ----
     // `events` is the whole shared store; `items` is the d-day view over it (events with a marker).
@@ -183,7 +184,6 @@ export default {
     root.innerHTML = `
       <div class="dd">
         <div class="dd-top">
-          <button class="dd-view"></button>
           <div class="dd-filter"></div>
         </div>
         <div class="dd-list"></div>
@@ -194,13 +194,7 @@ export default {
     const bar = box.querySelector(".dd-filter");
     const list = box.querySelector(".dd-list");
     const editor = box.querySelector(".dd-editor");
-    const viewBtn = box.querySelector(".dd-view");
     wheelScrollX(bar);
-    viewBtn.addEventListener("click", () => {
-      s.view = s.view === "list" ? "schedule" : "list";
-      api.save();
-      render();
-    });
 
     const today = () => ymd();
     // the day it counts to: a yearly item's next occurrence, else its own date
@@ -250,7 +244,26 @@ export default {
       return diff > 0 ? `D-${diff}` : diff === 0 ? "D-Day" : `D+${-diff}`;
     }
     const tagsOf = () =>
-      [...new Set(items.map((i) => i.tag).filter(Boolean))].sort();
+      [...new Set([...items.map((i) => i.tag), ...upcoming(false).flatMap((r) => r.e.tags || [])].filter(Boolean))].sort();
+
+    // Upcoming shared entries (calendar entries, to-dos, quotas; not d-days) by next occurrence within a year. Dailies are
+    // not countdowns; a ticked occurrence leaves the list until the next one. `filtered`: status and tag chips.
+    function upcoming(filtered = true) {
+      if (!s.cal || (filtered && s.filter.status === "past")) return [];
+      const t0 = today();
+      const rows = [];
+      for (const e of events) {
+        if (!e || typeof e.date !== "string" || isDday(e) || e.repeat === "daily") continue;
+        if (filtered && s.filter.tags.length && !(e.tags || []).some((g) => s.filter.tags.includes(g))) continue;
+        let next = null;
+        for (let i = 0; i <= 366 && !next; i++) {
+          const d = addDays(t0, i);
+          if (occursOn(e, d) && !eventDone(e, d)) next = d;
+        }
+        if (next) rows.push({ e, date: next, days: daysBetween(t0, next) });
+      }
+      return rows.sort((a, b) => a.date.localeCompare(b.date) || (a.e.time || "").localeCompare(b.e.time || ""));
+    }
     function visible() {
       const f = s.filter;
       return items.filter((it) => {
@@ -268,54 +281,32 @@ export default {
       `<div class="dd-av ${cls}">${it.icon ? `<img src="${esc(api.assetUrl(it.icon))}" alt="">` : esc(initial(it.name))}</div>`;
 
     function render() {
-      viewBtn.innerHTML = icon(s.view === "list" ? "calendar" : "list");
-      viewBtn.title = t(s.view === "list" ? "dday.view_schedule" : "dday.view_list");
-      if (s.view === "schedule") {
-        bar.hidden = true;
-        return renderSchedule();
-      }
       renderList();
     }
 
-    // Schedule: every upcoming shared entry (d-days, calendar entries, checklist to-dos and quotas) by next
-    // occurrence. Dailies are not countdowns; a ticked occurrence leaves the list until the next one.
-    function renderSchedule() {
-      const t0 = today();
-      const rows = [];
-      for (const e of events) {
-        if (!e || typeof e.date !== "string" || e.repeat === "daily") continue;
-        let next = null;
-        for (let i = 0; i <= 366 && !next; i++) {
-          const d = addDays(t0, i);
-          if (occursOn(e, d) && !eventDone(e, d)) next = d;
-        }
-        if (next) rows.push({ e, date: next, days: daysBetween(t0, next) });
-      }
-      rows.sort(
-        (a, b) =>
-          a.date.localeCompare(b.date) ||
-          (a.e.time || "").localeCompare(b.e.time || ""),
-      );
-      list.innerHTML = rows.length
-        ? rows
-            .map(({ e, date, days }) => {
-              const label = days === 0 ? "D-Day" : `D-${days}`;
-              const when =
-                date.replaceAll("-", ".") +
-                (e.time ? " " + e.time : "") +
-                (e.repeat === "yearly" && leapFallback(e.date, date) ? " · " + t("dday.leap_note") : "");
-              const name = e.title || "";
-              return `<div class="dd-row dd-sched" title="${esc(name)}\n${esc(when)}">
-              <div class="dd-text"><div class="dd-name">${esc(name)}${isDday(e) ? `<span class="dd-badge">${esc(t("dday.badge"))}</span>` : ""}</div><div class="dd-sub">${esc(when)}</div></div>
-              <div class="dd-d ${days === 0 ? "today" : ""}">${esc(label)}</div></div>`;
-            })
-            .join("")
-        : `<div class="dd-empty">${t("dday.schedule_empty")}</div>`;
-    }
+    const autoRows = (rows) =>
+      rows
+        .map(({ e, date, days }) => {
+          const label = days === 0 ? "D-Day" : `D-${days}`;
+          const when = [
+            date.replaceAll("-", ".") + (e.time ? " " + e.time : ""),
+            e.repeat === "yearly" && leapFallback(e.date, date) ? t("dday.leap_note") : "",
+            ...(e.tags || []).map((g) => "#" + g),
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          const name = e.title || "";
+          return `<div class="dd-row dd-auto" title="${esc(name)}\n${esc(when)}" aria-label="${esc(name + ", " + label + ", " + when)}">
+          <div class="dd-av">${icon("calendar")}</div>
+          <div class="dd-text"><div class="dd-name">${esc(name)}</div><div class="dd-sub">${esc(when)}</div></div>
+          <div class="dd-d ${days === 0 ? "today" : ""}">${esc(label)}</div></div>`;
+        })
+        .join("");
 
     function renderList() {
       s.filter.tags = s.filter.tags.filter((tg) => tagsOf().includes(tg));
-      bar.hidden = !items.length;
+      const auto = upcoming();
+      bar.hidden = !items.length && !upcoming(false).length;
       bar.innerHTML =
         `<button class="chip on" data-status>${t("dday.status." + s.filter.status)}</button>` +
         tagsOf()
@@ -325,7 +316,7 @@ export default {
           )
           .join("");
       const vis = visible();
-      list.innerHTML = vis.length
+      list.innerHTML = vis.length || auto.length
         ? vis
             .map((it) => {
               const ms = milestone(it);
@@ -359,7 +350,8 @@ export default {
               <div class="dd-text"><div class="dd-name">${esc(it.name)}</div><div class="dd-sub">${esc(sub)}</div></div>
               <div class="dd-d ${cls}">${esc(dLabel(it))}</div></div>`;
             })
-            .join("")
+            .join("") +
+          (auto.length ? (vis.length ? `<div class="dd-sep">${esc(t("ck.from_calendar"))}</div>` : "") + autoRows(auto) : "")
         : `<div class="dd-empty">${t("dday.empty")}</div>`;
     }
 
@@ -396,7 +388,7 @@ export default {
     let endDrag = null; // set while a reorder drag runs; destroy() calls it
     list.addEventListener("pointerdown", (e) => {
       const row = e.target.closest(".dd-row");
-      if (!row || e.button !== 0 || s.view !== "list") return;
+      if (!row || row.classList.contains("dd-auto") || e.button !== 0) return;
       const item = items.find((i) => i.id === row.dataset.id);
       const sx = e.clientX,
         sy = e.clientY;
@@ -437,7 +429,7 @@ export default {
           ?.closest(".dd-list");
         target = null;
         if (!tl?.__dday) return;
-        const rows = [...tl.querySelectorAll(".dd-row:not(.dragging)")];
+        const rows = [...tl.querySelectorAll(".dd-row:not(.dragging):not(.dd-auto)")];
         const before = rows.find(
           (r) =>
             ev.clientY < r.getBoundingClientRect().top + r.offsetHeight / 2,
@@ -479,7 +471,7 @@ export default {
     // keyboard: Enter opens the editor, Alt+↑/↓ moves the D-day up/down (same as dragging)
     list.addEventListener("keydown", (e) => {
       const row = e.target.closest(".dd-row");
-      if (!row || s.view !== "list") return;
+      if (!row || row.classList.contains("dd-auto")) return;
       const item = items.find((i) => i.id === row.dataset.id);
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
@@ -640,7 +632,7 @@ export default {
         persist();
         close();
         render();
-        if (s.view === "list" && !visible().includes(it))
+        if (!visible().includes(it))
           api.toast(t("dday.hidden_by_filter"));
       };
       editor.onclick = (e) => {
@@ -679,6 +671,12 @@ export default {
     load();
     return {
       destroy: () => endDrag?.(),
+      menu: () => [
+        {
+          text: (s.cal ? "✓ " : "") + t("dday.menu_cal"),
+          action: () => ((s.cal = !s.cal), api.save(), render()),
+        },
+      ],
       summary: () => {
         const list = visible();
         if (!list.length) return t("sum.dday_empty");
