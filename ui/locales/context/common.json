@@ -1,0 +1,9 @@
+{
+  "fmt.time": "Label: how times are written (12-hour or 24-hour). Settings › General row and a Clock right-click submenu. 1 to 3 words.",
+  "fmt.date": "Label: how dates are written. Settings › General row and a Clock right-click submenu; its choices are today's date in each style. 1 to 3 words.",
+  "fmt.default": "Time format choice: the language's usual style (Korean and English both show AM/PM). One word.",
+  "fmt.follow": "Clock right-click choice: use the format chosen in Settings › General instead of this clock's own. Short.",
+  "fmt.h12": "Time format choice: 12-hour clock with AM/PM. Short.",
+  "fmt.h12plain": "Time format choice: 12-hour clock without the AM/PM mark (10:27 for 10:27 PM). Short.",
+  "fmt.h24": "Time format choice: 24-hour clock. Short."
+}

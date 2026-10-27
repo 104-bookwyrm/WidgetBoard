@@ -4,7 +4,7 @@
 // ticks, so it stays exact through sleep. Closing the app pauses it (app.js leftover).
 import { icon } from "../icons.js";
 import { fmt, beep, unlockAudio, fmtTotal } from "./timekit.js";
-import { addEntry, cutEntry, awayHtml } from "../timelog.js";
+import { addEntry, cutEntry, askAway } from "../timelog.js";
 
 const PHASES = ["work", "short", "long"];
 const LIMITS = { work: [1, 180], short: [1, 60], long: [1, 120], every: [1, 12] };
@@ -92,7 +92,6 @@ export function pomodoro(root, s, api) {
       <div class="pm-top"><span class="pm-phase"></span></div>
       <div class="pm-time" role="timer"></div>
       <div class="pm-cap" role="status" hidden></div>
-      <div class="tl-away" role="status" hidden></div>
       <div class="pm-ctrl">
         <button class="primary" data-a="go"></button>
         <button data-a="skip" title="${t("pomo.skip")}"><span class="ico">${icon("next")}</span><span class="lbl">${t("pomo.skip")}</span></button>
@@ -149,9 +148,7 @@ export function pomodoro(root, s, api) {
     q(".pm-phase").title = `${t("pomo.round", { n: Math.min(s.round, s.every), total: s.every })} · ${t("pomo.today", { n: s.done })}`;
   }
   function renderAway() {
-    const a = q(".tl-away");
-    a.innerHTML = awayHtml(t, s.away, fmtTotal);
-    a.hidden = !s.away;
+    askAway(api, t("widget.pomodoro"), s.away, fmtTotal, answerAway);
   }
   /** Keep the focus time away, or take it out (of the running block, or of its log entry once it ended). */
   function answerAway(keep) {
@@ -323,6 +320,7 @@ export function pomodoro(root, s, api) {
 
   box.addEventListener("pointerdown", (e) => {
     if (!e.target.closest(".pm-set")) stopRing();
+    if (s.away) renderAway(); // another toast replaced the question: ask again
   });
   box.addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a;
@@ -335,7 +333,6 @@ export function pomodoro(root, s, api) {
     }
     else if (a === "reset") reset();
     else if (a === "set-close") closeSettings();
-    else if (a === "away-keep" || a === "away-cut") answerAway(a === "away-keep");
   });
   api.onDayChange?.(() => {
     s.day = today();

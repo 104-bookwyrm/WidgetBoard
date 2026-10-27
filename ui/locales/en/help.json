@@ -1,6 +1,6 @@
 {
   "help.ledger.tray.title": "Tray icon",
-  "help.ledger.tray.body": "Right-click the WidgetBoard icon in the taskbar to open its menu. Left-click it to show or hide all your widgets.",
+  "help.ledger.tray.body": "Left-click the icon to bring all your widgets to the front. To hide them, click tray menu › ‘Hide / show all widgets’.",
   "help.ledger.edit.title": "Edit layout",
   "help.ledger.edit.body": "Choose Edit layout in the tray menu to arrange your widgets on a grid. Click Done or press Esc when you finish.",
   "help.ledger.move_resize.title": "Move and resize",
@@ -71,6 +71,8 @@
   "help.guide.diary.body": "One page for each day, saved as you type. Use the arrows to move between days, or pick a date.",
   "help.guide.clock.title": "Clock",
   "help.guide.clock.body": "Shows the time. Right-click it to choose a time zone or show seconds.",
+  "help.guide.alarm.title": "Alarm",
+  "help.guide.alarm.body": "Click the time to set it, and the alarm turns on. Right-click › ‘Repeat’ picks the days. It uses the timer's sound settings.",
   "help.guide.timer.title": "Timer",
   "help.guide.timer.body": "Timer, Stopwatch and Pomodoro are separate choices in the add-widget menu. In Edit layout, Change widget type switches between them; a running one stops first and its time stays in the record. Hover an icon button to see its name.",
   "help.guide.timer.countdown": "Click the digits to type a time such as 25, 1:30 or 1:00:00, then press Start. Scroll over the digits to change it by a minute. Quick-start times added in Settings > Widgets appear under Quick start in the right-click menu.",
@@ -89,5 +91,5 @@
   "help.hint.edit_first.title": "Edit layout is on",
   "help.hint.edit_first.body": "Drag a widget's top strip to move it. Right-click a widget to change its type or open Appearance. Click Done or press Esc to finish.",
   "help.hint.tray_pin.title": "WidgetBoard stays in the taskbar",
-  "help.hint.tray_pin.body": "Right-click its icon to add widgets or edit the layout. Left-click the icon to hide or show every widget. If you don't see it, click ^ on the taskbar and drag the WidgetBoard icon onto the taskbar."
+  "help.hint.tray_pin.body": "Right-click its icon to add widgets or edit the layout. If you don't see it, click ^ on the taskbar and drag the WidgetBoard icon onto the taskbar."
 }

@@ -1,0 +1,15 @@
+{
+  "alarm.toggle": "Alarm widget: tooltip of the bell button and a right-click item with a checkmark when on. Turns the alarm on or off. 1 to 3 words.",
+  "alarm.edit": "Alarm widget: tooltip on the big time. Clicking it opens a time field. Short hint, 'action: result' style in Korean.",
+  "alarm.repeat_menu": "Alarm right-click submenu that lists Once and the seven weekdays to repeat on. One word.",
+  "alarm.once": "Alarm repeat submenu item: ring one time, then turn off. Checked when no weekday is picked. 1 to 2 words.",
+  "alarm.daily": "Alarm widget, small line under the time when every weekday is picked. 1 to 2 words.",
+  "alarm.weekdays": "Alarm widget, small line under the time when Monday to Friday are picked. One word.",
+  "alarm.weekends": "Alarm widget, small line under the time when Saturday and Sunday are picked. One word.",
+  "alarm.ringing": "Title of the flash and Windows notification when an alarm rings. The body is the alarm time. One word.",
+  "alarm.caption": "Sound caption (Settings › Hearing) while the alarm rings. {n} is the current ring, {total} how many it rings. Ends with how to stop it.",
+  "alarm.caption_muted": "Sound caption when the alarm goes off with the timer sound turned off. Ends with how to dismiss it.",
+  "sum.alarm_on": "Screen reader summary of an Alarm widget that is on. {time} is the alarm time (e.g. 7:00 AM). Short.",
+  "sum.alarm_off": "Screen reader summary of an Alarm widget that is off. {time} is the set time. Short.",
+  "hint.alarm": "Usage hint for the Alarm widget (opt-in, Settings › Accessibility). Same style as the other hint.* keys."
+}

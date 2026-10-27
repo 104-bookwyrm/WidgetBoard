@@ -1,0 +1,15 @@
+{
+  "alarm.toggle": "알람 켜기",
+  "alarm.edit": "클릭: 시간 설정",
+  "alarm.repeat_menu": "반복",
+  "alarm.once": "한 번만",
+  "alarm.daily": "매일",
+  "alarm.weekdays": "평일",
+  "alarm.weekends": "주말",
+  "alarm.ringing": "알람",
+  "alarm.caption": "🔔 알람 ({n}/{total}). 클릭: 끄기",
+  "alarm.caption_muted": "🔕 알람 (소리 꺼짐). 클릭: 닫기",
+  "sum.alarm_on": "{time} 알람",
+  "sum.alarm_off": "알람 꺼짐 ({time})",
+  "hint.alarm": "시간 클릭: 시간 설정, 우클릭: 반복"
+}

@@ -238,6 +238,30 @@ export function setEventDone(e, d, on) {
   e.doneDates = [...dates].sort();
 }
 
+// ---- time and date formats (Settings › 일반 timeFormat / dateFormat, a clock may override its own) ----
+// They adjust Intl options, so each language keeps its own order and words.
+/** "" = the widget's own style; the rest add a year, use a numeric month, or both. */
+export const DATE_STYLES = ["", "year", "numeric", "numeric-year"];
+/** `pref` choices: "" (the language's default), 12 (10:27 PM), "12plain" (10:27, no AM/PM), 24 (22:27). */
+export const TIME_FORMATS = ["", 12, "12plain", 24];
+/** A time in the chosen format. Intl cannot leave out AM/PM, so "12plain" drops that part. */
+export function formatTime(lang, when, opts, pref) {
+  const h12 = +pref === 12 || pref === "12plain" ? { hour12: true } : +pref === 24 ? { hour12: false } : {};
+  const parts = new Intl.DateTimeFormat(lang, { ...opts, ...h12 }).formatToParts(when);
+  return (pref === "12plain" ? parts.filter((p) => p.type !== "dayPeriod") : parts).map((p) => p.value).join("").trim();
+}
+/** Intl options for a date; only a date that names both a month and a day changes. */
+export function dateOpts(opts, style) {
+  if (!opts.month || !opts.day) return opts;
+  const o = { ...opts };
+  if (style === "numeric" || style === "numeric-year") o.month = "numeric";
+  if (style === "year" || style === "numeric-year") o.year = "numeric";
+  return o;
+}
+/** Today in each date style, for the pickers (their labels are examples, not words to translate). */
+export const dateStyleSample = (lang, style) =>
+  new Intl.DateTimeFormat(lang, dateOpts({ month: "short", day: "numeric", weekday: "short" }, style)).format(new Date());
+
 // The short list shown on top of every zone picker.
 export const TZ_COMMON = [
   "Asia/Seoul",

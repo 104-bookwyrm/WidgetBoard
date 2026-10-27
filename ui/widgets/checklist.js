@@ -19,6 +19,7 @@ import {
   setEventDone,
   weekFirstDay,
   tickDay,
+  dateOpts,
 } from "../util.js";
 import { icon } from "../icons.js";
 
@@ -105,7 +106,7 @@ export default {
     const q = (c) => box.querySelector(c);
     const today = () => ymd();
     const fmt = (opts, d) =>
-      new Intl.DateTimeFormat(lang, opts).format(parseYmd(d));
+      new Intl.DateTimeFormat(lang, dateOpts(opts, api.config?.ui?.dateFormat)).format(parseYmd(d));
 
     // ---- periods: a daily ticks today, a quota ticks its week's or month's last day ----
     const isDone = (i) => eventDone(i, tickDay(i, today()));

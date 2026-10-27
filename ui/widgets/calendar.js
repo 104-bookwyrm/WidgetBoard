@@ -21,6 +21,7 @@ import {
   REPEATS,
   tzOptions,
   osZone,
+  dateOpts,
 } from "../util.js";
 import { loadHolidays, holidayName } from "../holidays.js";
 import { icon } from "../icons.js";
@@ -207,7 +208,7 @@ export default {
     const q = (c) => box.querySelector(c);
     wheelScrollX(q(".cal-filter"));
     const fmt = (opts, d) =>
-      new Intl.DateTimeFormat(lang, opts).format(parseYmd(d));
+      new Intl.DateTimeFormat(lang, dateOpts(opts, api.config?.ui?.dateFormat)).format(parseYmd(d));
     const dayLabel = (d) =>
       fmt({ month: "long", day: "numeric", weekday: "short" }, d);
     const holName = (d) => holidayName(hol, api.config, lang, d);

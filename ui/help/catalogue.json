@@ -34,6 +34,7 @@
   {"id":"guide.memo","kind":"guide","type":"memo","since":null},
   {"id":"guide.diary","kind":"guide","type":"diary","since":null},
   {"id":"guide.clock","kind":"guide","type":"clock","since":null},
+  {"id":"guide.alarm","kind":"guide","type":"alarm","since":null},
   {"id":"guide.timer","kind":"guide","type":"timer","sections":["countdown","stopwatch","pomodoro"],"since":null},
   {"id":"guide.image","kind":"guide","type":"image","sections":["slideshow","grid"],"since":null},
   {"id":"guide.showcase","kind":"guide","type":"showcase","since":null},

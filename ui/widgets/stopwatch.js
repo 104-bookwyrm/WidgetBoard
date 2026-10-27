@@ -5,7 +5,7 @@
 //   session: this run (reset with the reset button when stopped); laps belong to the session
 //   total: the category's logged time since "reset total", which counts from then on and deletes nothing
 import { icon } from "../icons.js";
-import { CATS, spent, total as logTotal, readLog, addEntry, cutEntry, awayHtml } from "../timelog.js";
+import { CATS, spent, total as logTotal, readLog, addEntry, cutEntry, askAway } from "../timelog.js";
 import { p2, fmtTotal } from "./timekit.js";
 
 export { fmtTotal };
@@ -28,9 +28,6 @@ const css = `
     .sw-ctrl { display: flex; gap: var(--space-3); flex: none; max-width: 100%; }
     /* icon-only: the label stays as the button's title (tooltip and screen-reader name) */
     .sw-ctrl .lbl { display: none; }
-    /* the keep / take-out question needs the room while it is asked */
-    .sw:has(.tl-away:not([hidden])) { gap: 3cqh; }
-    .sw:has(.tl-away:not([hidden])) .sw-main { font-size: min(calc(108cqw / var(--len, 5)), 20cqh); }
     @container (max-height: 5.5em) { .sw-ctrl { display: none; } }
   `;
 
@@ -52,8 +49,8 @@ export function stopwatch(root, s, api) {
 
   root.innerHTML = `
     <div class="sw">
+      <div class="tw-mode">${icon("stopwatch")}</div>
       <div class="sw-main" role="timer"></div>
-      <div class="tl-away" role="status" hidden></div>
       <div class="sw-ctrl">
         <button class="primary" data-a="go"></button>
         <button data-a="lap"></button>
@@ -93,9 +90,7 @@ export function stopwatch(root, s, api) {
     if (lap.disabled !== off) lap.disabled = off;
   }
   function renderAway() {
-    const a = q(".tl-away");
-    a.innerHTML = awayHtml(t, s.away, fmtTotal);
-    a.hidden = !s.away;
+    askAway(api, t("widget.stopwatch"), s.away, fmtTotal, answerAway, s.cat);
   }
 
   let tick,
@@ -172,10 +167,10 @@ export function stopwatch(root, s, api) {
     render();
   }
 
+  box.addEventListener("pointerdown", () => s.away && renderAway()); // another toast replaced the question: ask again
   box.addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a;
     if (a === "go") s.startedAt ? stop() : start();
-    if (a === "away-keep" || a === "away-cut") answerAway(a === "away-keep");
     if (a === "lap") {
       if (s.startedAt) {
         const at = session();

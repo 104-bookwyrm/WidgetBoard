@@ -18,6 +18,7 @@ use std::{
 mod backup_policy;
 mod content;
 mod flush;
+mod layer;
 mod media;
 mod migrate;
 mod updater;
@@ -1144,7 +1145,7 @@ fn apply_layer(app: &AppHandle) {
     let st = app.state::<AppState>();
     let top = st.edit.load(Ordering::Relaxed) || st.kbd.load(Ordering::Relaxed);
     for w in boards(app) {
-        let _ = w.set_always_on_top(top);
+        layer::set_topmost(&w, top);
     }
 }
 
@@ -1163,10 +1164,25 @@ fn apply_edit_mode(app: &AppHandle, on: bool) {
 
 fn toggle_boards(app: &AppHandle) {
     let ws = boards(app);
-    let show = !ws.iter().any(|w| w.is_visible().unwrap_or(false));
-    for w in ws {
-        let _ = if show { w.show() } else { w.hide() };
+    if !ws.iter().any(|w| w.is_visible().unwrap_or(false)) {
+        return raise_boards(app);
     }
+    for w in ws {
+        let _ = w.hide();
+    }
+}
+
+/// Show every board in front of other apps once (an explicit request: tray, second launch, Widget menu).
+fn raise_boards(app: &AppHandle) {
+    for w in boards(app) {
+        let _ = w.show();
+        layer::raise(&w);
+    }
+}
+
+#[tauri::command]
+fn raise_board(window: WebviewWindow) {
+    layer::raise(&window);
 }
 
 /// Poll the cursor ~30x/s; each board ignores the mouse unless it is over one of its widgets.
@@ -1374,6 +1390,7 @@ fn create_boards(app: &AppHandle) -> tauri::Result<()> {
         w.set_position(wa.position)?; // position first: a DPI change may resize the window
         w.set_size(wa.size)?;
         let _ = w.set_ignore_cursor_events(true);
+        layer::keep_back(&w);
         w.show()?;
     }
     Ok(())
@@ -1929,9 +1946,7 @@ fn on_menu(app: &AppHandle, id: &str) {
     let st = app.state::<AppState>();
     if let Some(kind) = id.strip_prefix("add:") {
         if let Some(label) = st.primary_label() {
-            for w in boards(app) {
-                let _ = w.show();
-            }
+            raise_boards(app);
             let _ = app.emit_to(&label, "add-widget", kind);
         }
         return;
@@ -1953,16 +1968,36 @@ fn on_menu(app: &AppHandle, id: &str) {
     }
 }
 
+/// A non-production build (devtest) marks its tray icon with an orange dot, so it never passes for the real app.
+fn dev_mark(icon: &tauri::image::Image) -> tauri::image::Image<'static> {
+    let (w, h) = (icon.width() as usize, icon.height() as usize);
+    let mut px = icon.rgba().to_vec();
+    let (cx, cy, r) = (w as f64 * 0.72, h as f64 * 0.72, w as f64 * 0.28);
+    for y in 0..h {
+        for x in 0..w {
+            let d = ((x as f64 + 0.5 - cx).powi(2) + (y as f64 + 0.5 - cy).powi(2)).sqrt();
+            if d <= r {
+                let rgba = if d > r * 0.8 { [255, 255, 255, 255] } else { [255, 120, 0, 255] }; // white rim, orange fill
+                px[(y * w + x) * 4..][..4].copy_from_slice(&rgba);
+            }
+        }
+    }
+    tauri::image::Image::new_owned(px, w as u32, h as u32)
+}
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let icon = app.default_window_icon().cloned().expect("icon");
+    let dev = app.config().identifier != PRODUCTION_IDENTIFIER;
     TrayIconBuilder::with_id(TRAY_ID)
-        .icon(app.default_window_icon().cloned().expect("icon"))
-        .tooltip("WidgetBoard")
+        .icon(if dev { dev_mark(&icon) } else { icon })
+        .tooltip(if dev { "WidgetBoard (dev)" } else { "WidgetBoard" })
         .menu(&build_menu(app)?)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, ev| on_menu(app, ev.id().as_ref()))
         .on_tray_icon_event(|tray, ev| {
+            // left-click only shows (a stray click must not hide anything); hiding is the menu's Show/hide
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = ev {
-                toggle_boards(tray.app_handle());
+                raise_boards(tray.app_handle());
             }
         })
         .build(app)?;
@@ -1976,9 +2011,7 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            for w in boards(app) {
-                let _ = w.show();
-            }
+            raise_boards(app);
             let _ = app.emit("toast", "toast.already_running");
         }))
         .setup(|app| {
@@ -2042,6 +2075,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            raise_board,
             load_state,
             put_widget,
             remove_widget,

@@ -161,25 +161,6 @@ body.edit #board.free {
   right: 0;
   border-top-width: 1px;
 }
-/* stopwatch / pomodoro: keep or take out time away (timelog.js awayHtml) */
-.tl-away {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2) var(--space-3);
-  flex: none;
-  max-width: 100%;
-  font-size: var(--fs-small);
-  color: var(--c3);
-}
-.tl-away[hidden] {
-  display: none;
-}
-.tl-away button {
-  padding: 0 8px;
-  font-size: var(--fs-small);
-}
 .widget.invalid {
   outline: 2px dashed var(--danger, #f55);
   outline-offset: -2px;
@@ -240,6 +221,20 @@ body.edit #board.free {
 }
 body.edit .w-head button {
   display: inline-block;
+}
+/* ⋯ opens the widget menu; shown with the header in every mode */
+.w-head [data-act="menu"] {
+  display: inline-flex;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 0 3px;
+  font-size: 1.4em; /* Lucide's dots are small at the title's size */
+  color: var(--text-muted);
+}
+.w-head [data-act="menu"]:hover {
+  color: var(--c3);
+  background: color-mix(in srgb, var(--c3) 15%, transparent);
 }
 .widget:hover .w-head,
 body.edit .w-head {
@@ -612,7 +607,10 @@ body.reduce-motion .widget.moving {
   transform: translateX(-50%);
   z-index: 60;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: 18px; /* a pill on one line, still round when a question wraps */
+  max-width: min(560px, 90vw);
+  text-align: center;
+  word-break: keep-all; /* Korean wraps between words, not inside one */
   background: var(--c1);
   font-size: 13px;
   border: var(--line-width) var(--line-style) var(--line-color);

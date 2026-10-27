@@ -3,7 +3,7 @@ import { createMockTauri } from "./mock-tauri.js";
 // Reads everything once via get_settings, applies changes instantly, mirrors the app's a11y settings.
 import { loadLang, t, applyStatic } from "./i18n.js";
 import { loadCatalogue, readHelp, patchHelp } from "./help.js";
-import { tzOptions, osZone, syncScheme, appWindow } from "./util.js";
+import { tzOptions, osZone, syncScheme, appWindow, DATE_STYLES, dateStyleSample } from "./util.js";
 import {
   sanitize,
   setVar,
@@ -252,6 +252,10 @@ function fillGeneral() {
     invoke("save_config", { patch: { ui: { weekStart: week.value } } }).then(
       saved,
     );
+
+  const dateFmt = $("#set-datefmt"); // saved by the shared [data-ui] binding
+  dateFmt.innerHTML = DATE_STYLES.map((v) => `<option value="${v}">${dateStyleSample(data.app.lang, v)}</option>`).join("");
+  dateFmt.value = cfgUi().dateFormat ?? "";
 
   const tz = $("#set-tz");
   const cur = cfgUi().currentTz || "";

@@ -926,6 +926,7 @@ function mount(w) {
     <div class="w-head">
       <button class="grip" data-act="grip" title="${esc(t("a11y.grip", { name }))}">${icon("grip")}</button><span class="title">${esc(name)}</span>
       <span class="w-hint" title="${esc(hintOf(w))}">${esc(hintOf(w))}</span>
+      <button data-act="menu" title="${esc(t("menu.more"))}">${icon("ellipsis")}</button>
       <button data-act="remove" title="${esc(t("menu.close"))}">${icon("x")}</button>
     </div>
     <div class="w-resize" aria-hidden="true"></div>`;
@@ -977,6 +978,8 @@ function mount(w) {
     /** "Deleted" toast with an undo button; restore() puts the item back. */
     deleted: (restore) =>
       toast(t("toast.deleted"), { label: t("toast.undo"), fn: restore }, el),
+    /** A question toast with buttons [{ label, fn }]; it stays until answered and goes away with this widget. */
+    ask: (msg, buttons) => toast(msg, buttons, el, 0),
     t,
     lang,
     wheelScrollX,
@@ -1563,6 +1566,7 @@ async function openAddMenu(cell, at) {
 
 function wireFrame(el, w, def, inst) {
   el.querySelector("[data-act=remove]").onclick = () => removeWidget(w);
+  el.querySelector("[data-act=menu]").onclick = () => openMenu(w, el); // the right-click menu, for those who never right-click
   el.addEventListener("contextmenu", (e) => {
     if (e.target.closest("input, textarea, [contenteditable]")) return;
     e.preventDefault();
@@ -1978,31 +1982,32 @@ function hideToast() {
   toastOwner = null;
   syncHits();
 }
-/** toast('text') or toast('text', { label: '되돌리기', fn }, widgetEl) - an action keeps it up longer. */
-function toast(msg, action, owner = null) {
+/**
+ * toast('text') or toast('text', { label: '되돌리기', fn }, widgetEl) - an action keeps it up longer.
+ * `action` may be a list of buttons; ms = 0 keeps it up until a button is pressed or another toast replaces it.
+ */
+function toast(msg, action, owner = null, ms = action ? 7000 : 2600) {
   toastOwner = owner;
   const el = $("#toast");
   el.textContent = msg;
-  if (action) {
+  for (const a of [].concat(action ?? [])) {
     const b = document.createElement("button");
-    b.textContent = action.label;
+    b.textContent = a.label;
     b.onclick = () => {
       el.hidden = true;
       syncHits();
-      action.fn();
+      a.fn();
     };
     el.append(" ", b);
   }
   el.hidden = false;
   syncHits();
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(
-    () => {
+  if (ms)
+    toastTimer = setTimeout(() => {
       el.hidden = true;
       syncHits();
-    },
-    action ? 7000 : 2600,
-  );
+    }, ms);
 }
 /** Screen-reader announcement without a visible toast. */
 function announce(msg) {
@@ -2792,7 +2797,12 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     if ("hidden" in patch) setHidden(w, !!patch.hidden, true);
     save(w);
   });
-  await listen("widget-locate", (e) => locate(e.payload));
+  // the Widget menu asked to see a widget: its board comes in front of other apps once (boards stay at the back)
+  const raiseFor = (id) => mounted.has(id) && invoke("raise_board").catch(() => {});
+  await listen("widget-locate", (e) => {
+    locate(e.payload);
+    raiseFor(e.payload);
+  });
   // close / move from the settings window: the owning board acts on its live copy (unsaved edits included)
   await listen("widget-close", (e) => {
     const w = widgets.find((x) => x.id === e.payload);
@@ -2810,7 +2820,10 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     const w = e.payload;
     const def = REGISTRY[w?.type];
     if (!w?.id || !def) return;
-    if (mounted.has(w.id)) return locate(w.id); // already here
+    if (mounted.has(w.id)) {
+      locate(w.id); // already here
+      return raiseFor(w.id);
+    }
     w.w ??= def.size?.w ?? def.min?.w ?? 2;
     w.h ??= def.size?.h ?? def.min?.h ?? 2;
     const known = displays.some((d) => d.display === w.display);
@@ -2821,6 +2834,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       syncHits();
     } else if (w.display === myDisplay || (!known && isPrimary))
       receiveWidget(w);
+    raiseFor(w.id);
   });
   await listen("edit-mode", (e) => setEdit(!!e.payload));
   await listen("theme-changed", (e) => applyTheme(e.payload));

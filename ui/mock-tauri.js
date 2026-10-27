@@ -389,6 +389,7 @@ export function createMockTauri({ memory = false } = {}) {
         window.__hits = args.rects;
         return;
       case "set_interacting":
+      case "raise_board":
         return;
       case "emit_primary":
         native(cmd, args.event, args.payload);

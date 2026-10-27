@@ -1,0 +1,15 @@
+{
+  "alarm.toggle": "Alarm on",
+  "alarm.edit": "Click to set the time",
+  "alarm.repeat_menu": "Repeat",
+  "alarm.once": "Once",
+  "alarm.daily": "Every day",
+  "alarm.weekdays": "Weekdays",
+  "alarm.weekends": "Weekends",
+  "alarm.ringing": "Alarm",
+  "alarm.caption": "🔔 Alarm ringing ({n}/{total}) - click to stop",
+  "alarm.caption_muted": "🔕 Alarm (sound off) - click to dismiss",
+  "sum.alarm_on": "Alarm at {time}",
+  "sum.alarm_off": "Alarm off ({time})",
+  "hint.alarm": "Click the time to set it · right-click → repeat"
+}

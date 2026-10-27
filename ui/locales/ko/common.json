@@ -63,5 +63,12 @@
   "sum.ap_empty": "트랙 없음",
   "pomo.work": "집중",
   "pomo.short": "짧은 휴식",
-  "pomo.long": "긴 휴식"
+  "pomo.long": "긴 휴식",
+  "fmt.time": "시간 형식",
+  "fmt.date": "날짜 형식",
+  "fmt.default": "기본",
+  "fmt.follow": "설정과 같게",
+  "fmt.h12": "12시간",
+  "fmt.h12plain": "12시간 (오전/오후 없이)",
+  "fmt.h24": "24시간"
 }

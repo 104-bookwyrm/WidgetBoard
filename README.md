@@ -59,7 +59,7 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
   **설정창 / Settings**, **레이아웃 / Layouts…**, **언어 / Language ›**, show/hide, open data folder,
   **설정 파일 열기 / Open settings file** (config.json), check for updates, quit.
   _Theme colours…_ and _Layouts…_ open the matching page of the settings window.
-- left-click → show/hide all widgets
+- left-click → bring all widgets to the front (hide them from the menu)
 
 **Moving and sizing**
 

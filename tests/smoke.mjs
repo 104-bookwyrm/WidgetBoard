@@ -100,11 +100,17 @@ const rect = (p, id) => p.$eval(`.widget[data-id="${id}"]`, (e) => e.getBounding
   await p.clock.runFor(500);
   const d = await p.evaluate(() => __mock.content().s?.data ?? __mock.widgets()[0].settings);
   ok(d.startedAt === null && d.elapsed === 20 * MIN, "6: stopped at the close", JSON.stringify(d));
-  ok(await p.$eval(".tl-away", (e) => e.hidden), "6: no question after a proper close");
+  ok(await p.$eval("#toast", (e) => e.hidden), "6: no question after a proper close");
   await p.close();
   p = await page([sw], { "wb-session": { launched: T0, closed: T0 - 120 * MIN } }, { clock: true });
   await p.clock.runFor(500);
-  ok(!(await p.$eval(".tl-away", (e) => e.hidden)), "6: a crash asks");
+  ok(!(await p.$eval("#toast", (e) => e.hidden)), "6: a crash asks");
+  await p.clock.runFor(60000);
+  ok((await p.$$("#toast:not([hidden]) button")).length === 2, "6: the question waits for an answer");
+  await p.click("#toast button:last-child");
+  await p.clock.runFor(1000); // save debounce
+  const cut = await p.evaluate(() => __mock.content().s?.data ?? __mock.widgets()[0].settings);
+  ok(cut.away === null, "6: answering clears the question", JSON.stringify(cut.away));
   await p.close();
 }
 

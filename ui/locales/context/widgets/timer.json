@@ -3,5 +3,9 @@
   "sw.cat_menu": "Stopwatch right-click submenu to pick the time category (Focus / Other). One word.",
   "sw.reset_total_menu": "Stopwatch right-click item: the category total starts counting from zero now. Nothing is deleted; the log keeps all past time. Short.",
   "sw.laps_menu": "Stopwatch right-click submenu listing the recorded laps. {n} is how many. Short.",
-  "pomo.settings_menu": "Pomodoro right-click item that opens its settings panel (lengths, rounds, auto-start). Ends with an ellipsis like other items that open a panel."
+  "pomo.settings_menu": "Pomodoro right-click item that opens its settings panel (lengths, rounds, auto-start). Ends with an ellipsis like other items that open a panel.",
+  "away.text": "Toast question when the PC slept or the user was away while a stopwatch or pomodoro kept counting. {name} is the widget type (Stopwatch, Pomodoro), {t} the time away, {cat} the category the time is recorded under (time.focus or time.other; pomodoro is always Focus). Stays up until a button is pressed. Ends with a yes/no question (record it under {cat}?) answered by away.keep / away.cut.",
+  "away.crash": "Toast question after WidgetBoard closed unexpectedly while a stopwatch or pomodoro was running. {name} is the widget type, {since} the time the run started (e.g. 17:53), {cat} the category as in away.text. The app cannot tell when it closed, so the whole span from {since} to now is in question.",
+  "away.keep": "Toast button: count the time in question in the time record. One word.",
+  "away.cut": "Toast button: leave the time in question out of the time record. 1 to 2 words."
 }

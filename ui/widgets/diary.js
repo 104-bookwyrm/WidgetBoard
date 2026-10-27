@@ -1,7 +1,7 @@
 // Diary: one page per day (diary/YYYY-MM-DD.md). ‹ › flick between days that have pages
 // (› ends at today); click the date to jump anywhere. Arrow keys stay with the text cursor.
 // A horizontal touchpad swipe over the widget also flicks pages.
-import { ymd, parseYmd } from "../util.js";
+import { ymd, parseYmd, dateOpts } from "../util.js";
 import { icon } from "../icons.js";
 
 export default {
@@ -55,12 +55,10 @@ export default {
       dates.find((d) => d > date) ?? (date < ymd() ? ymd() : null);
 
     function renderHead() {
-      const label = new Intl.DateTimeFormat(lang, {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        weekday: "short",
-      }).format(parseYmd(date));
+      const label = new Intl.DateTimeFormat(
+        lang,
+        dateOpts({ year: "numeric", month: "long", day: "numeric", weekday: "short" }, api.config?.ui?.dateFormat),
+      ).format(parseYmd(date));
       q(".dy-date").textContent = label;
       q("[data-a=prev]").disabled = !prevDate();
       q("[data-a=next]").disabled = !nextDate();
@@ -163,6 +161,7 @@ export default {
 
     // a search result in the Library: open that page
     api.on("goto-date", (p) => p?.type === "diary" && open(p.date));
+    api.onConfig(() => renderHead()); // date format (Settings › 일반)
 
     // another diary widget (or monitor) changed a page
     api.onStore("diary", async (p) => {

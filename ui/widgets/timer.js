@@ -35,8 +35,10 @@ const css = `
     @keyframes t-blink { 50% { opacity: .3; } }
     .t-cap { font-size: var(--fs-small); font-weight: 600; padding: 2px 10px; border-radius: 999px; flex: none; max-width: 100%;
       background: var(--c2); color: var(--on-accent, #fff); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* which time widget this is (hourglass / stopwatch), where the pomodoro shows its phase pill */
+    .tw-mode { color: var(--text-muted); font-size: min(10cqh, 1.5em); line-height: 1; flex: none; display: flex; }
     /* em-based, so larger text hides the buttons sooner instead of overflowing */
-    @container (max-height: 5.5em) { .t-ctrl { display: none; } }
+    @container (max-height: 5.5em) { .t-ctrl, .tw-mode { display: none; } }
   `;
 
 // Countdown. Stores the end timestamp (not ticks), so it stays correct across sleep/restart.
@@ -44,6 +46,7 @@ function countdown(root, s, api) {
   const { t } = api;
   root.innerHTML = `
     <div class="timer">
+      <div class="tw-mode">${icon("hourglass")}</div>
       <div class="t-display" title="${t("timer.hint")}"></div>
       <div class="t-cap" role="status" hidden></div>
       <div class="t-ctrl"><button class="primary" data-a="go"></button><button data-a="reset" title="${t("timer.reset")}"><span class="ico">${icon("reset")}</span><span class="lbl">${t("timer.reset")}</span></button></div>

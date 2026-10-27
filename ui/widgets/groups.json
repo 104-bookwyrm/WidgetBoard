@@ -1,7 +1,7 @@
 [
   { "id": "plan", "widgets": ["checklist", "calendar", "dday"] },
   { "id": "notes", "widgets": ["memo", "diary"] },
-  { "id": "time", "widgets": ["clock", "timer", "stopwatch", "pomodoro"] },
+  { "id": "time", "widgets": ["clock", "alarm", "timer", "stopwatch", "pomodoro"] },
   { "id": "images", "widgets": ["image", "showcase"] },
   { "id": "media", "widgets": ["nowplaying"] }
 ]

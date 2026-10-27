@@ -3,6 +3,7 @@
 // Totals are sums over entries, so no widget writes another widget's data, and two boards adding at the same
 // moment merge by id (app.js writeStore).
 // ponytail: the whole list is rewritten on every add; ~10 entries a day stays small for years. Split by year if not.
+import { formatTime } from "./util.js";
 export const CATS = ["focus", "other"];
 const after = (a, b, since) => Math.max(0, b - Math.max(a, since)); // length of [a, b] from `since` on
 
@@ -53,13 +54,18 @@ export const cutEntry = (api, id, cut) =>
   });
 
 /**
- * The keep / take-out question after time away (sleep, or a crash left something running).
- * `away` = { from, to, id, crash? }. Buttons: data-a="away-keep" / "away-cut".
+ * The keep / take-out question after time away (sleep, or a crash left something running), as a toast that stays
+ * until answered; the widget face stays clean. `away` = { from, to, id, crash? }; `name` says which widget asks.
  */
-export function awayHtml(t, away, fmt) {
-  if (!away) return "";
+export function askAway(api, name, away, fmt, answer, cat = "focus") {
+  if (!away) return;
+  const { t } = api;
+  const label = t("time." + cat);
   const msg = away.crash
-    ? t("away.crash", { since: new Date(away.from).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })
-    : t("away.text", { t: fmt(away.to - away.from) });
-  return `<span>${msg}</span><button data-a="away-keep">${t("away.keep")}</button><button data-a="away-cut">${t("away.cut")}</button>`;
+    ? t("away.crash", { name, cat: label, since: formatTime(api.lang, away.from, { hour: "numeric", minute: "2-digit" }, api.config?.ui?.timeFormat) })
+    : t("away.text", { name, cat: label, t: fmt(away.to - away.from) });
+  api.ask?.(msg, [
+    { label: t("away.keep"), fn: () => answer(true) },
+    { label: t("away.cut"), fn: () => answer(false) },
+  ]);
 }

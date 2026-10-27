@@ -331,6 +331,20 @@
               <label for="set-tz" data-i18n="set.general.tz">내 시간대</label>
               <select id="set-tz"></select>
             </div>
+            <div class="set-row">
+              <label for="set-timefmt" data-i18n="fmt.time"></label>
+              <select id="set-timefmt" data-ui="timeFormat">
+                <option value="" data-i18n="fmt.default"></option>
+                <option value="12" data-i18n="fmt.h12"></option>
+                <option value="12plain" data-i18n="fmt.h12plain"></option>
+                <option value="24" data-i18n="fmt.h24"></option>
+              </select>
+            </div>
+            <div class="set-row">
+              <label for="set-datefmt" data-i18n="fmt.date"></label>
+              <!-- options: today in each style (settings.js), so they need no translation -->
+              <select id="set-datefmt" data-ui="dateFormat"></select>
+            </div>
           </fieldset>
         </section>
 

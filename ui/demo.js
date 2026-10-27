@@ -50,10 +50,10 @@ export async function mountStage({ T, invoke, toast, groupMenus, isEdit }) {
   tray.setAttribute("aria-label", label);
   tray.title = label;
 
-  // the real tray hides or shows every board window; here it is the board layer (board, edit bar, panels)
+  // the real tray shows (left-click) or hides and shows (Show/hide) every board window; here it is the board layer
   const setBoard = (on) => document.body.classList.toggle("demo-board-off", !on);
   const toggleBoard = () => setBoard(document.body.classList.contains("demo-board-off"));
-  tray.onclick = toggleBoard;
+  tray.onclick = () => setBoard(true);
 
   // one entry per tray-menu.json item, in its order; what each id does follows main.rs on_menu
   const items = () => {

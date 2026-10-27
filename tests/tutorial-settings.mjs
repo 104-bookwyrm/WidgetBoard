@@ -43,7 +43,7 @@ try {
   const guide = await browser.newPage();
   await guide.goto("http://localhost:8765/settings.html?page=guide.timer&lang=en");
   await guide.waitForSelector('[data-page="guide"]:not([hidden])');
-  assert.equal(await guide.locator(".help-guide-item").count(), 10, "the Guide has one entry per host widget type");
+  assert.equal(await guide.locator(".help-guide-item").count(), catalogue.filter((e) => e.kind === "guide").length, "the Guide has one entry per host widget type");
   assert.equal(await guide.locator('[data-guide="timer"].help-focus').count(), 1, "the route focuses the requested Guide entry");
   assert.equal(await guide.locator('[data-guide="timer"] h4').count(), 3, "Timer explains all three modes");
   assert.deepEqual(
