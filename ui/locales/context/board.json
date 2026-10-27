@@ -1,5 +1,7 @@
 {
-  "menu.more": "Tooltip and screen-reader name of the ⋯ button at the right end of a widget title bar. It opens the same menu as right-clicking the widget. 1 to 2 words.",
+  "menu.pin": "Widget right-click menu item. The widget leaves the board and floats in its own window above every other app until released. Same idea as Windows' \"Always on top\". 2 to 4 words, no full stop.",
+  "menu.unpin": "Right-click menu item of a widget that is kept on top (menu.pin). The window closes and the widget returns to its spot on the board. 2 to 3 words, no full stop.",
+  "menu.more":"Tooltip and screen-reader name of the ⋯ button at the right end of a widget title bar. It opens the same menu as right-clicking the widget. 1 to 2 words.",
   "demo.unavailable": "Toast in the tutorial demo, shown when the user picks a tray menu item the demo does not run (Library, Settings, Language and so on). It tells them the item works in the real app. A short phrase, no full stop in English.",
   "demo.tray_icon": "Accessible name and tooltip of the fake tray icon on the demo's fake taskbar. It stands for the real WidgetBoard tray icon; keep the product name as the app uses it. 3 to 5 words.",
   "demo.sample.ev_today": "Title of a sample calendar entry dated today on the tutorial demo's sample board. A short, everyday event name, 1 to 3 words, no full stop.",

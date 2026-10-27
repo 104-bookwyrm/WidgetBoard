@@ -1,6 +1,7 @@
 {
   "timer.start": "Start",
   "timer.pause": "Pause",
+  "timer.stop": "Stop alarm",
   "timer.resume": "Resume",
   "timer.reset": "Reset",
   "timer.min": "{n}m",

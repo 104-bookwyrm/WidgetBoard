@@ -38,7 +38,10 @@ const css = `
     /* which time widget this is (hourglass / stopwatch), where the pomodoro shows its phase pill */
     .tw-mode { color: var(--text-muted); font-size: min(10cqh, 1.5em); line-height: 1; flex: none; display: flex; }
     /* em-based, so larger text hides the buttons sooner instead of overflowing */
-    @container (max-height: 5.5em) { .t-ctrl, .tw-mode { display: none; } }
+    /* ringing: the stop button shows at any size (beside the digits when short); reset waits until it is quiet */
+    @container (max-height: 5.5em) { .t-ctrl, .tw-mode { display: none; } .timer.ringing { flex-direction: row; } }
+    .timer.ringing .t-ctrl { display: flex; }
+    .timer.ringing [data-a=reset] { display: none; }
   `;
 
 // Countdown. Stores the end timestamp (not ticks), so it stays correct across sleep/restart.
@@ -71,17 +74,20 @@ function countdown(root, s, api) {
   s.endAt = s.endAt ? num(s.endAt, null) : null;
   const left = () =>
     s.endAt ? Math.max(0, s.endAt - Date.now()) : s.remaining;
+  const ringing = () => box.classList.contains("ringing");
   function render() {
     if (!editing) {
       disp.textContent = fmt(left());
       disp.style.setProperty("--len", Math.max(5, disp.textContent.length));
     }
-    const k = s.endAt
-      ? "timer.pause"
-      : s.remaining > 0 && s.remaining < s.duration
-        ? "timer.resume"
-        : "timer.start";
-    go.innerHTML = `<span class="ico">${icon(s.endAt ? "pause" : "play")}</span><span class="lbl">${t(k)}</span>`;
+    const k = ringing()
+      ? "timer.stop"
+      : s.endAt
+        ? "timer.pause"
+        : s.remaining > 0 && s.remaining < s.duration
+          ? "timer.resume"
+          : "timer.start";
+    go.innerHTML = `<span class="ico">${icon(ringing() ? "bell-off" : s.endAt ? "pause" : "play")}</span><span class="lbl">${t(k)}</span>`;
     go.title = t(k);
     box.classList.toggle("running", !!s.endAt);
   }
@@ -95,8 +101,8 @@ function countdown(root, s, api) {
     s.endAt = null;
     s.remaining = 0;
     api.save();
-    render();
     box.classList.add("ringing");
+    render();
     if (sound) {
       api.alert?.(t("timer.done"), fmt(s.duration));
       const ring = (n) => {
@@ -124,10 +130,11 @@ function countdown(root, s, api) {
     clearInterval(ringTimer);
     box.classList.remove("ringing");
     cap.hidden = true;
+    render();
   }
   function start() {
     unlockAudio(); // during the click, so the alarm may play
-    stopRing(); // Enter/Space on Start while it rings: the old ring loop would cut the next alarm short
+    stopRing(); // a preset started while it rings: the old ring loop would cut the next alarm short
     if (s.remaining <= 0) s.remaining = s.duration;
     s.startedAt = Date.now();
     s.endAt = s.startedAt + s.remaining;
@@ -152,9 +159,11 @@ function countdown(root, s, api) {
     render();
   }
 
-  box.addEventListener("pointerdown", stopRing);
-  go.onclick = () => (s.endAt ? pause() : start());
-  box.querySelector("[data-a=reset]").onclick = () => setDuration(s.duration);
+  // While it rings, a click anywhere on the face silences it. The buttons do it in their own click (re-rendering the
+  // button on pointerdown would swallow that click), and the stop button only silences: it never starts over.
+  box.addEventListener("pointerdown", (e) => e.target.closest("button") || stopRing());
+  go.onclick = () => (ringing() ? stopRing() : s.endAt ? pause() : start());
+  box.querySelector("[data-a=reset]").onclick = () => (ringing() ? stopRing() : setDuration(s.duration));
   // Presets come from config.json (timer.presets: [{ label, time }]); label may be empty. They live in the
   // right-click menu (빠른 시작): picking one sets that time and starts it.
   const DEFAULT_PRESETS = [

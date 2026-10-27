@@ -317,18 +317,30 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
     let (my_display, i_am_primary) =
         me.as_ref().map(|b| (b.display.clone(), b.primary)).unwrap_or_default();
     let present: HashSet<&str> = boards.iter().map(|b| b.display.as_str()).collect();
+    let pin = window.label().strip_prefix("pin-");
     // Widgets whose monitor is missing (unplugged, or older layout) show on the primary board.
+    // A pin window gets only its own widget.
     let widgets: Vec<Value> = state
         .widgets
         .lock()
         .unwrap()
         .iter()
-        .filter(|w| match w.get("display").and_then(Value::as_str) {
-            Some(d) if present.contains(d) => d == my_display,
+        .filter(|w| match (pin, w.get("display").and_then(Value::as_str)) {
+            (Some(id), _) => widget_id(w) == Some(id),
+            (None, Some(d)) if present.contains(d) => d == my_display,
             _ => i_am_primary,
         })
         .cloned()
         .collect();
+    let my_display = match pin {
+        Some(_) => widgets.first().and_then(|w| w.get("display")).and_then(Value::as_str).unwrap_or_default().to_string(),
+        None => my_display,
+    };
+    // a board keeps a pinned widget's spot but does not run it (its pin window does)
+    let pinned: Vec<String> = match pin {
+        Some(_) => vec![],
+        None => pins(window.app_handle()).iter().filter_map(|w| w.label().strip_prefix("pin-").map(str::to_string)).collect(),
+    };
     let theme =
         fs::read_to_string(state.dir.join("theme.css")).unwrap_or_else(|_| DEFAULT_THEME.into());
     let settings = state.settings.lock().unwrap().clone();
@@ -337,6 +349,7 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
         "primary": i_am_primary,
         "displays": boards,
         "widgets": widgets,
+        "pinned": pinned,
         "theme": theme,
         "lang": settings.lang,
         "reduceMotion": settings.reduce_motion,
@@ -1014,7 +1027,7 @@ fn set_dwell(state: State<AppState>, ms: usize) {
 fn set_zoom(app: AppHandle, state: State<AppState>, zoom: f64) {
     let z = if zoom.is_finite() { zoom.clamp(0.75, 3.0) } else { 1.0 };
     *state.zoom.lock().unwrap() = z;
-    for w in boards(&app) {
+    for w in boards(&app).into_iter().chain(pins(&app)) {
         let _ = w.set_zoom(z);
     }
 }
@@ -1101,6 +1114,9 @@ fn emit_primary(app: AppHandle, state: State<AppState>, event: String, payload: 
 fn replace_widgets(app: AppHandle, state: State<AppState>, widgets: Vec<Value>) -> Result<(), String> {
     *state.widgets.lock().unwrap() = widgets.into_iter().filter(|w| widget_id(w).is_some()).collect();
     state.persist_widgets()?;
+    for w in pins(&app) {
+        let _ = w.destroy(); // the caller flushed every window first; the widgets follow the new layout
+    }
     let _ = app.emit("layout-replaced", ());
     Ok(())
 }
@@ -1183,6 +1199,78 @@ fn raise_boards(app: &AppHandle) {
 #[tauri::command]
 fn raise_board(window: WebviewWindow) {
     layer::raise(&window);
+}
+
+/// Pinned widgets: each runs alone in an always-on-top window `pin-<id>` (index.html?pin=<id>). Which widgets are
+/// pinned is just which of these windows exist, so a restart puts every widget back on its board.
+fn pins(app: &AppHandle) -> Vec<WebviewWindow> {
+    app.webview_windows().into_iter().filter(|(l, _)| l.starts_with("pin-")).map(|(_, w)| w).collect()
+}
+
+/// A widget's rect on a board (CSS px) -> physical screen x, y, w, h, from the board's client origin.
+fn pin_rect(origin: (i32, i32), r: Rect, zoom: f64, scale: f64) -> (i32, i32, u32, u32) {
+    let k = zoom * scale;
+    let px = |v: f64| (v * k).round();
+    (origin.0 + px(r.x) as i32, origin.1 + px(r.y) as i32, px(r.w) as u32, px(r.h) as u32)
+}
+
+/// Pin a widget from `window` (its board): it opens over its own spot, in front of every app, until released.
+/// async: building a window inside a sync command deadlocks the IPC on Windows (tauri docs).
+#[tauri::command]
+async fn pin_widget(app: AppHandle, window: WebviewWindow, id: String, rect: Rect) -> Result<(), String> {
+    if id.is_empty() || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err("bad id".into()); // becomes a window label and a URL query
+    }
+    let label = format!("pin-{id}");
+    if let Some(w) = app.get_webview_window(&label) {
+        return w.set_focus().map_err(|e| e.to_string());
+    }
+    let z = *app.state::<AppState>().zoom.lock().unwrap();
+    let origin = window.inner_position().map_err(|e| e.to_string())?;
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let (x, y, w, h) = pin_rect((origin.x, origin.y), rect, z, scale);
+    let pin = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(format!("index.html?pin={id}").into()))
+        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
+        .title("WidgetBoard")
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .always_on_top(true) // no layer::keep_back: this window is meant to stay in front
+        .skip_taskbar(true)
+        .resizable(true)
+        .min_inner_size(96.0, 64.0)
+        .visible(false)
+        .disable_drag_drop_handler()
+        .build()
+        .map_err(|e| e.to_string())?;
+    let _ = pin.set_position(tauri::PhysicalPosition::new(x, y)); // position first: a DPI change may resize the window
+    let _ = pin.set_size(tauri::PhysicalSize::new(w.max(1), h.max(1)));
+    let _ = pin.set_zoom(z);
+    let handle = app.clone();
+    pin.on_window_event(move |e| match e {
+        // Alt+F4 and the like: the page saves first, then calls unpin_widget
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            let _ = handle.emit_to(&label, "pin-release", ());
+        }
+        tauri::WindowEvent::Destroyed => {
+            let st = handle.state::<AppState>();
+            let widget = st.widgets.lock().unwrap().iter().find(|w| widget_id(w) == Some(&id)).cloned();
+            let _ = handle.emit("widget-unpinned", json!({ "id": id, "widget": widget }));
+        }
+        _ => {}
+    });
+    let _ = pin.show();
+    let _ = pin.set_focus();
+    Ok(())
+}
+
+/// A pin window lets go once its saves are flushed; its board shows the widget again (`widget-unpinned`).
+#[tauri::command]
+fn unpin_widget(window: WebviewWindow) {
+    if window.label().starts_with("pin-") {
+        let _ = window.destroy();
+    }
 }
 
 /// Poll the cursor ~30x/s; each board ignores the mouse unless it is over one of its widgets.
@@ -2118,6 +2206,8 @@ fn main() {
             update_skip,
             set_hit_rects,
             set_interacting,
+            pin_widget,
+            unpin_widget,
             set_edit_mode,
             open_theme_file,
             get_settings,
@@ -2149,6 +2239,14 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pin_rect_maps_css_px_to_physical_screen() {
+        let r = Rect { x: 100.0, y: 50.0, w: 200.0, h: 120.0 };
+        assert_eq!(pin_rect((0, 0), r, 1.0, 1.0), (100, 50, 200, 120));
+        assert_eq!(pin_rect((1920, 0), r, 1.0, 1.5), (1920 + 150, 75, 300, 180)); // second monitor at 150%
+        assert_eq!(pin_rect((0, 40), r, 1.25, 1.0), (125, 40 + 63, 250, 150)); // UI zoom, taskbar on top; 62.5 rounds up
+    }
 
     #[test]
     fn tray_menu_ids_and_labels_exist() {

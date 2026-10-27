@@ -65,7 +65,10 @@ const css = `
     .pm-set input[type=number]:focus { border-color: var(--c2); }
     .pm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(7em, 1fr)); gap: var(--space-3); }
     @container (max-width: 13em) { .pm-ctrl [data-a=auto] { display: none; } } /* four buttons don't fit; the settings panel keeps it */
-    @container (max-height: 6em) { .pm-ctrl, .pm-top { display: none; } }
+    /* ringing: the stop button shows at any size (alone, beside the digits, when short) */
+    @container (max-height: 6em) { .pm-ctrl, .pm-top { display: none; } .pm.ringing { flex-direction: row; }
+      .pm.ringing .pm-ctrl button:not([data-a=go]) { display: none; } }
+    .pm.ringing .pm-ctrl { display: flex; }
   `;
 
 export function pomodoro(root, s, api) {
@@ -107,6 +110,7 @@ export function pomodoro(root, s, api) {
     ui().timerSound === false ? 0 : Math.min(Math.max((ui().timerVolume ?? 60) / 100, 0), 1);
   const rings = () => Math.min(Math.max(ui().timerRings ?? 10, 1), 60);
   const left = () => (s.endAt ? Math.max(0, s.endAt - Date.now()) : s.remaining);
+  const ringing = () => box.classList.contains("ringing");
   let tick, ringTimer;
   let last = Date.now();
 
@@ -136,11 +140,13 @@ export function pomodoro(root, s, api) {
     box.classList.toggle("running", !!s.endAt);
     box.classList.toggle("work", s.phase === "work");
     box.classList.toggle("brk", s.phase !== "work");
-    label(
-      q("[data-a=go]"),
-      s.endAt ? "timer.pause" : s.remaining > 0 && s.remaining < len() ? "timer.resume" : "timer.start",
-      s.endAt ? "pause" : "play",
-    );
+    if (ringing()) label(q("[data-a=go]"), "timer.stop", "bell-off");
+    else
+      label(
+        q("[data-a=go]"),
+        s.endAt ? "timer.pause" : s.remaining > 0 && s.remaining < len() ? "timer.resume" : "timer.start",
+        s.endAt ? "pause" : "play",
+      );
     q("[data-a=auto]").setAttribute("aria-pressed", s.auto);
   }
   // the round and today's count are the phase pill's tooltip, not text on the face
@@ -215,10 +221,10 @@ export function pomodoro(root, s, api) {
     moveOn(ended, sound && s.auto);
     api.save();
     run();
-    render();
-    renderTip();
     stopRing();
     box.classList.add("ringing");
+    render();
+    renderTip();
     if (!sound) return;
     const msg = t(ended === "work" ? "pomo.done_work" : "pomo.done_break");
     api.alert?.(msg, t("pomo.next", { phase: t("pomo." + s.phase), t: fmt(len()) }));
@@ -241,6 +247,7 @@ export function pomodoro(root, s, api) {
     ringTimer = null;
     box.classList.remove("ringing");
     q(".pm-cap").hidden = true;
+    render();
   }
   function start() {
     unlockAudio(); // during the click, so the end-of-phase sound may play
@@ -318,12 +325,16 @@ export function pomodoro(root, s, api) {
     }
   });
 
+  // While it rings, a click anywhere on the face silences it. The buttons do it in their own click (re-rendering the
+  // button on pointerdown would swallow that click), and the stop button only silences: the next phase runs on.
   box.addEventListener("pointerdown", (e) => {
-    if (!e.target.closest(".pm-set")) stopRing();
+    if (!e.target.closest(".pm-set, button")) stopRing();
     if (s.away) renderAway(); // another toast replaced the question: ask again
   });
   box.addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a;
+    if (a === "go" && ringing()) return stopRing();
+    if (e.target.closest(".pm-ctrl button")) stopRing(); // skip, reset or auto while it rings: silence and act
     if (a === "go") s.endAt ? pause() : start();
     else if (a === "skip") skip();
     else if (a === "auto") {

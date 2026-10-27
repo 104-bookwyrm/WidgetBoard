@@ -74,6 +74,8 @@
   "menu.backward": "Send backward",
   "menu.lock": "Lock position",
   "menu.pick": "Select below",
+  "menu.pin": "Keep on top",
+  "menu.unpin": "Back to board",
   "layers.open": "Layers",
   "layers.title": "Layers",
   "layers.hint": "Top is front. Drag a row to change the order. Ctrl+] / Ctrl+[ moves the selected widget one layer, with Shift to the front or back.",

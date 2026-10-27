@@ -44,7 +44,8 @@ fn wait_for(
 
 /// Must run off the UI thread so boards can invoke their write commands while we wait.
 pub fn boards(app: &AppHandle) -> Result<(), String> {
-    let labels: HashSet<String> = app.state::<AppState>().labels().into_iter().collect();
+    let mut labels: HashSet<String> = app.state::<AppState>().labels().into_iter().collect();
+    labels.extend(crate::pins(app).iter().map(|w| w.label().to_string())); // pinned widgets save too
     if labels.is_empty() {
         return Ok(());
     }

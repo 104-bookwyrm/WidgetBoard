@@ -1149,3 +1149,18 @@ body.edit .widget.w-hidden {
     outline-color: transparent;
   }
 }
+
+/* ---------- pin window (?pin=<id>): one widget fills its own always-on-top window ---------- */
+body.pin #board .widget {
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  transition: none;
+}
+body.pin .w-resize {
+  display: none; /* the window's edges resize it */
+}
+body.pin.header-hidden .w-head {
+  display: flex; /* the title bar is how the window moves: back on hover, like the default */
+}

@@ -30,6 +30,8 @@ const DEMO = new URLSearchParams(location.search).has("demo");
 // ?demo&preview=<type>: one live sample widget, centred, no stage or tutorial (the widget gallery shows it in a frame)
 const PREVIEW = DEMO ? new URLSearchParams(location.search).get("preview") : null;
 const DEMO_FOCUS = DEMO ? PREVIEW || new URLSearchParams(location.search).get("focus") : null;
+// ?pin=<id>: a pinned widget alone in its own always-on-top window (Rust pin_widget); its board keeps the spot
+const PIN = DEMO ? null : new URLSearchParams(location.search).get("pin");
 const T = DEMO
   ? {
       ...createMockTauri({ memory: true }),
@@ -71,6 +73,7 @@ const board = $("#board");
 const mounted = new Map(); // id -> { el, inst }
 const retired = new WeakSet(); // widget elements unmounted from this board (closed, moved, type changed)
 let widgets = []; // widgets on this monitor
+const pinned = new Set(); // ids running in a pin window: kept in `widgets` (their spot stays) but not mounted or saved here
 let myDisplay = "";
 let displays = []; // [{ label, display, index, primary }]
 let assetsDir = "";
@@ -145,7 +148,7 @@ function resolve(moverId, rect) {
     widgets.map((o) => [o.id, { id: o.id, x: o.x, y: o.y, w: o.w, h: o.h }]),
   );
   pos.set(moverId, { id: moverId, ...rect });
-  let fixed = new Set([moverId]);
+  let fixed = new Set([moverId, ...pinned]); // a pinned widget's spot is kept for its return: never pushed
   let budget = 3000;
   function settle(id, depth) {
     for (;;) {
@@ -210,6 +213,7 @@ function applyLayout(layout, { commit }) {
  * Skipped while the board has an implausible size (window still being placed).
  */
 function reflow() {
+  if (PIN) return; // the window is not the board: its size says nothing about the widget's spot
   if (board.clientWidth < 300 || board.clientHeight < 200) return;
   if (freeMode()) {
     // free mode: only what ended up outside the board (smaller screen, scaling change) comes back in
@@ -652,6 +656,7 @@ async function persistWidget(w) {
   if (unsaved.get(w.id) === revision) unsaved.delete(w.id);
 }
 function save(w) {
+  if (pinned.has(w.id)) return; // its pin window saves it; this copy is stale until it comes back
   unsaved.set(w.id, { w });
   clearTimeout(pending.get(w.id));
   pending.set(
@@ -692,9 +697,19 @@ function archiveMemo(w, now) {
     );
 }
 
+/** Let go of the pin: save everything, then the window closes and the board shows the widget again. */
+let releasing = null;
+function releasePin() {
+  releasing ??= flushSaves()
+    .then(() => invoke("unpin_widget"))
+    .catch((e) => ((releasing = null), reportError(e))); // a failed save keeps the window, and the text in it
+  return releasing;
+}
+
 // Tell Rust where the widgets are so clicks elsewhere pass through to the desktop / windows.
 let hitTimer;
 function syncHits() {
+  if (PIN) return; // a pin window takes every click
   clearTimeout(hitTimer);
   hitTimer = setTimeout(() => {
     const rects = [
@@ -1264,6 +1279,11 @@ $("#fp-svg").onclick = async () => {
 $("#fp-close").onclick = closeFontPanel;
 
 function unmount(w) {
+  park(w);
+  widgets = widgets.filter((o) => o.id !== w.id);
+}
+/** Stop running a widget here but keep it in `widgets` (a pinned widget's spot stays taken). */
+function park(w) {
   const m = mounted.get(w.id);
   m?.inst.destroy?.(); // may flush a last edit into w (memo) and queue a save...
   m?.inst.unsub?.();
@@ -1272,9 +1292,23 @@ function unmount(w) {
   unsaved.delete(w.id);
   retire(m);
   mounted.delete(w.id);
-  widgets = widgets.filter((o) => o.id !== w.id);
   if (fontTarget?.w.id === w.id) closeFontPanel();
   syncHits();
+}
+/** Pin to front: the widget leaves the board for its own always-on-top window, opened over the same spot. */
+async function pinWidget(w, el) {
+  const r = el.getBoundingClientRect();
+  park(w); // its destroy flushes the last edit into w
+  pinned.add(w.id);
+  try {
+    await persistWidget(w); // the pin window loads what is saved
+    await invoke("pin_widget", { id: w.id, rect: { x: r.left, y: r.top, w: r.width, h: r.height } });
+  } catch (e) {
+    pinned.delete(w.id);
+    mount(w);
+    syncHits();
+    reportError(e);
+  }
 }
 
 /** Off the board. Library content stays, remembering where it was so reopening puts it back. */
@@ -1289,6 +1323,8 @@ function removeWidget(w) {
   unmount(w); // first: the widget's destroy flushes its latest edit into w
   lastClosed = structuredClone(w);
   closeContent(w);
+  if (PIN) return releasePin(); // its window goes with it; the content stays in the Library
+
   toast(t("toast.closed", { name: widgetName(w) }), {
     label: t("toast.undo"),
     fn: restoreClosed,
@@ -1476,18 +1512,30 @@ async function openMenu(w, el, at) {
         { text: t("layers.open"), action: () => openLayers() },
       ]
     : [];
+  const closeFind = [
+    { text: t("menu.close"), action: () => removeWidget(w) },
+    { text: t("menu.library"), action: () => invoke("open_library").catch(() => {}) },
+    { text: t("menu.search"), action: () => invoke("open_library", { page: "search" }).catch(() => {}) },
+  ];
   const manage = [
     ...stack,
     { item: "Separator" },
     w.hidden
       ? { text: t("menu.show"), action: () => setHidden(w, false) }
       : { text: t("menu.hide"), action: () => setHidden(w, true) },
-    { text: t("menu.close"), action: () => removeWidget(w) },
-    { text: t("menu.library"), action: () => invoke("open_library").catch(() => {}) },
-    { text: t("menu.search"), action: () => invoke("open_library", { page: "search" }).catch(() => {}) },
+    ...closeFind,
   ];
   let items;
-  if (editMode) {
+  if (PIN) {
+    // a pinned widget: its own options, release, and what closes or finds it (nothing about the board's layout)
+    items = [
+      ...ownBlock,
+      { text: t("menu.look"), action: () => openFontPanel(w, el) },
+      { text: t("menu.unpin"), action: releasePin },
+      { item: "Separator" },
+      ...closeFind,
+    ];
+  } else if (editMode) {
     // Edit layout: customise and arrange this widget.
     const others = displays.filter((d) => d.display !== myDisplay);
     items = [
@@ -1539,6 +1587,7 @@ async function openMenu(w, el, at) {
       ...(ui().announceSummary
         ? [{ text: t("menu.summary"), action: () => announceSummary(w) }]
         : []),
+      ...(DEMO || w.hidden ? [] : [{ text: t("menu.pin"), action: () => pinWidget(w, el) }]),
       ...manage,
     ];
   }
@@ -1582,6 +1631,13 @@ function wireFrame(el, w, def, inst) {
       openMenu(w, el);
     }
   });
+  if (PIN) {
+    // a pin window moves as a whole by the title bar (its edges resize it); the grid moves and keys stay on the board
+    el.querySelector(".w-head").addEventListener("pointerdown", (e) => {
+      if (e.button === 0 && !e.target.closest("button:not(.grip)")) win.startDragging().catch(() => {});
+    });
+    return;
+  }
 
   const min = def.min ?? { w: 1, h: 1 };
   // keyboard: focus the ⋮⋮ grip, arrows move, Shift+arrows resize, Delete closes (with undo)
@@ -2680,6 +2736,7 @@ addEventListener("contextmenu", (e) => {
     });
 });
 addEventListener("resize", () => {
+  if (PIN) return mounted.get(PIN)?.inst.resized?.(); // the pin window was resized: the widget fills it
   syncHits();
   reflowSoon();
 });
@@ -2696,6 +2753,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
 
 // ---------------- boot ----------------
 (async function boot() {
+  if (PIN) document.body.classList.add("pin");
   const st = await invoke("load_state");
   session = { launched: 0, closed: null, ...st.session };
   lang = st.lang || "ko";
@@ -2747,9 +2805,11 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   widgets = (Array.isArray(st.widgets) ? st.widgets : []).filter(
     (w) => w && typeof w === "object",
   );
+  for (const id of st.pinned ?? []) pinned.add(id);
   for (const w of widgets) {
     if (!w.id || seen.has(w.id)) w.id = crypto.randomUUID();
     seen.add(w.id);
+    if (pinned.has(w.id)) continue; // running in its pin window
     try {
       mount(w); // one broken widget must never stop the others from loading
     } catch (e) {
@@ -2758,8 +2818,10 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   }
   if (freeMode()) setLayers(layerOrder()); // one z per widget (older layouts could share one)
   setTimeout(() => (reflow(), (document.documentElement.dataset.reflowed = "")), 400);
-  setEdit(!!st.edit);
+  setEdit(!PIN && !!st.edit);
   syncHits();
+  // board layout and board-wide events never reach a pin window
+  const onBoard = PIN ? async () => {} : listen;
   if (DEMO && !PREVIEW) (await import("./tutorial/runner.js")).startTutorial({
     t,
     focus: REGISTRY[DEMO_FOCUS] ? DEMO_FOCUS : null,
@@ -2770,23 +2832,23 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     close: () => (T.demoWindow ?? T.webviewWindow.getCurrentWebviewWindow()).close(),
   });
 
-  await listen("demo-closed", (e) => {
+  await onBoard("demo-closed", (e) => {
     if (!DEMO) {
       helpState = { ...helpState, demoDone: true };
       tracked(patchHelp(invoke, { demoDone: true }).then((latest) => (helpState = latest)).catch(reportError));
     }
     if (e.payload?.origin === win.label && !$("#welcome").hidden) welcomePresets();
   });
-  await listen("add-widget", (e) => (hideWelcome(), addWidget(e.payload)));
-  await listen("apply-preset", (e) =>
+  await onBoard("add-widget", (e) => (hideWelcome(), addWidget(e.payload)));
+  await onBoard("apply-preset", (e) =>
     applyPreset(e.payload).catch(reportError),
   );
-  await listen("widget-arrived", (e) => receiveWidget(e.payload));
-  // from the settings window (broadcast; each board acts only on its own widgets)
+  await onBoard("widget-arrived", (e) => receiveWidget(e.payload));
+  // from the settings window (broadcast; each board acts only on its own widgets, a pin window on its one)
   await listen("widget-patch", (e) => {
     const { id, patch } = e.payload || {};
     const w = widgets.find((x) => x.id === id);
-    if (!w || !patch) return;
+    if (!w || !patch || pinned.has(id)) return;
     if ("name" in patch) {
       w.name = String(patch.name || "")
         .trim()
@@ -2796,30 +2858,32 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     }
     if ("hidden" in patch) setHidden(w, !!patch.hidden, true);
     save(w);
+    if (PIN && patch.hidden) releasePin(); // hidden widgets live on the board
   });
   // the Widget menu asked to see a widget: its board comes in front of other apps once (boards stay at the back)
   const raiseFor = (id) => mounted.has(id) && invoke("raise_board").catch(() => {});
   await listen("widget-locate", (e) => {
+    if (PIN) return e.payload === PIN && win.setFocus().catch(() => {});
     locate(e.payload);
     raiseFor(e.payload);
   });
   // close / move from the settings window: the owning board acts on its live copy (unsaved edits included)
   await listen("widget-close", (e) => {
     const w = widgets.find((x) => x.id === e.payload);
-    if (w) removeWidget(w);
+    if (w && !pinned.has(w.id)) removeWidget(w);
   });
-  await listen("widget-move", (e) => {
+  await onBoard("widget-move", (e) => {
     const { id, display } = e.payload || {};
     const w = widgets.find((x) => x.id === id);
-    if (w && display && display !== w.display)
+    if (w && display && display !== w.display && !pinned.has(id))
       moveTo(w, display).catch(reportError);
   });
-  await listen("undo-layout", () => undoLayout().catch(reportError));
+  await onBoard("undo-layout", () => undoLayout().catch(reportError));
   // "Show on board" from the Library: the board of its last monitor takes it (the primary if that monitor is gone)
-  await listen("widget-restore", (e) => {
+  await onBoard("widget-restore", (e) => {
     const w = e.payload;
     const def = REGISTRY[w?.type];
-    if (!w?.id || !def) return;
+    if (!w?.id || !def || pinned.has(w.id)) return;
     if (mounted.has(w.id)) {
       locate(w.id); // already here
       return raiseFor(w.id);
@@ -2836,21 +2900,33 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       receiveWidget(w);
     raiseFor(w.id);
   });
-  await listen("edit-mode", (e) => setEdit(!!e.payload));
+  // a pinned widget comes back: its board runs it again in the spot it kept (null: it was closed meanwhile)
+  await onBoard("widget-unpinned", (e) => {
+    const { id, widget } = e.payload || {};
+    if (!pinned.delete(id)) return;
+    const i = widgets.findIndex((x) => x.id === id);
+    if (i < 0) return;
+    if (!widget) return void widgets.splice(i, 1);
+    widgets[i] = widget;
+    mount(widget);
+    syncHits();
+  });
+  if (PIN) await listen("pin-release", () => releasePin()); // Alt+F4 and the like
+  await onBoard("edit-mode", (e) => setEdit(!!e.payload));
   await listen("theme-changed", (e) => applyTheme(e.payload));
   await listen("lang-changed", () => location.reload());
-  await listen("toast", (e) => toast(t(e.payload)));
+  await onBoard("toast", (e) => toast(t(e.payload)));
   await listen("motion-changed", (e) => setMotion(e.payload));
   await listen("config-changed", (e) => {
     config = e.payload || {};
     applyUi();
     configSubs.forEach((cb) => cb(config));
   });
-  await listen("apply-layout", (e) =>
+  await onBoard("apply-layout", (e) =>
     applySavedLayout(e.payload).catch(reportError),
   );
-  await listen("kbd-mode", (e) => setKbd(!!e.payload));
-  await listen("layout-replaced", () => location.reload());
+  await onBoard("kbd-mode", (e) => setKbd(!!e.payload));
+  await onBoard("layout-replaced", () => location.reload()); // Rust closes pin windows itself
   // content saved by another window (the settings window, another monitor): show the newer version
   await listen("content-changed", (e) => {
     const { item, src } = e.payload || {};
@@ -2862,6 +2938,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       contents.set(item.id, item);
       unmount(w);
       write("remove_widget", { id: w.id }).catch(() => {});
+      if (PIN) releasePin();
     } else if (w && mounted.has(w.id)) remountWith(w, item);
     else contents.set(item.id, item);
   });
@@ -2911,7 +2988,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     if (welcomed) showHint("hint.tray_pin", { tray: true });
   }
 
-  await listen("update-available", (e) => {
+  await onBoard("update-available", (e) => {
     const v = e.payload?.version;
     if (v)
       toast(t("upd.available", { v }), {
@@ -2919,7 +2996,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
         fn: () => invoke("open_settings", { page: "about" }).catch(() => {}),
       });
   });
-  await listen("update-failed", (e) =>
+  await onBoard("update-failed", (e) =>
     toast(t("upd.failed", { e: updateError(e.payload) })),
   );
   await listen("flush-saves", async (event) => {
