@@ -553,7 +553,9 @@ export default {
           }
           cur.tags = tags;
           cur.time = f("time").value || null;
-          cur.url = f("url").value.trim() || null;
+          const url = f("url").value.trim();
+          // open_url only takes http(s), so "www.naver.com" would give a dead link button
+          cur.url = !url ? null : /^https?:\/\//i.test(url) ? url : "https://" + url;
           cur.tz = f("tz").value || defaultTz();
           cur.notify = f("notify").checked;
           cur.lead = Math.max(0, Math.floor(+f("lead").value || 0)) || null;
