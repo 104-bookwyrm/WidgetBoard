@@ -3,6 +3,7 @@ import { createMockTauri } from "./mock-tauri.js";
 // Reads everything once via get_settings, applies changes instantly, mirrors the app's a11y settings.
 import { loadLang, t, applyStatic } from "./i18n.js";
 import { loadCatalogue, readHelp, patchHelp } from "./help.js";
+import REPORT_FORM from "./report-form.json" with { type: "json" };
 import { tzOptions, osZone, syncScheme, appWindow, DATE_STYLES, dateStyleSample } from "./util.js";
 import {
   sanitize,
@@ -378,6 +379,13 @@ function bindAbout() {
 }
 function fillAbout() {
   $("#about-version").textContent = `WidgetBoard v${data.version || ""}`.trim();
+  // ponytail: Google stamps the submit time, so app info is only version and language
+  const report = $("#about-report");
+  report.hidden = !REPORT_FORM.url;
+  report.onclick = () =>
+    invoke("open_url", {
+      url: REPORT_FORM.url.replace("APPINFO", encodeURIComponent(`v${data.version} ${data.app.lang}`)),
+    }).catch(() => {});
   invoke("update_status")
     .then(showUpdate)
     .catch(() => {});

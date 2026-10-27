@@ -222,8 +222,14 @@ fn open_url(url: String) -> Result<(), String> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("unsupported url scheme".into());
     }
+    // explorer.exe opens Documents instead of the browser when the URL has a query string
     #[cfg(windows)]
-    let _ = std::process::Command::new("explorer").arg(&url).spawn();
+    unsafe {
+        use windows::core::{w, HSTRING};
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        ShellExecuteW(None, w!("open"), &HSTRING::from(url.as_str()), None, None, SW_SHOWNORMAL);
+    }
     #[cfg(not(windows))]
     let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
     Ok(())

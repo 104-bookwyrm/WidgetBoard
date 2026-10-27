@@ -157,5 +157,6 @@
   "set.tutorial.level": "Level {n}",
   "set.tutorial.seen": "Seen",
   "set.tutorial.whats_new": "What's new",
-  "set.guide.try": "Try it"
+  "set.guide.try": "Try it",
+  "set.about.report": "Report a problem"
 }

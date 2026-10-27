@@ -157,5 +157,6 @@
   "set.tutorial.level": "레벨 {n}",
   "set.tutorial.seen": "확인함",
   "set.tutorial.whats_new": "새로운 기능",
-  "set.guide.try": "체험하기"
+  "set.guide.try": "체험하기",
+  "set.about.report": "오류 신고"
 }
