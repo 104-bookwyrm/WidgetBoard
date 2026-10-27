@@ -1,5 +1,5 @@
 [
-  {"id":"ledger.tray","kind":"ledger","level":1,"since":null},
+  {"id":"ledger.tray","kind":"ledger","level":1,"since":"0.16.0"},
   {"id":"ledger.edit","kind":"ledger","level":1,"since":null},
   {"id":"ledger.move_resize","kind":"ledger","level":1,"since":null},
   {"id":"ledger.push","kind":"ledger","level":1,"since":null},
@@ -20,6 +20,9 @@
   {"id":"ledger.layouts","kind":"ledger","level":2,"since":null},
   {"id":"ledger.focus","kind":"ledger","level":2,"since":null},
   {"id":"ledger.search","kind":"ledger","level":2,"since":null},
+  {"id":"ledger.alarm","kind":"ledger","level":2,"since":"0.16.0"},
+  {"id":"ledger.pin","kind":"ledger","level":2,"since":"0.16.0"},
+  {"id":"ledger.time_format","kind":"ledger","level":2,"since":"0.16.0"},
   {"id":"ledger.ai_theme","kind":"ledger","level":3,"since":null},
   {"id":"ledger.free_placement","kind":"ledger","level":3,"since":null},
   {"id":"ledger.keyboard_mode","kind":"ledger","level":3,"since":null},
