@@ -4,6 +4,8 @@
 //            entries that don't fit collapse into "+N", which opens the full list for that day.
 // Each widget keeps its own view and tag filter. Tag chips cycle: normal → only this tag → hidden.
 // Korean public holidays are shown in both views (see ../holidays.js).
+// Day and tag colours are shared by every calendar (data/calcolors.json) and stored as a palette
+// number, so a theme can recolour them through --mark-1 … --mark-6.
 import {
   esc,
   ymd,
@@ -73,6 +75,15 @@ const isEvent = (e) =>
   typeof e === "object" &&
   typeof e.date === "string" &&
   /^\d{4}-\d{2}-\d{2}$/.test(e.date);
+// Day/tag palette: fallbacks for themes that don't set --mark-n. Stored values are 1-based indexes.
+const MARKS = ["#e5534b", "#e8913a", "#d9b836", "#4caf72", "#4a90e2", "#9b6bd6"];
+const markVar = (n) =>
+  Number.isInteger(n) && n >= 1 && n <= MARKS.length ? `var(--m${n})` : null;
+/** Keep only valid { key: palette index } pairs. */
+const cleanMarks = (o) =>
+  Object.fromEntries(
+    Object.entries(o && typeof o === "object" && !Array.isArray(o) ? o : {}).filter(([, n]) => markVar(n)),
+  );
 
 export default {
   size: { w: 4, h: 5 },
@@ -80,7 +91,8 @@ export default {
   defaults: { filter: {}, view: "mini" },
   css: `
     .cal { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
-      display: flex; flex-direction: column; gap: var(--space-3); }
+      display: flex; flex-direction: column; gap: var(--space-3);
+      ${MARKS.map((hex, i) => `--m${i + 1}: var(--mark-${i + 1}, ${hex});`).join(" ")} }
     .cal-head { display: flex; align-items: center; gap: var(--space-2); flex: none; min-width: 0; }
     .cal-head button { padding: 0 7px; font-size: var(--fs-small); flex: none; }
     .cal-title { flex: 1; min-width: 0; text-align: center; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -96,16 +108,19 @@ export default {
     .cal-grid .wd.sun { color: color-mix(in srgb, var(--hol) 80%, var(--c1)); }
     .cal-grid .wd.sat { color: color-mix(in srgb, var(--sat) 80%, var(--c1)); }
     .cal-grid .d { position: relative; border-radius: var(--r-inner); cursor: pointer; font-variant-numeric: tabular-nums;
-      display: flex; align-items: center; justify-content: center; min-height: 0; }
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 0; }
     .cal-grid .d:hover { background: color-mix(in srgb, var(--c3) 10%, transparent); }
+    .cal-grid .d.dc { background: color-mix(in srgb, var(--day) 30%, transparent); }
     .cal-grid .d.sun, .cal-grid .d.hol { color: var(--hol); }
     .cal-grid .d.sat { color: var(--sat); }
     .cal-grid .d.other { opacity: .3; }
-    .cal-grid .d.today { font-weight: 800; text-decoration: underline; text-underline-offset: 3px; }
-    .cal-grid .d.sel { background: var(--c2); color: var(--on-accent); }
-    .cal-grid .d.has::after { content: ""; position: absolute; left: 50%; bottom: 12%; width: 5px; height: 5px;
-      margin-left: -2.5px; border-radius: 50%; background: var(--c2); }
-    .cal-grid .d.sel.has::after { background: var(--on-accent); }
+    .cal-grid .dn { min-width: 1.75em; line-height: 1.75em; border-radius: 999px; flex: none; }
+    .cal-grid .d.today .dn { background: var(--c2); color: var(--on-accent); font-weight: 800; }
+    .cal-grid .d.sel .dn { box-shadow: 0 0 0 1.5px var(--c2); }
+    .cal-grid .d.today.sel .dn { box-shadow: 0 0 0 1.5px var(--c1), 0 0 0 3px var(--c2); }
+    /* the dot's room is kept on every day so the numbers line up */
+    .cal-grid .d::after { content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none; }
+    .cal-grid .d.has::after { background: var(--dot, var(--c2)); }
     .cal-grid .d.alldone::after { background: transparent; box-shadow: inset 0 0 0 1.2px currentColor; opacity: .7; }
     .cal-dayhead { font-size: var(--fs-meta); color: var(--text-muted); flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hol-name { color: var(--hol); margin-left: 6px; }
@@ -125,6 +140,22 @@ export default {
     .ev:hover .ev-link, .ev:hover .ev-cfg, .ev:hover .ev-del { opacity: .8; }
     .ev-link { color: var(--text-faint); }
     .ev:hover .ev-link { opacity: 1; }
+    .ev.tc { box-shadow: inset 3px 0 var(--tag); padding-left: 7px; }
+    .ev.tc .ev-tags { color: color-mix(in srgb, var(--tag) 70%, var(--c3)); }
+    .cal-filter .chip.tc { box-shadow: inset 3px 0 var(--tag); }
+
+    /* colour swatches (day colour in the day list, tag colour in details) */
+    .cal-sw { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); flex: none; }
+    .cal-sw button, .cal-sw button:hover { width: 1.3em; height: 1.3em; padding: 0; border: 0; border-radius: 50%; background: var(--sw); flex: none; }
+    .cal-sw button:hover { filter: brightness(1.2); }
+    .cal-sw button.on { box-shadow: 0 0 0 2px var(--c1), 0 0 0 3.5px var(--c3); }
+    .cal-sw button.none, .cal-sw button.none:hover { background: none; box-shadow: inset 0 0 0 1.5px var(--text-faint); display: grid; place-items: center;
+      color: var(--text-faint); font-size: .8em; }
+    .cal-sw button.none.on { box-shadow: inset 0 0 0 1.5px var(--text-faint), 0 0 0 2px var(--c1), 0 0 0 3.5px var(--c3); }
+
+    /* what the add box recognised, or the syntax while it's empty */
+    .cal-parse { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: none; font-size: var(--fs-meta); color: var(--text-faint); min-height: 1.5em; }
+    .cal-parse .pc { padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--c2) 18%, transparent); color: var(--c3); }
 
     /* event details editor (url / time / zone / reminder) */
     .cal-ed { position: absolute; inset: calc(var(--head-h) + 2px) 6px 6px; z-index: 7; padding: 10px; overflow-y: auto;
@@ -141,6 +172,9 @@ export default {
     .cal-ed-tags .chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 2px 0 6px; border-radius: 999px;
       background: color-mix(in srgb, var(--c2) 18%, transparent); color: var(--c3); }
     .cal-ed-tags .chip button { padding: 0 2px; background: none; border: 0; }
+    .cal-ed-tags .chip.tc { box-shadow: inset 0 0 0 1.5px var(--tag); }
+    .cal-ed-tags .chip.picking { outline: 1.5px solid var(--c2); }
+    .cal-ed-tags .chip span { cursor: pointer; }
     .cal-ed-tags input { flex: 1; min-width: 6em; width: auto; }
     .cal-ed-btns { display: flex; gap: var(--space-3); margin-top: auto; }
     .cal-ed-btns .sp { flex: 1; }
@@ -156,6 +190,8 @@ export default {
       display: flex; flex-direction: column; cursor: text; font-size: var(--fs-meta);
       background: color-mix(in srgb, var(--c3) 5%, transparent); }
     .bc:hover { background: color-mix(in srgb, var(--c3) 11%, transparent); }
+    .bc.dc { background: color-mix(in srgb, var(--day) 24%, transparent); }
+    .bc-ev.tc { box-shadow: inset 2px 0 var(--tag); padding-left: 4px; }
     .bc.other { opacity: .4; }
     .bc.today { box-shadow: inset 0 0 0 1.5px var(--c2); }
     .bc-top { display: flex; gap: var(--space-2); align-items: baseline; flex: none; white-space: nowrap; overflow: hidden; }
@@ -187,9 +223,12 @@ export default {
       s.filter = {};
     if (s.view !== "board") s.view = "mini";
     let events = [];
+    let colors = { days: {}, tags: {} }; // shared: { days: { ymd: n }, tags: { tag: n } }
     let hol = {};
     let month = ymd().slice(0, 7) + "-01";
     let popDate = null;
+    let daySw = false; // the day list's colour row is open
+    let boardClick = null; // big squares: a single click waits so a double-click can type in place
     const defaultTz = () => api.config?.ui?.currentTz || osZone(); // the viewer's zone, as app.js currentTz()
 
     root.innerHTML = `
@@ -235,7 +274,43 @@ export default {
             (a.time || "").localeCompare(b.time || ""),
         );
     const persist = () => api.store.set("events", events).catch(() => {});
+    const persistColors = () => api.store.set("calcolors", colors).catch(() => {});
     const byId = (id) => events.find((e) => e.id === id);
+    // an entry takes the colour of its first coloured tag
+    const tagMark = (ev) => (ev.tags || []).map((x) => markVar(colors.tags[x])).find(Boolean) || null;
+    const tagAttrs = (ev) => {
+      const c = tagMark(ev);
+      return c ? { cls: " tc", style: ` style="--tag:${c}"` } : { cls: "", style: "" };
+    };
+    /** Day-cell colour vars: the day's own colour, and (small view) the dot's colour. */
+    function dayAttrs(d, evs) {
+      const vars = [];
+      const day = markVar(colors.days[d]);
+      if (day) vars.push(`--day:${day}`);
+      const dot = evs.map(tagMark).find(Boolean);
+      if (dot) vars.push(`--dot:${dot}`);
+      return { cls: day ? "dc" : "", style: vars.length ? ` style="${vars.join(";")}"` : "" };
+    }
+    /** A row of palette buttons; `cur` = the chosen index (0/undefined = none). */
+    const swatches = (cur) =>
+      `<button class="none ${markVar(cur) ? "" : "on"}" data-a="sw" data-n="0" title="${esc(t("cal.mark_none"))}" aria-label="${esc(t("cal.mark_none"))}">${icon("x")}</button>` +
+      MARKS.map(
+        (_, i) =>
+          `<button class="${cur === i + 1 ? "on" : ""}" data-a="sw" data-n="${i + 1}" style="--sw:var(--m${i + 1})" title="${esc(t("cal.mark_" + (i + 1)))}" aria-label="${esc(t("cal.mark_" + (i + 1)))}"></button>`,
+      ).join("");
+    /** Under the add box: what the text will become, or the syntax while it's empty. */
+    function parseHtml(text) {
+      if (!text.trim()) return esc(t("cal.syntax"));
+      const p = parseEntry(text);
+      return [
+        p.time && p.time,
+        ...p.tags.map((x) => "#" + x),
+        p.repeat && t("cal." + p.repeat),
+      ]
+        .filter(Boolean)
+        .map((x) => `<span class="pc">${esc(x)}</span>`)
+        .join("");
+    }
 
     // ---------------- rendering ----------------
     function render() {
@@ -252,10 +327,10 @@ export default {
         if (!tags.includes(k)) delete s.filter[k];
       q(".cal-filter").hidden = !tags.length;
       q(".cal-filter").innerHTML = tags
-        .map(
-          (x) =>
-            `<button class="chip ${s.filter[x] === "only" ? "on" : s.filter[x] === "hide" ? "off" : ""}" data-tag="${esc(x)}" title="#${esc(x)}">#${esc(x)}</button>`,
-        )
+        .map((x) => {
+          const c = markVar(colors.tags[x]);
+          return `<button class="chip ${s.filter[x] === "only" ? "on" : s.filter[x] === "hide" ? "off" : ""}${c ? " tc" : ""}" data-tag="${esc(x)}" title="#${esc(x)}"${c ? ` style="--tag:${c}"` : ""}>#${esc(x)}</button>`;
+        })
         .join("");
 
       if (s.view === "mini") renderMini();
@@ -300,7 +375,7 @@ export default {
         ? evs
             .map(
               (e) => `
-            <div class="ev ${eventDone(e, d) ? "done" : ""}" data-id="${esc(e.id)}" data-d="${d}">
+            <div class="ev ${eventDone(e, d) ? "done" : ""}${tagAttrs(e).cls}" data-id="${esc(e.id)}" data-d="${d}"${tagAttrs(e).style}>
               ${
                 e.dday
                   ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
@@ -308,7 +383,7 @@ export default {
               }
               ${e.time ? `<span class="ev-time">${esc(e.time)}</span>` : ""}
               ${e.notify ? `<span class="ev-bell" title="${esc(t("cal.notify"))}">${icon("bell")}</span>` : ""}
-              <span class="ev-title" title="${esc(e.title)} - ${esc(t("cal.edit_hint"))}">${esc(e.title)}</span>
+              <span class="ev-title" title="${esc(e.title)} - ${esc(t("cal.click_edit"))}">${esc(e.title)}</span>
               <span class="ev-tags" title="${esc((e.tags || []).map((x) => "#" + x).join(" "))}">${esc((e.tags || []).map((x) => "#" + x).join(" "))}</span>
               ${e.url ? `<button class="ev-link" title="${esc(e.url)}">${icon("link")}</button>` : ""}
               <button class="ev-cfg" title="${esc(t("cal.details"))}">${icon("settings")}</button>
@@ -329,9 +404,11 @@ export default {
         const d = addDays(start, i);
         const evs = dayEvents(d);
         const hn = holName(d);
+        const da = dayAttrs(d, evs);
         const cls = [
           "d",
           ...dayClasses(d, i),
+          da.cls,
           d === popDate && "sel",
           evs.length && "has",
           evs.length && evs.every((e) => eventDone(e, d)) && "alldone",
@@ -342,7 +419,7 @@ export default {
           .filter(Boolean)
           .join(" · ");
         const label = [dayLabel(d), tip].filter(Boolean).join(", ");
-        html += `<div class="${cls}" data-d="${d}" role="button" tabindex="0" aria-label="${esc(label)}"${tip ? ` title="${esc(tip)}"` : ""}>${+d.slice(8)}</div>`;
+        html += `<div class="${cls}" data-d="${d}" role="button" tabindex="0" aria-label="${esc(label)}"${tip ? ` title="${esc(tip)}"` : ""}${da.style}><span class="dn">${+d.slice(8)}</span></div>`;
       }
       q(".cal-body").innerHTML =
         `<div class="cal-grid" style="grid-template-rows: auto repeat(${weeks}, minmax(0, 1fr))">${html}</div>`;
@@ -357,13 +434,14 @@ export default {
         const d = addDays(start, i);
         const hn = holName(d);
         const evs = dayEvents(d);
+        const da = dayAttrs(d, []);
         html += `
-          <div class="bc ${dayClasses(d, i).join(" ")}" data-d="${d}" tabindex="0" aria-label="${esc([dayLabel(d), hn, evs.length ? t("cal.count", { n: evs.length }) : ""].filter(Boolean).join(", "))}" title="${esc(hn || "")}">
+          <div class="bc ${dayClasses(d, i).join(" ")} ${da.cls}" data-d="${d}" tabindex="0" aria-label="${esc([dayLabel(d), hn, evs.length ? t("cal.count", { n: evs.length }) : ""].filter(Boolean).join(", "))}" title="${esc(hn || "")}"${da.style}>
             <div class="bc-top"><span class="bc-num">${+d.slice(8)}</span>${hn ? `<span class="bc-hol">${esc(hn)}</span>` : ""}</div>
             <div class="bc-evs">${evs
               .map(
                 (e) => `
-              <div class="bc-ev ${eventDone(e, d) ? "done" : ""}" data-id="${esc(e.id)}" title="${esc(unparse(e))}">
+              <div class="bc-ev ${eventDone(e, d) ? "done" : ""}${tagAttrs(e).cls}" data-id="${esc(e.id)}" title="${esc(unparse(e))}"${tagAttrs(e).style}>
                 ${
                   e.dday
                     ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
@@ -411,13 +489,20 @@ export default {
         return;
       }
       const hn = holName(popDate);
+      // keep a half-typed entry across a re-render (e.g. picking a day colour)
+      const typed = pop.querySelector(".cal-add")?.dataset.date === popDate ? pop.querySelector(".cal-add").value : "";
       pop.innerHTML = `
         <div class="pop-head"><button data-a="pop-prev" title="${esc(t("cal.prev_day"))}">${icon("left")}</button>
           <b>${esc(dayLabel(popDate))}${hn ? `<span class="hol-name">${esc(hn)}</span>` : ""}</b>
           <button data-a="pop-next" title="${esc(t("cal.next_day"))}">${icon("right")}</button>
+          <button data-a="pop-color" title="${esc(t("cal.day_color"))}" aria-expanded="${daySw}">${icon("palette")}</button>
           <button data-a="pop-close" title="${esc(t("theme.close"))}">${icon("x")}</button></div>
+        ${daySw ? `<div class="cal-sw" role="group" aria-label="${esc(t("cal.day_color"))}">${swatches(colors.days[popDate])}</div>` : ""}
         <div class="cal-list">${agendaHtml(popDate)}</div>
-        <input class="cal-add" data-date="${popDate}" placeholder="${esc(t("cal.add_placeholder"))}">`;
+        <input class="cal-add" data-date="${popDate}" placeholder="${esc(t("cal.add_placeholder"))}">
+        <div class="cal-parse" aria-hidden="true"></div>`;
+      pop.querySelector(".cal-add").value = typed;
+      pop.querySelector(".cal-parse").innerHTML = parseHtml(typed);
       pop.hidden = false;
     }
 
@@ -502,7 +587,7 @@ export default {
         <label>${esc(t("cal.date"))}<input data-f="date" type="date" value="${esc(ev.date)}" required></label>
         <label>${esc(t("cal.time"))}<input data-f="time" type="time" value="${esc(ev.time || "")}"></label>
         ${ev.dday || ev.quota ? "" : `<label>${esc(t("cal.repeat"))}<select data-f="repeat">${repeatOpts}</select></label>`}
-        <label>${esc(t("cal.tags"))}<span class="cal-ed-tags"><span class="chips"></span><input data-f="tag" placeholder="${esc(t("cal.tag_add"))}"></span></label>
+        <label>${esc(t("cal.tags"))}<span class="cal-ed-tags"><span class="chips"></span><input data-f="tag" placeholder="${esc(t("cal.tag_add"))}"></span><span class="cal-sw" role="group" hidden></span></label>
         <label>${esc(t("cal.url"))}<input data-f="url" type="url" inputmode="url" value="${esc(ev.url || "")}" placeholder="https://"></label>
         <label>${esc(t("clock.zone"))}<select data-f="tz">${tzOptions(tz, { common: t("set.tz_common"), all: t("set.tz_all") })}</select></label>
         <label class="cal-ed-chk"><input data-f="notify" type="checkbox" ${ev.notify ? "checked" : ""}> ${esc(t("cal.notify"))}</label>
@@ -512,10 +597,20 @@ export default {
       ed.querySelector("[data-f=tz]").value = tz;
       const f = (n) => ed.querySelector(`[data-f=${n}]`);
       if (f("repeat")) f("repeat").value = REPEATS.includes(ev.repeat) ? ev.repeat : "";
-      const drawTags = () =>
-        (ed.querySelector(".chips").innerHTML = tags
-          .map((x, i) => `<span class="chip">#${esc(x)}<button data-a="tag-del" data-i="${i}" title="${esc(t("cal.tag_remove", { tag: x }))}">${icon("x")}</button></span>`)
-          .join(""));
+      let picking = null; // the tag whose colour row is open
+      const drawTags = () => {
+        if (!tags.includes(picking)) picking = null;
+        ed.querySelector(".chips").innerHTML = tags
+          .map((x, i) => {
+            const c = markVar(colors.tags[x]);
+            return `<span class="chip${c ? " tc" : ""}${x === picking ? " picking" : ""}"${c ? ` style="--tag:${c}"` : ""}><span data-a="tag-pick" data-i="${i}" title="${esc(t("cal.tag_color", { tag: x }))}">#${esc(x)}</span><button data-a="tag-del" data-i="${i}" title="${esc(t("cal.tag_remove", { tag: x }))}">${icon("x")}</button></span>`;
+          })
+          .join("");
+        const sw = ed.querySelector(".cal-sw");
+        sw.hidden = !picking;
+        sw.innerHTML = picking ? swatches(colors.tags[picking]) : "";
+        sw.setAttribute("aria-label", picking ? t("cal.tag_color", { tag: picking }) : "");
+      };
       drawTags();
       const addTag = () => {
         const x = f("tag").value.trim().replace(/^#/, "").replace(/\s+/g, "").slice(0, 40);
@@ -537,6 +632,22 @@ export default {
           e.preventDefault();
           tags.splice(+e.target.closest("[data-i]").dataset.i, 1);
           return drawTags();
+        }
+        if (a === "tag-pick") {
+          e.preventDefault();
+          const x = tags[+e.target.closest("[data-i]").dataset.i];
+          picking = picking === x ? null : x;
+          return drawTags();
+        }
+        if (a === "sw" && picking) {
+          // a tag's colour is shared by every entry with it, so it applies now (not on Save)
+          e.preventDefault();
+          const n = +e.target.closest("[data-n]").dataset.n;
+          if (markVar(n)) colors.tags[picking] = n;
+          else delete colors.tags[picking];
+          persistColors();
+          drawTags();
+          return render();
         }
         if (a === "ed-save") {
           // the live copy: another widget may have re-synced `events` while the panel was open
@@ -593,13 +704,18 @@ export default {
     function toggleView() {
       s.view = s.view === "mini" ? "board" : "mini";
       popDate = null;
-      api.save();
       q(".cal-body").innerHTML = "";
       if (s.view === "board") {
         const cur = api.size;
-        if (cur.w < 6 || cur.h < 5)
+        if (cur.w < 6 || cur.h < 5) {
+          s.miniSize = cur; // folded back on the way out of big squares
           api.requestSize({ w: Math.max(cur.w, 7), h: Math.max(cur.h, 6) });
+        }
+      } else if (s.miniSize) {
+        api.requestSize(s.miniSize);
+        delete s.miniSize;
       }
+      api.save();
       render();
     }
 
@@ -614,11 +730,23 @@ export default {
       if (a === "view") return toggleView();
       if (a === "pop-close") {
         popDate = null;
+        daySw = false;
         closeDetails();
         return render();
       }
       if (a === "pop-prev" || a === "pop-next")
         return openDay(addDays(popDate, a === "pop-prev" ? -1 : 1));
+      if (a === "pop-color") {
+        daySw = !daySw;
+        return renderPop();
+      }
+      if (a === "sw" && e.target.closest(".cal-pop")) {
+        const n = +e.target.closest("[data-n]").dataset.n;
+        if (markVar(n)) colors.days[popDate] = n;
+        else delete colors.days[popDate];
+        persistColors();
+        return render();
+      }
       const chip = e.target.closest(".cal-filter [data-tag]");
       if (chip) {
         const x = chip.dataset.tag;
@@ -651,13 +779,24 @@ export default {
       }
       const more = e.target.closest(".bc-more");
       if (more) return openDay(more.closest(".bc").dataset.d);
-      const line = e.target.closest(".bc-t");
+      // one click edits an entry's text, in the day list and in big squares alike
+      const line = e.target.closest(".bc-t, .ev-title");
       if (line && !line.querySelector("input"))
         return editInline(line, byId(line.closest("[data-id]").dataset.id));
+      // one click opens the day list in both views; in big squares a double-click types in place instead
       const cell = e.target.closest(".bc");
-      if (cell && !e.target.closest("input")) return addInCell(cell);
+      if (cell && !e.target.closest("input")) {
+        clearTimeout(boardClick);
+        if (e.detail >= 2) return addInCell(cell);
+        boardClick = setTimeout(() => openDay(cell.dataset.d), 250);
+        return;
+      }
       const d = e.target.closest(".cal-grid [data-d]")?.dataset.d;
       if (d) openDay(d);
+    });
+    box.addEventListener("input", (e) => {
+      if (e.target.matches(".cal-add"))
+        q(".cal-pop .cal-parse").innerHTML = parseHtml(e.target.value);
     });
     box.addEventListener("change", (e) => {
       if (e.target.type !== "checkbox") return;
@@ -668,23 +807,14 @@ export default {
       persist();
       render();
     });
-    box.addEventListener("dblclick", (e) => {
-      const span = e.target.closest(".ev-title");
-      if (span && !span.querySelector("input"))
-        editInline(span, byId(span.closest("[data-id]").dataset.id));
-    });
     box.addEventListener("keydown", (e) => {
-      // keyboard: Enter/Space on a day opens it (mini) or starts writing in it (big squares); F2 edits an entry
+      // keyboard: Enter/Space on a day opens its list (both views); F2 edits an entry
       if (
         (e.key === "Enter" || e.key === " ") &&
-        e.target.matches(".cal-grid .d")
+        e.target.matches(".cal-grid .d, .bc")
       ) {
         e.preventDefault();
         return openDay(e.target.dataset.d);
-      }
-      if ((e.key === "Enter" || e.key === " ") && e.target.matches(".bc")) {
-        e.preventDefault();
-        return addInCell(e.target);
       }
       if (e.key === "F2") {
         const row = e.target.closest(".ev, .bc-ev");
@@ -744,6 +874,12 @@ export default {
       renderLater();
     };
     api.onStore("events", load);
+    const loadColors = async () => {
+      const c = await api.store.get("calcolors").catch(() => null);
+      colors = { days: cleanMarks(c?.days), tags: cleanMarks(c?.tags) };
+      renderLater();
+    };
+    api.onStore("calcolors", loadColors);
     api.onConfig(renderLater);
     loadHolidays().then((h) => {
       hol = h;
@@ -752,9 +888,11 @@ export default {
     api.onDayChange(renderLater);
     render();
     load();
+    loadColors();
     return {
       destroy() {
         ro.disconnect();
+        clearTimeout(boardClick);
       },
       resized: () => (s.view === "board" ? fitCells() : null),
       summary: () => {

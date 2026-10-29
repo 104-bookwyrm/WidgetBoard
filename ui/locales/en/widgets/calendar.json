@@ -36,5 +36,16 @@
   "cal.date": "Date",
   "cal.tags": "Tags",
   "cal.tag_add": "Add a tag, then Enter",
-  "cal.tag_remove": "Remove #{tag}"
+  "cal.tag_remove": "Remove #{tag}",
+  "cal.click_edit": "Click to edit",
+  "cal.syntax": "14:00 time · #tag · @weekly repeat",
+  "cal.day_color": "Day colour",
+  "cal.tag_color": "Click: change #{tag} colour",
+  "cal.mark_none": "No colour",
+  "cal.mark_1": "Red",
+  "cal.mark_2": "Orange",
+  "cal.mark_3": "Yellow",
+  "cal.mark_4": "Green",
+  "cal.mark_5": "Blue",
+  "cal.mark_6": "Purple"
 }

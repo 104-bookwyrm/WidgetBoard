@@ -36,5 +36,16 @@
   "cal.date": "날짜",
   "cal.tags": "태그",
   "cal.tag_add": "태그 입력 후 Enter",
-  "cal.tag_remove": "#{tag} 빼기"
+  "cal.tag_remove": "#{tag} 빼기",
+  "cal.click_edit": "클릭: 수정",
+  "cal.syntax": "14:00 시간 · #태그 · @매주 반복",
+  "cal.day_color": "날짜 색",
+  "cal.tag_color": "클릭: #{tag} 색 바꾸기",
+  "cal.mark_none": "색 없음",
+  "cal.mark_1": "빨강",
+  "cal.mark_2": "주황",
+  "cal.mark_3": "노랑",
+  "cal.mark_4": "초록",
+  "cal.mark_5": "파랑",
+  "cal.mark_6": "보라"
 }

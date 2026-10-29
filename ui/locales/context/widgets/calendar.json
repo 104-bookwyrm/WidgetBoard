@@ -1,0 +1,13 @@
+{
+  "cal.click_edit": "Calendar entry tooltip (after the entry title and a hyphen): one click turns the title into an edit box. Hint format.",
+  "cal.syntax": "Faint line under the calendar day list add box while it is empty: shows the input syntax by example. Keep 14:00, # and the @ repeat word (Korean users type @매주). Separate parts with a middle dot.",
+  "cal.day_color": "Calendar day list: tooltip of the palette button that shows colour swatches for the open day. Short label.",
+  "cal.tag_color": "Calendar details panel: tooltip on a tag chip. Clicking the tag shows colour swatches for that tag (shared by every entry with it). Hint format.",
+  "cal.mark_none": "Calendar colour swatch that removes the colour. Short label.",
+  "cal.mark_1": "Calendar colour swatch name (screen readers, tooltip). Short.",
+  "cal.mark_2": "Calendar colour swatch name. Short.",
+  "cal.mark_3": "Calendar colour swatch name. Short.",
+  "cal.mark_4": "Calendar colour swatch name. Short.",
+  "cal.mark_5": "Calendar colour swatch name. Short.",
+  "cal.mark_6": "Calendar colour swatch name. Short."
+}
