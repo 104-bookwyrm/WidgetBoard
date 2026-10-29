@@ -1,7 +1,9 @@
 // Calendar + to-do, two views over the SAME shared events (data/events.json):
-//  • mini  — just the month grid; a dot marks days that have entries; click a day to open its list
-//  • board — big month squares; click a square to write in it, click an entry to edit it,
-//            entries that don't fit collapse into "+N", which opens the full list for that day.
+//  • mini:  just the month grid; a dot marks days that have entries; click a day to open its list
+//  • board: big month squares; click a square to open its list, double-click to write in it,
+//            click an entry to edit it; entries that don't fit collapse into "+N".
+// Either view can show the month or a rolling run of 1-6 weeks (widget menu › rows shown).
+// The search row lights up matching entries and dims the rest; Enter / ‹ › jump between matches.
 // Each widget keeps its own view and tag filter. Tag chips cycle: normal → only this tag → hidden.
 // Korean public holidays are shown in both views (see ../holidays.js).
 // Day and tag colours are shared by every calendar (data/calcolors.json) and stored as a palette
@@ -27,6 +29,7 @@ import {
   tzOptions,
   osZone,
   dateOpts,
+  fold,
 } from "../util.js";
 import { loadHolidays, holidayName } from "../holidays.js";
 import { icon } from "../icons.js";
@@ -112,6 +115,17 @@ export default {
       mask-image: linear-gradient(to right, #000 88%, transparent); }
     .cal-filter .chip { max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
     .cal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+
+    /* search row: matches light up, the rest dims */
+    .cal-search { display: flex; align-items: center; gap: var(--space-2); flex: none; min-width: 0; }
+    .cal-search[hidden] { display: none; }
+    .cal-search input { flex: 1; min-width: 4em; box-sizing: border-box; font-size: 1em; }
+    .cal-search button { padding: 0 6px; flex: none; }
+    .cal-hits { font-size: var(--fs-meta); color: var(--text-muted); white-space: nowrap; flex: none; }
+    .searching .cal-grid .d:not(.hit), .searching .bc:not(.hit) { opacity: .3; }
+    .searching .cal-grid .d.hit { background: color-mix(in srgb, var(--c2) 22%, transparent); }
+    .searching .bc-ev:not(.hit), .searching .ev:not(.hit) { opacity: .35; }
+    .searching .bc-ev.hit, .searching .ev.hit { background: color-mix(in srgb, var(--c2) 22%, transparent); border-radius: var(--r-inner); }
 
     /* mini view */
     .cal-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-1);
@@ -244,6 +258,8 @@ export default {
     let colors = { days: {}, tags: {} }; // shared: { days: { ymd: n }, tags: { tag: n } }
     let hol = {};
     let month = ymd().slice(0, 7) + "-01";
+    let anchor = null; // rolling weeks: the first day shown (null = this week, so it follows the date)
+    let query = ""; // search row text (not saved)
     let popDate = null;
     let daySw = false; // the day list's colour row is open
     let boardClick = null; // big squares: a single click waits so a double-click can type in place
@@ -252,9 +268,17 @@ export default {
     root.innerHTML = `
       <div class="cal">
         <div class="cal-head">
-          <button data-a="prev" title="${esc(t("cal.prev_month"))}">${icon("left")}</button><span class="cal-title" aria-live="polite"></span><button data-a="next" title="${esc(t("cal.next_month"))}">${icon("right")}</button>
+          <button data-a="prev">${icon("left")}</button><span class="cal-title" aria-live="polite"></span><button data-a="next">${icon("right")}</button>
+          <button data-a="search" title="${esc(t("cal.search"))}" aria-expanded="false">${icon("search")}</button>
           <button data-a="today">${esc(t("cal.today"))}</button>
           <button data-a="view"></button>
+        </div>
+        <div class="cal-search" hidden>
+          <input type="search" aria-label="${esc(t("cal.search"))}" placeholder="${esc(t("cal.search_ph"))}">
+          <span class="cal-hits" aria-live="polite"></span>
+          <button data-a="hit-prev" title="${esc(t("cal.hit_prev"))}">${icon("left")}</button>
+          <button data-a="hit-next" title="${esc(t("cal.hit_next"))}">${icon("right")}</button>
+          <button data-a="search-close" title="${esc(t("theme.close"))}">${icon("x")}</button>
         </div>
         <div class="cal-filter" title="${esc(t("cal.filter_hint"))}"></div>
         <div class="cal-body"></div>
@@ -300,6 +324,42 @@ export default {
     const persist = () => api.store.set("events", events).catch(() => {});
     const persistColors = () => api.store.set("calcolors", colors).catch(() => {});
     const byId = (id) => events.find((e) => e.id === id);
+    // ---- search: title or tag contains the text ("#" optional for tags) ----
+    const searchKey = () => fold(query.trim());
+    function matches(e) {
+      const k = searchKey();
+      if (!k) return false;
+      const tag = k.replace(/^#/, "");
+      return fold(e.title).includes(k) || (e.tags || []).some((x) => fold(x).includes(tag));
+    }
+    const hits = () => events.filter((e) => !routine(e) && shown(e) && matches(e));
+    const hitCount = () => {
+      if (!searchKey()) return "";
+      const n = hits().length;
+      return n ? t("cal.hits", { n }) : t("cal.no_hits");
+    };
+    /** Show the period holding `d` (month, or the rolling weeks starting at its week). */
+    function showDate(d) {
+      if (rolling()) {
+        const { start, weeks } = monthCells();
+        if (d < start || d > addDays(start, weeks * 7 - 1)) anchor = weekOf(d);
+      } else if (d.slice(0, 7) !== month.slice(0, 7)) month = d.slice(0, 7) + "-01";
+    }
+    /** ‹ › / Enter: the next (dir 1) or previous match date outside what's shown; repeats count from their first date. */
+    function hitJump(dir) {
+      const dates = [...new Set(hits().map((e) => e.date))].sort();
+      if (!dates.length) return;
+      const { start, weeks } = monthCells();
+      const [lo, hi] = rolling()
+        ? [start, addDays(start, weeks * 7 - 1)]
+        : [month, ymd(new Date(+month.slice(0, 4), +month.slice(5, 7), 0))];
+      let to = dir > 0 ? dates.find((d) => d > hi) : dates.findLast((d) => d < lo);
+      // Enter with nothing further on: land on the latest earlier match instead of doing nothing
+      if (!to && dir > 0 && !dates.some((d) => d >= lo && d <= hi)) to = dates.findLast((d) => d < lo);
+      if (!to) return;
+      showDate(to);
+      render();
+    }
     // an entry takes the colour of its first coloured tag
     const tagMark = (ev) => (ev.tags || []).map((x) => markVar(colors.tags[x])).find(Boolean) || null;
     const tagAttrs = (ev) => {
@@ -341,10 +401,16 @@ export default {
       const v = q("[data-a=view]");
       v.innerHTML = icon(s.view === "mini" ? "grid" : "list");
       v.title = t(s.view === "mini" ? "cal.view_board" : "cal.view_mini");
-      q(".cal-title").textContent = fmt(
-        { year: "numeric", month: "long" },
-        month,
-      );
+      if (rolling()) {
+        const { start, weeks } = monthCells();
+        // the year only when the run isn't in this year
+        const md = { month: "long", day: "numeric", ...(start.slice(0, 4) !== ymd().slice(0, 4) && { year: "numeric" }) };
+        q(".cal-title").textContent = `${fmt(md, start)} - ${fmt(md, addDays(start, weeks * 7 - 1))}`;
+      } else q(".cal-title").textContent = fmt({ year: "numeric", month: "long" }, month);
+      q("[data-a=prev]").title = t(rolling() ? "cal.prev_week" : "cal.prev_month");
+      q("[data-a=next]").title = t(rolling() ? "cal.next_week" : "cal.next_month");
+      box.classList.toggle("searching", !!searchKey());
+      if (!q(".cal-search").hidden) q(".cal-hits").textContent = hitCount();
 
       const tags = allTags();
       for (const k of Object.keys(s.filter))
@@ -371,7 +437,11 @@ export default {
       );
     const wdClass = (i) =>
       dowOf(i) === 0 ? "sun" : dowOf(i) === 6 ? "sat" : "";
+    // rows shown: 0 = the month, 1-6 = that many weeks from `anchor` (this week by default)
+    const rolling = () => Number.isInteger(s.rows) && s.rows >= 1 && s.rows <= 6;
+    const weekOf = (d) => addDays(d, -((parseYmd(d).getDay() - ws() + 7) % 7));
     function monthCells() {
+      if (rolling()) return { start: anchor || weekOf(ymd()), weeks: s.rows };
       const first = parseYmd(month);
       const lead = (first.getDay() - ws() + 7) % 7;
       const start = addDays(month, -lead);
@@ -388,7 +458,7 @@ export default {
         dowOf(i % 7) === 0 && "sun",
         dowOf(i % 7) === 6 && "sat",
         holName(d) && "hol",
-        d.slice(0, 7) !== month.slice(0, 7) && "other",
+        !rolling() && d.slice(0, 7) !== month.slice(0, 7) && "other",
         d === ymd() && "today",
       ].filter(Boolean);
     }
@@ -399,7 +469,7 @@ export default {
         ? evs
             .map(
               (e) => `
-            <div class="ev ${eventDone(e, d) ? "done" : ""}${tagAttrs(e).cls}" data-id="${esc(e.id)}" data-d="${d}"${tagAttrs(e).style}>
+            <div class="ev ${eventDone(e, d) ? "done" : ""}${tagAttrs(e).cls}${matches(e) ? " hit" : ""}" data-id="${esc(e.id)}" data-d="${d}"${tagAttrs(e).style}>
               ${
                 e.dday
                   ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
@@ -436,6 +506,7 @@ export default {
           d === popDate && "sel",
           evs.length && "has",
           evs.length && evs.every((e) => eventDone(e, d)) && "alldone",
+          evs.some(matches) && "hit",
         ]
           .filter(Boolean)
           .join(" ");
@@ -460,12 +531,12 @@ export default {
         const evs = dayEvents(d);
         const da = dayAttrs(d, []);
         html += `
-          <div class="bc ${dayClasses(d, i).join(" ")} ${da.cls}" data-d="${d}" tabindex="0" aria-label="${esc([dayLabel(d), hn, evs.length ? t("cal.count", { n: evs.length }) : ""].filter(Boolean).join(", "))}" title="${esc(hn || "")}"${da.style}>
+          <div class="bc ${dayClasses(d, i).join(" ")} ${da.cls}${evs.some(matches) ? " hit" : ""}" data-d="${d}" tabindex="0" aria-label="${esc([dayLabel(d), hn, evs.length ? t("cal.count", { n: evs.length }) : ""].filter(Boolean).join(", "))}" title="${esc(hn || "")}"${da.style}>
             <div class="bc-top"><span class="bc-num">${+d.slice(8)}</span>${hn ? `<span class="bc-hol">${esc(hn)}</span>` : ""}${s.lunar ? `<span class="bc-lun" title="${esc(lunarLabel(d))}">${esc(lunarText(d))}</span>` : ""}</div>
             <div class="bc-evs">${evs
               .map(
                 (e) => `
-              <div class="bc-ev ${eventDone(e, d) ? "done" : ""}${tagAttrs(e).cls}" data-id="${esc(e.id)}" title="${esc(unparse(e))}"${tagAttrs(e).style}>
+              <div class="bc-ev ${eventDone(e, d) ? "done" : ""}${tagAttrs(e).cls}${matches(e) ? " hit" : ""}" data-id="${esc(e.id)}" title="${esc(unparse(e))}"${tagAttrs(e).style}>
                 ${
                   e.dday
                     ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
@@ -759,13 +830,18 @@ export default {
     function openDay(d) {
       closeDetails();
       popDate = d;
-      if (d.slice(0, 7) !== month.slice(0, 7)) month = d.slice(0, 7) + "-01";
+      showDate(d);
       render();
       q(".cal-pop .cal-add")?.focus(); // type right away; Esc closes
     }
     // a search result in the Library: open that day
     api.on("goto-date", (p) => p?.type === "calendar" && openDay(p.date));
     function go(dir) {
+      // rolling weeks step one week at a time
+      if (rolling()) {
+        anchor = addDays(monthCells().start, 7 * dir);
+        return render();
+      }
       const d = parseYmd(month);
       d.setDate(1);
       d.setMonth(d.getMonth() + dir);
@@ -796,8 +872,12 @@ export default {
       if (a === "next") return go(1);
       if (a === "today") {
         month = ymd().slice(0, 7) + "-01";
+        anchor = null;
         return render();
       }
+      if (a === "search") return openSearch(q(".cal-search").hidden);
+      if (a === "search-close") return openSearch(false);
+      if (a === "hit-prev" || a === "hit-next") return hitJump(a === "hit-next" ? 1 : -1);
       if (a === "view") return toggleView();
       if (a === "pop-close") {
         popDate = null;
@@ -868,7 +948,23 @@ export default {
     box.addEventListener("input", (e) => {
       if (e.target.matches(".cal-add"))
         q(".cal-pop .cal-parse").innerHTML = parseHtml(e.target.value);
+      if (e.target.matches(".cal-search input")) {
+        query = e.target.value;
+        render();
+      }
     });
+    /** Open or close the search row; closing clears the search. */
+    function openSearch(on) {
+      const row = q(".cal-search");
+      row.hidden = !on;
+      q("[data-a=search]").setAttribute("aria-expanded", on);
+      if (on) row.querySelector("input").focus();
+      else {
+        query = "";
+        row.querySelector("input").value = "";
+      }
+      render();
+    }
     box.addEventListener("change", (e) => {
       if (e.target.type !== "checkbox") return;
       const ev = byId(e.target.closest("[data-id]")?.dataset.id);
@@ -879,6 +975,14 @@ export default {
       render();
     });
     box.addEventListener("keydown", (e) => {
+      if (e.target.matches(".cal-search input")) {
+        if (e.key === "Enter") return hitJump(e.shiftKey ? -1 : 1);
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          return openSearch(false);
+        }
+        return;
+      }
       // keyboard: Enter/Space on a day opens its list (both views); F2 edits an entry
       if (
         (e.key === "Enter" || e.key === " ") &&
@@ -994,6 +1098,18 @@ export default {
         {
           text: t(s.view === "mini" ? "cal.view_board" : "cal.view_mini"),
           action: toggleView,
+        },
+        {
+          text: t("cal.rows"),
+          items: [0, 1, 2, 3, 4, 5, 6].map((n) => ({
+            text: ((rolling() ? s.rows : 0) === n ? "✓ " : "") + (n ? t("cal.rows_n", { n }) : t("cal.rows_month")),
+            action: () => {
+              s.rows = n;
+              anchor = null;
+              api.save();
+              render();
+            },
+          })),
         },
         {
           text: (s.lunar ? "✓ " : "") + t("cal.show_lunar"),

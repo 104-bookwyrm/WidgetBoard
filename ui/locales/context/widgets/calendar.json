@@ -20,5 +20,16 @@
   "cal.unit_monthly": "Unit after the repeat-interval number box: every N months. Short.",
   "cal.unit_yearly": "Unit after the repeat-interval number box: every N years. Short.",
   "cal.on_days": "Calendar details panel (weekly repeat): label of seven weekday toggle buttons. Short label.",
-  "cal.until": "Calendar details panel: date box for the last day a repeat happens; empty = never ends. Short label."
+  "cal.until": "Calendar details panel: date box for the last day a repeat happens; empty = never ends. Short label.",
+  "cal.prev_week": "Calendar header arrow tooltip when the calendar shows rolling weeks. Short.",
+  "cal.next_week": "Calendar header arrow tooltip when the calendar shows rolling weeks. Short.",
+  "cal.rows": "Calendar right-click submenu: how much the grid shows (the month, or 1-6 weeks starting this week). Short menu label, no full stop.",
+  "cal.rows_month": "Item in the rows-shown submenu: the normal month grid. Short.",
+  "cal.rows_n": "Item in the rows-shown submenu: {n} week rows starting with the current week, scrolling a week at a time. Short.",
+  "cal.search": "Calendar header search button tooltip and the search box label. Short.",
+  "cal.search_ph": "Placeholder in the calendar search box: it matches entry titles and tags. Short.",
+  "cal.hits": "Count beside the calendar search box: how many entries match. Very short.",
+  "cal.no_hits": "Beside the calendar search box when nothing matches. Very short.",
+  "cal.hit_prev": "Calendar search: button that jumps back to the previous period with a match; Shift+Enter does the same. Hint.",
+  "cal.hit_next": "Calendar search: button that jumps to the next period with a match; Enter does the same. Hint."
 }

@@ -58,5 +58,16 @@
   "cal.unit_monthly": "개월마다",
   "cal.unit_yearly": "년마다",
   "cal.on_days": "반복할 요일",
-  "cal.until": "종료일 (선택)"
+  "cal.until": "종료일 (선택)",
+  "cal.prev_week": "이전 주",
+  "cal.next_week": "다음 주",
+  "cal.rows": "표시 범위",
+  "cal.rows_month": "한 달",
+  "cal.rows_n": "이번 주부터 {n}주",
+  "cal.search": "일정 검색",
+  "cal.search_ph": "제목 또는 #태그",
+  "cal.hits": "{n}개 찾음",
+  "cal.no_hits": "찾은 일정 없음",
+  "cal.hit_prev": "이전 결과 (Shift+Enter)",
+  "cal.hit_next": "다음 결과 (Enter)"
 }

@@ -24,6 +24,10 @@ textarea {
 }
 input[type="text"],
 input[type="date"],
+input[type="time"],
+input[type="url"],
+input[type="search"],
+input[type="number"],
 input:not([type]),
 textarea,
 select {
