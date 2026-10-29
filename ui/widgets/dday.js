@@ -288,7 +288,7 @@ export default {
           const label = days === 0 ? "D-Day" : `D-${days}`;
           const when = [
             date.replaceAll("-", ".") + (e.time ? " " + e.time : ""),
-            e.repeat === "yearly" && leapFallback(e.date, date) ? t("dday.leap_note") : "",
+            e.repeat === "yearly" && !e.lunar && leapFallback(e.date, date) ? t("dday.leap_note") : "",
             ...(e.tags || []).map((g) => "#" + g),
           ]
             .filter(Boolean)

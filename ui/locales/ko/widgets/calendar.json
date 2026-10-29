@@ -47,5 +47,16 @@
   "cal.mark_3": "노랑",
   "cal.mark_4": "초록",
   "cal.mark_5": "파랑",
-  "cal.mark_6": "보라"
+  "cal.mark_6": "보라",
+  "cal.yearly_lunar": "매년 반복 (음력)",
+  "cal.lunar": "음력 {date}",
+  "cal.lunar_leap": "윤{m}",
+  "cal.show_lunar": "음력 날짜 표시",
+  "cal.every": "반복 간격",
+  "cal.unit_daily": "일마다",
+  "cal.unit_weekly": "주마다",
+  "cal.unit_monthly": "개월마다",
+  "cal.unit_yearly": "년마다",
+  "cal.on_days": "반복할 요일",
+  "cal.until": "종료일 (선택)"
 }

@@ -47,5 +47,16 @@
   "cal.mark_3": "Yellow",
   "cal.mark_4": "Green",
   "cal.mark_5": "Blue",
-  "cal.mark_6": "Purple"
+  "cal.mark_6": "Purple",
+  "cal.yearly_lunar": "Repeats yearly (lunar)",
+  "cal.lunar": "Lunar {date}",
+  "cal.lunar_leap": "leap {m}",
+  "cal.show_lunar": "Show lunar dates",
+  "cal.every": "Repeat every",
+  "cal.unit_daily": "days",
+  "cal.unit_weekly": "weeks",
+  "cal.unit_monthly": "months",
+  "cal.unit_yearly": "years",
+  "cal.on_days": "On these days",
+  "cal.until": "Ends on (optional)"
 }

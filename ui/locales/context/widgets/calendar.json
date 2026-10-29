@@ -9,5 +9,16 @@
   "cal.mark_3": "Calendar colour swatch name. Short.",
   "cal.mark_4": "Calendar colour swatch name. Short.",
   "cal.mark_5": "Calendar colour swatch name. Short.",
-  "cal.mark_6": "Calendar colour swatch name. Short."
+  "cal.mark_6": "Calendar colour swatch name. Short.",
+  "cal.yearly_lunar": "Calendar details panel, Repeat dropdown option: repeats every year on the same Korean lunar date (birthdays, ancestral rites). Short label.",
+  "cal.lunar": "Lunar date shown in the calendar day list header and day tooltips. {date} is e.g. 9.16 or a leap-month form. Short.",
+  "cal.lunar_leap": "Leap lunar month marker before the month number {m} (Korean: 윤). Very short.",
+  "cal.show_lunar": "Calendar widget right-click toggle (a tick shows when on): lunar dates appear in big squares, day tooltips and the day list. Short menu label, no full stop.",
+  "cal.every": "Calendar details panel: label before a number box and a unit (days/weeks/months/years), e.g. Repeat every [2] weeks. Short label.",
+  "cal.unit_daily": "Unit after the repeat-interval number box: every N days. Korean reads as N일마다. Short.",
+  "cal.unit_weekly": "Unit after the repeat-interval number box: every N weeks. Short.",
+  "cal.unit_monthly": "Unit after the repeat-interval number box: every N months. Short.",
+  "cal.unit_yearly": "Unit after the repeat-interval number box: every N years. Short.",
+  "cal.on_days": "Calendar details panel (weekly repeat): label of seven weekday toggle buttons. Short label.",
+  "cal.until": "Calendar details panel: date box for the last day a repeat happens; empty = never ends. Short label."
 }

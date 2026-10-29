@@ -21,6 +21,9 @@ import {
   eventDone,
   setEventDone,
   REPEATS,
+  repeatEvery,
+  repeatDays,
+  lunarOf,
   tzOptions,
   osZone,
   dateOpts,
@@ -33,8 +36,15 @@ export function parseEntry(text) {
   text = String(text ?? "").slice(0, 500);
   const tags = [...text.matchAll(/#([^\s#]+)/g)].map((m) => m[1].slice(0, 40));
   let rest = text.replace(/#[^\s#]+/g, " ");
-  // "@weekly" / "@매주" (and daily, monthly, yearly) mark a repeating entry.
+  // "@weekly" / "@매주" (and daily, monthly, yearly) mark a repeating entry; "@lunar" / "@음력" = yearly by lunar date.
   let repeat = null;
+  let lunar = false;
+  const lunarToken = /(^|\s)@(lunar|음력)(?=\s|$)/i;
+  if (lunarToken.test(rest)) {
+    repeat = "yearly";
+    lunar = true;
+    rest = rest.replace(lunarToken, " ");
+  }
   for (const [token, kind] of [
     [/(^|\s)@(daily|매일)(?=\s|$)/i, "daily"],
     [/(^|\s)@(weekly|매주)(?=\s|$)/i, "weekly"],
@@ -43,6 +53,7 @@ export function parseEntry(text) {
   ]) {
     if (token.test(rest)) {
       repeat = kind;
+      lunar = false;
       rest = rest.replace(token, " ");
     }
   }
@@ -57,6 +68,7 @@ export function parseEntry(text) {
     time,
     tags: [...new Set(tags)],
     repeat, // 'daily' | 'weekly' | 'monthly' | 'yearly' | null: null so editing clears a previous repeat
+    lunar, // yearly by the lunar date; false so editing clears it
   };
 }
 const unparse = (ev) =>
@@ -64,12 +76,12 @@ const unparse = (ev) =>
     ev.time,
     ev.title,
     ...(ev.tags || []).map((x) => "#" + x),
-    REPEATS.includes(ev.repeat) ? "@" + ev.repeat : "",
+    ev.repeat === "yearly" && ev.lunar ? "@lunar" : REPEATS.includes(ev.repeat) ? "@" + ev.repeat : "",
   ]
     .filter(Boolean)
     .join(" ");
 // Title for the repeat marker (↻) shown on a recurring entry.
-const repeatLabel = (t, ev) => t("cal." + ev.repeat);
+const repeatLabel = (t, ev) => t(ev.repeat === "yearly" && ev.lunar ? "cal.yearly_lunar" : "cal." + ev.repeat);
 const isEvent = (e) =>
   e &&
   typeof e === "object" &&
@@ -124,6 +136,7 @@ export default {
     .cal-grid .d.alldone::after { background: transparent; box-shadow: inset 0 0 0 1.2px currentColor; opacity: .7; }
     .cal-dayhead { font-size: var(--fs-meta); color: var(--text-muted); flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hol-name { color: var(--hol); margin-left: 6px; }
+    .lun-name { color: var(--text-faint); margin-left: 6px; font-weight: 400; }
     .cal-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-1); scrollbar-width: thin; }
     .ev { display: flex; align-items: center; gap: var(--space-3); padding: 3px 4px; border-radius: var(--r-inner); min-width: 0; }
     .ev:hover { background: color-mix(in srgb, var(--c3) 8%, transparent); }
@@ -167,6 +180,10 @@ export default {
     .cal-ed label.cal-ed-chk input { width: auto; flex: none; }
     .cal-ed input, .cal-ed select { width: 100%; box-sizing: border-box; font-size: 1em; }
     .cal-ed-lead input { width: 5em; }
+    .cal-ed-rule { display: flex; flex-direction: column; gap: var(--space-4); }
+    .cal-ed-days { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    .cal-ed-days button { min-width: 2em; padding: 2px 4px; }
+    .cal-ed-days button[aria-pressed=true] { background: var(--c2); border-color: var(--c2); color: var(--on-accent); }
     .cal-ed-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
     .cal-ed-tags .chips { display: contents; }
     .cal-ed-tags .chip { display: inline-flex; align-items: center; gap: 2px; padding: 0 2px 0 6px; border-radius: 999px;
@@ -198,7 +215,8 @@ export default {
     .bc-num { font-weight: 600; font-variant-numeric: tabular-nums; }
     .bc.sun .bc-num, .bc.hol .bc-num { color: var(--hol); }
     .bc.sat .bc-num { color: var(--sat); }
-    .bc-hol { font-size: var(--fs-small); color: var(--hol); overflow: hidden; text-overflow: ellipsis; }
+    .bc-hol { font-size: var(--fs-small); color: var(--hol); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .bc-lun { margin-left: auto; font-size: var(--fs-small); color: var(--text-faint); flex: none; font-variant-numeric: tabular-nums; }
     .bc-evs { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: var(--space-1); }
     .bc-ev { display: flex; align-items: center; gap: var(--space-2); white-space: nowrap; min-width: 0; flex: none; }
     .bc-ev input[type=checkbox] { margin: 0; width: .95em; height: .95em; flex: none; accent-color: var(--c2); }
@@ -251,6 +269,12 @@ export default {
     const dayLabel = (d) =>
       fmt({ month: "long", day: "numeric", weekday: "short" }, d);
     const holName = (d) => holidayName(hol, api.config, lang, d);
+    // lunar date "9.16" (leap month "윤6.1"); shown when the widget menu's lunar option is on
+    const lunarText = (d) => {
+      const l = lunarOf(d);
+      return `${l.leap ? t("cal.lunar_leap", { m: l.m }) : l.m}.${l.d}`;
+    };
+    const lunarLabel = (d) => t("cal.lunar", { date: lunarText(d) });
 
     const allTags = () =>
       [...new Set(events.flatMap((e) => e.tags || []))].sort();
@@ -305,7 +329,7 @@ export default {
       return [
         p.time && p.time,
         ...p.tags.map((x) => "#" + x),
-        p.repeat && t("cal." + p.repeat),
+        p.repeat && t(p.lunar ? "cal.yearly_lunar" : "cal." + p.repeat),
       ]
         .filter(Boolean)
         .map((x) => `<span class="pc">${esc(x)}</span>`)
@@ -415,7 +439,7 @@ export default {
         ]
           .filter(Boolean)
           .join(" ");
-        const tip = [hn, evs.length ? t("cal.count", { n: evs.length }) : ""]
+        const tip = [hn, s.lunar ? lunarLabel(d) : "", evs.length ? t("cal.count", { n: evs.length }) : ""]
           .filter(Boolean)
           .join(" · ");
         const label = [dayLabel(d), tip].filter(Boolean).join(", ");
@@ -437,7 +461,7 @@ export default {
         const da = dayAttrs(d, []);
         html += `
           <div class="bc ${dayClasses(d, i).join(" ")} ${da.cls}" data-d="${d}" tabindex="0" aria-label="${esc([dayLabel(d), hn, evs.length ? t("cal.count", { n: evs.length }) : ""].filter(Boolean).join(", "))}" title="${esc(hn || "")}"${da.style}>
-            <div class="bc-top"><span class="bc-num">${+d.slice(8)}</span>${hn ? `<span class="bc-hol">${esc(hn)}</span>` : ""}</div>
+            <div class="bc-top"><span class="bc-num">${+d.slice(8)}</span>${hn ? `<span class="bc-hol">${esc(hn)}</span>` : ""}${s.lunar ? `<span class="bc-lun" title="${esc(lunarLabel(d))}">${esc(lunarText(d))}</span>` : ""}</div>
             <div class="bc-evs">${evs
               .map(
                 (e) => `
@@ -493,7 +517,7 @@ export default {
       const typed = pop.querySelector(".cal-add")?.dataset.date === popDate ? pop.querySelector(".cal-add").value : "";
       pop.innerHTML = `
         <div class="pop-head"><button data-a="pop-prev" title="${esc(t("cal.prev_day"))}">${icon("left")}</button>
-          <b>${esc(dayLabel(popDate))}${hn ? `<span class="hol-name">${esc(hn)}</span>` : ""}</b>
+          <b>${esc(dayLabel(popDate))}${hn ? `<span class="hol-name">${esc(hn)}</span>` : ""}${s.lunar ? `<span class="lun-name">${esc(lunarLabel(popDate))}</span>` : ""}</b>
           <button data-a="pop-next" title="${esc(t("cal.next_day"))}">${icon("right")}</button>
           <button data-a="pop-color" title="${esc(t("cal.day_color"))}" aria-expanded="${daySw}">${icon("palette")}</button>
           <button data-a="pop-close" title="${esc(t("theme.close"))}">${icon("x")}</button></div>
@@ -578,15 +602,31 @@ export default {
       const ed = q(".cal-ed");
       const tz = ev.tz || defaultTz();
       let tags = [...(ev.tags || [])];
-      const repeatOpts = ["", ...REPEATS]
-        .map((r) => `<option value="${r}">${esc(t(r ? "cal." + r : "cal.repeat_none"))}</option>`)
+      // "yearly-lunar" is only a select value: it saves as repeat "yearly" + lunar
+      const repeatOpts = ["", ...REPEATS, "yearly-lunar"]
+        .map((r) => `<option value="${r}">${esc(t(r ? "cal." + r.replace("-", "_") : "cal.repeat_none"))}</option>`)
         .join("");
+      const startDow = (date) => parseYmd(date).getDay();
+      const chosenDays = repeatDays(ev) || [startDow(ev.date)];
+      const dayBtns = [...Array(7)]
+        .map((_, i) => dowOf(i))
+        .map(
+          (w) =>
+            `<button type="button" data-a="wd" data-w="${w}" aria-pressed="${chosenDays.includes(w)}">${esc(fmt({ weekday: "narrow" }, addDays("2023-01-01", w)))}</button>`,
+        )
+        .join("");
+      const ruleHtml = `
+        <div class="cal-ed-rule" hidden>
+          <label class="cal-ed-lead">${esc(t("cal.every"))}<span><input data-f="every" type="number" min="1" max="99" step="1" inputmode="numeric" value="${repeatEvery(ev)}"> <span class="cal-ed-unit"></span></span></label>
+          <div class="cal-ed-days" role="group" aria-label="${esc(t("cal.on_days"))}">${dayBtns}</div>
+          <label>${esc(t("cal.until"))}<input data-f="until" type="date" value="${esc(typeof ev.until === "string" ? ev.until : "")}"></label>
+        </div>`;
       ed.innerHTML = `
         <div class="pop-head"><b>${esc(t("cal.details"))}</b>
           <button data-a="ed-close" title="${esc(t("theme.close"))}">${icon("x")}</button></div>
         <label>${esc(t("cal.date"))}<input data-f="date" type="date" value="${esc(ev.date)}" required></label>
         <label>${esc(t("cal.time"))}<input data-f="time" type="time" value="${esc(ev.time || "")}"></label>
-        ${ev.dday || ev.quota ? "" : `<label>${esc(t("cal.repeat"))}<select data-f="repeat">${repeatOpts}</select></label>`}
+        ${ev.dday || ev.quota ? "" : `<label>${esc(t("cal.repeat"))}<select data-f="repeat">${repeatOpts}</select></label>${ruleHtml}`}
         <label>${esc(t("cal.tags"))}<span class="cal-ed-tags"><span class="chips"></span><input data-f="tag" placeholder="${esc(t("cal.tag_add"))}"></span><span class="cal-sw" role="group" hidden></span></label>
         <label>${esc(t("cal.url"))}<input data-f="url" type="url" inputmode="url" value="${esc(ev.url || "")}" placeholder="https://"></label>
         <label>${esc(t("clock.zone"))}<select data-f="tz">${tzOptions(tz, { common: t("set.tz_common"), all: t("set.tz_all") })}</select></label>
@@ -596,7 +636,19 @@ export default {
       ed.hidden = false;
       ed.querySelector("[data-f=tz]").value = tz;
       const f = (n) => ed.querySelector(`[data-f=${n}]`);
-      if (f("repeat")) f("repeat").value = REPEATS.includes(ev.repeat) ? ev.repeat : "";
+      // the rule rows (interval, weekdays, end date) follow the repeat choice
+      const syncRule = () => {
+        const v = f("repeat").value;
+        ed.querySelector(".cal-ed-rule").hidden = !v;
+        ed.querySelector(".cal-ed-days").hidden = v !== "weekly";
+        if (v) ed.querySelector(".cal-ed-unit").textContent = t("cal.unit_" + v.replace("-lunar", ""));
+      };
+      if (f("repeat")) {
+        f("repeat").value =
+          ev.repeat === "yearly" && ev.lunar ? "yearly-lunar" : REPEATS.includes(ev.repeat) ? ev.repeat : "";
+        f("repeat").addEventListener("change", syncRule);
+        syncRule();
+      }
       let picking = null; // the tag whose colour row is open
       const drawTags = () => {
         if (!tags.includes(picking)) picking = null;
@@ -633,6 +685,11 @@ export default {
           tags.splice(+e.target.closest("[data-i]").dataset.i, 1);
           return drawTags();
         }
+        if (a === "wd") {
+          const b = e.target.closest("[data-w]");
+          b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") !== "true");
+          return;
+        }
         if (a === "tag-pick") {
           e.preventDefault();
           const x = tags[+e.target.closest("[data-i]").dataset.i];
@@ -656,11 +713,25 @@ export default {
           addTag(); // a tag typed but not yet entered still counts
           if (/^\d{4}-\d{2}-\d{2}$/.test(f("date").value)) cur.date = f("date").value;
           if (f("repeat")) {
-            const r = f("repeat").value || null;
-            if (r !== (cur.repeat ?? null)) delete cur.doneDates; // per-occurrence ticks belong to the old rule
+            const v = f("repeat").value;
+            const r = v === "yearly-lunar" ? "yearly" : v || null;
+            const lunar = v === "yearly-lunar";
+            // per-occurrence ticks belong to the old rule
+            if (r !== (cur.repeat ?? null) || lunar !== !!cur.lunar) delete cur.doneDates;
             cur.repeat = r;
             // a to-do given a dated repeat becomes a calendar entry (the checklist then shows it on its days)
             if (cur.todo && r && r !== "daily") delete cur.todo;
+            for (const k of ["lunar", "every", "days", "until"]) delete cur[k];
+            if (lunar) cur.lunar = true;
+            if (r) {
+              const n = Math.floor(+f("every").value || 1);
+              if (n > 1) cur.every = Math.min(n, 99);
+              const days = [...ed.querySelectorAll("[data-a=wd][aria-pressed=true]")].map((b) => +b.dataset.w).sort();
+              // only the start date's weekday = the plain weekly rule
+              if (r === "weekly" && days.length && !(days.length === 1 && days[0] === startDow(cur.date))) cur.days = days;
+              const until = f("until").value;
+              if (/^\d{4}-\d{2}-\d{2}$/.test(until) && until >= cur.date) cur.until = until;
+            }
           }
           cur.tags = tags;
           cur.time = f("time").value || null;
@@ -923,6 +994,14 @@ export default {
         {
           text: t(s.view === "mini" ? "cal.view_board" : "cal.view_mini"),
           action: toggleView,
+        },
+        {
+          text: (s.lunar ? "✓ " : "") + t("cal.show_lunar"),
+          action: () => {
+            s.lunar = !s.lunar;
+            api.save();
+            render();
+          },
         },
       ],
     };

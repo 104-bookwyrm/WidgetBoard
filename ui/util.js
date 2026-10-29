@@ -130,19 +130,31 @@ export function zonedToInstant(ymdStr, hm, tz = "UTC") {
 /**
  * Does event `e` occur on day `d` ('YYYY-MM-DD')? Shared by the calendar grid, the
  * checklist "today" view and the reminder engine so recurrence is defined once.
- * ponytail: yearly + weekly only — no monthly/RRULE until a real need shows up.
  * Feb 29 yearly entries fall on Feb 28 in other years (yearlyIn).
+ * Optional rule fields: `every` (every N days/weeks/months/years), `days` (weekly: weekdays 0 = Sun … 6),
+ * `until` (last day, inclusive), `lunar` (yearly by the Korean lunar date).
  */
 export function occursOn(e, d) {
   if (!e || typeof e.date !== "string") return false;
   // a period quota ("once this week / month", from the checklist) falls on its period's last day
   if (e.quota) return d >= e.date && periodEnd(e.repeat, d) === d;
-  if (e.date === d) return true;
-  if (e.repeat === "yearly") return yearlyIn(e.date, d.slice(0, 4)) === d;
+  if (e.repeat && typeof e.until === "string" && d > e.until) return false;
+  const days = repeatDays(e);
+  if (e.date === d && !days) return true;
+  const n = repeatEvery(e);
+  if (e.repeat === "yearly") {
+    if (n > 1 && (d < e.date || (+d.slice(0, 4) - +e.date.slice(0, 4)) % n)) return false;
+    return e.lunar ? lunarYearlyOn(e.date, d) : yearlyIn(e.date, d.slice(0, 4)) === d;
+  }
   if (d < e.date) return false; // daily / weekly / monthly start at their first date
-  if (e.repeat === "daily") return true;
-  if (e.repeat === "weekly") return parseYmd(d).getDay() === parseYmd(e.date).getDay();
+  if (e.repeat === "daily") return daysBetween(e.date, d) % n === 0;
+  if (e.repeat === "weekly") {
+    if (!(days || [parseYmd(e.date).getDay()]).includes(parseYmd(d).getDay())) return false;
+    // every N weeks counts calendar weeks (Settings week start), so Mon + Wed every 2 weeks stay together
+    return (daysBetween(weekFirstDay(e.date), weekFirstDay(d)) / 7) % n === 0;
+  }
   if (e.repeat === "monthly") {
+    if (((+d.slice(0, 4) - +e.date.slice(0, 4)) * 12 + (+d.slice(5, 7) - +e.date.slice(5, 7))) % n) return false;
     // the 29th-31st fall on a shorter month's last day (Microsoft To Do)
     const day = parseYmd(d);
     const last = new Date(day.getFullYear(), day.getMonth() + 1, 0).getDate();
@@ -151,6 +163,38 @@ export function occursOn(e, d) {
   return false;
 }
 export const REPEATS = ["daily", "weekly", "monthly", "yearly"];
+/** The repeat interval: a whole number from 1. */
+export const repeatEvery = (e) => (Number.isInteger(e?.every) && e.every > 1 ? Math.min(e.every, 99) : 1);
+/** A weekly entry's chosen weekdays (0 = Sunday), or null for "the start date's weekday". */
+export const repeatDays = (e) =>
+  e?.repeat === "weekly" && Array.isArray(e.days) && e.days.some((x) => Number.isInteger(x) && x >= 0 && x <= 6)
+    ? e.days.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6)
+    : null;
+
+// ---- Korean lunar calendar (the browser's built-in "dangi" calendar; no data file) ----
+const lunarFmt = new Intl.DateTimeFormat("ko-KR-u-ca-dangi", { month: "numeric", day: "numeric" });
+const lunarCache = new Map();
+/** Lunar date of a solar 'YYYY-MM-DD': { m, d, leap } (leap = the repeated "윤" month). */
+export function lunarOf(s) {
+  let v = lunarCache.get(s);
+  if (!v) {
+    const parts = lunarFmt.formatToParts(parseYmd(s));
+    const month = parts.find((p) => p.type === "month")?.value ?? "";
+    v = { m: parseInt(month.replace(/\D/g, ""), 10), d: +parts.find((p) => p.type === "day")?.value, leap: /\D/.test(month) };
+    lunarCache.set(s, v);
+  }
+  return v;
+}
+/**
+ * Does a lunar-yearly entry first dated `date` fall on `d`? Leap months are skipped (the date is kept in
+ * the regular month, as Korean birthdays are), and a 30th falls on the 29th when that month is short.
+ */
+export function lunarYearlyOn(date, d) {
+  const want = lunarOf(date);
+  const got = lunarOf(d);
+  if (got.leap || got.m !== want.m) return false;
+  return got.d === want.d || (want.d === 30 && got.d === 29 && lunarOf(addDays(d, 1)).d === 1);
+}
 
 /**
  * A yearly date's day in `year`. The one place for the Feb 29 rule: a year without Feb 29 uses Feb 28
