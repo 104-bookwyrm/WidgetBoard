@@ -201,6 +201,9 @@
       .set-add {
         justify-content: flex-start;
       }
+      #cal-sub-url {
+        flex: 1;
+      }
       .set-list-row input,
       .set-add input {
         font: inherit;
@@ -606,6 +609,28 @@
                 data-i18n-title="set.cal.date"
               />
               <button id="cal-remove-btn" data-i18n="set.cal.exclude"></button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="set.cal.subs"></legend>
+            <p class="hint" data-i18n="set.cal.subs_hint"></p>
+            <div id="cal-sub-list" class="set-list"></div>
+            <div class="set-row set-add">
+              <input
+                type="text"
+                id="cal-sub-name"
+                data-i18n-placeholder="set.cal.sub_name_ph"
+              />
+              <input
+                type="url"
+                id="cal-sub-url"
+                data-i18n-placeholder="set.cal.sub_url_ph"
+              />
+              <button id="cal-sub-add" data-i18n="set.cal.add"></button>
+            </div>
+            <div class="set-row">
+              <button id="cal-sub-refresh" data-i18n="set.cal.sub_refresh"></button>
             </div>
           </fieldset>
 

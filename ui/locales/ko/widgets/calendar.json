@@ -22,6 +22,7 @@
   "cal.yearly": "매년 반복",
   "cal.weekly": "매주 반복",
   "cal.dday_item": "디데이",
+  "cal.imported": "{name}에서 불러온 일정 (읽기 전용)",
   "cal.details": "세부 정보",
   "cal.url": "링크 (URL)",
   "cal.time": "시간",

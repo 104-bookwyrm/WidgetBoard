@@ -17,6 +17,7 @@ import {
 } from "./util.js";
 import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
 import { icon } from "./icons.js";
+import { refreshSubs, subsOf, REFRESH_MS } from "./calsubs.js";
 import REGISTRY, { HOSTS } from "./widgets/index.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import GROUPS from "./widgets/groups.json" with { type: "json" };
@@ -2926,6 +2927,14 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     applySavedLayout(e.payload).catch(reportError),
   );
   await onBoard("kbd-mode", (e) => setKbd(!!e.payload));
+  // calendar subscriptions (calsubs.js): the primary board refreshes them on start, every 3 hours and when
+  // Settings adds, removes or asks ("refresh now")
+  if (!DEMO && !PIN) {
+    const refresh = () => refreshSubs(invoke, () => config);
+    await onBoard("calsubs-refresh", refresh);
+    if (isPrimary && subsOf(config).length) refresh();
+    setInterval(() => isPrimary && subsOf(config).length && refresh(), REFRESH_MS);
+  }
   await onBoard("layout-replaced", () => location.reload()); // Rust closes pin windows itself
   // content saved by another window (the settings window, another monitor): show the newer version
   await listen("content-changed", (e) => {

@@ -31,5 +31,6 @@
   "cal.hits": "Count beside the calendar search box: how many entries match. Very short.",
   "cal.no_hits": "Beside the calendar search box when nothing matches. Very short.",
   "cal.hit_prev": "Calendar search: button that jumps back to the previous period with a match; Shift+Enter does the same. Hint.",
-  "cal.hit_next": "Calendar search: button that jumps to the next period with a match; Enter does the same. Hint."
+  "cal.hit_next": "Calendar search: button that jumps to the next period with a match; Enter does the same. Hint.",
+  "cal.imported": "Tooltip on the small calendar icon of an entry imported from a subscribed calendar (Settings > Calendar). {name} = the subscription's name. Short."
 }

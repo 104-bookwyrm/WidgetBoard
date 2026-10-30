@@ -8,5 +8,14 @@
   "set.tutorial.whats_new": "Heading for the current version's newly introduced tutorial entries.",
   "set.guide.try": "Button on a widget Guide entry that opens an isolated demo focused on that widget type.",
   "set.backup.open_folder": "Settings > Backup and data: button that opens the WidgetBoard data folder in File Explorer. Replaces the old tray item.",
-  "set.about.report": "Button in Settings > About. Opens an anonymous Google Form in the browser to report a bug. 1 to 3 words."
+  "set.about.report": "Button in Settings > About. Opens an anonymous Google Form in the browser to report a bug. 1 to 3 words.",
+  "set.cal.subs": "Settings > Calendar fieldset title: read-only calendars imported from an .ics / iCal link (Google, Outlook, Naver). Short label.",
+  "set.cal.subs_hint": "Hint under the subscribed-calendars title: where to find the secret iCal link in Google Calendar, that imported entries are read-only, and the 3-hour refresh. Keep Google's own label for the field.",
+  "set.cal.sub_name_ph": "Placeholder of the subscription name box. The name also becomes the entries' tag in the calendar.",
+  "set.cal.sub_url_ph": "Placeholder of the subscription link box. Short.",
+  "set.cal.sub_refresh": "Button: download every subscribed calendar again now.",
+  "set.cal.sub_at": "Status after a subscription's name in the list: {n} entries, {when} = date and time of the last successful download.",
+  "set.cal.sub_pending": "Status after a just-added subscription that has not been downloaded yet.",
+  "set.cal.sub_failed": "Status after a subscription whose last download failed; the technical reason shows as a tooltip. The last good copy stays in the calendar.",
+  "set.cal.sub_bad_url": "Browser validation bubble on the link box when the text is not an https:// or webcal:// link."
 }

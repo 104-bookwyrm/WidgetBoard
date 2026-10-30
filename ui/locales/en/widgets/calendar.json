@@ -22,6 +22,7 @@
   "cal.yearly": "Repeats yearly",
   "cal.weekly": "Repeats weekly",
   "cal.dday_item": "D-day",
+  "cal.imported": "From {name}, read-only",
   "cal.details": "Details",
   "cal.url": "Link (URL)",
   "cal.time": "Time",

@@ -8,6 +8,8 @@
 // Korean public holidays are shown in both views (see ../holidays.js).
 // Day and tag colours are shared by every calendar (data/calcolors.json) and stored as a palette
 // number, so a theme can recolour them through --mark-1 … --mark-6.
+// Calendar subscriptions (Settings > 달력, ../calsubs.js) show read-only, tagged with the subscription's name;
+// they are kept apart from `events`, so nothing here can write them.
 import {
   esc,
   ymd,
@@ -33,6 +35,7 @@ import {
 } from "../util.js";
 import { loadHolidays, holidayName } from "../holidays.js";
 import { icon } from "../icons.js";
+import { subsOf } from "../calsubs.js";
 
 /** "14:00 회의 #work" -> { title: '회의', time: '14:00', tags: ['work'] } */
 export function parseEntry(text) {
@@ -255,6 +258,9 @@ export default {
       s.filter = {};
     if (s.view !== "board") s.view = "mini";
     let events = [];
+    let subRaw = {}; // data/calsubs.json
+    let subList = []; // imported entries, read-only
+    let subDays = new Map(); // date -> imported entries that day
     let colors = { days: {}, tags: {} }; // shared: { days: { ymd: n }, tags: { tag: n } }
     let hol = {};
     let month = ymd().slice(0, 7) + "-01";
@@ -300,8 +306,9 @@ export default {
     };
     const lunarLabel = (d) => t("cal.lunar", { date: lunarText(d) });
 
+    const all = () => events.concat(subList);
     const allTags = () =>
-      [...new Set(events.flatMap((e) => e.tags || []))].sort();
+      [...new Set(all().flatMap((e) => e.tags || []))].sort();
     // checklist daily routines live in the checklist only (not in every day square)
     const routine = (ev) => ev.todo && ev.repeat === "daily";
     function shown(ev) {
@@ -315,6 +322,7 @@ export default {
     const dayEvents = (d) =>
       events
         .filter((e) => occursOn(e, d) && shown(e))
+        .concat((subDays.get(d) || []).filter(shown))
         .sort(
           (a, b) =>
             eventDone(a, d) - eventDone(b, d) ||
@@ -332,7 +340,7 @@ export default {
       const tag = k.replace(/^#/, "");
       return fold(e.title).includes(k) || (e.tags || []).some((x) => fold(x).includes(tag));
     }
-    const hits = () => events.filter((e) => !routine(e) && shown(e) && matches(e));
+    const hits = () => all().filter((e) => !routine(e) && shown(e) && matches(e));
     const hitCount = () => {
       if (!searchKey()) return "";
       const n = hits().length;
@@ -471,17 +479,19 @@ export default {
               (e) => `
             <div class="ev ${eventDone(e, d) ? "done" : ""}${tagAttrs(e).cls}${matches(e) ? " hit" : ""}" data-id="${esc(e.id)}" data-d="${d}"${tagAttrs(e).style}>
               ${
-                e.dday
+                e.ro
+                  ? `<span class="ev-rep" title="${esc(t("cal.imported", { name: e.tags[0] }))}">${icon("calendar")}</span>`
+                  : e.dday
                   ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
                   : `<input type="checkbox" ${eventDone(e, d) ? "checked" : ""}>${e.repeat ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">${icon("repeat")}</span>` : ""}`
               }
               ${e.time ? `<span class="ev-time">${esc(e.time)}</span>` : ""}
               ${e.notify ? `<span class="ev-bell" title="${esc(t("cal.notify"))}">${icon("bell")}</span>` : ""}
-              <span class="ev-title" title="${esc(e.title)} - ${esc(t("cal.click_edit"))}">${esc(e.title)}</span>
+              <span class="ev-title" title="${esc(e.title)}${e.ro ? "" : ` - ${esc(t("cal.click_edit"))}`}">${esc(e.title)}</span>
               <span class="ev-tags" title="${esc((e.tags || []).map((x) => "#" + x).join(" "))}">${esc((e.tags || []).map((x) => "#" + x).join(" "))}</span>
               ${e.url ? `<button class="ev-link" title="${esc(e.url)}">${icon("link")}</button>` : ""}
-              <button class="ev-cfg" title="${esc(t("cal.details"))}">${icon("settings")}</button>
-              <button class="ev-del" title="${esc(t("dday.delete"))}">${icon("x")}</button>
+              ${e.ro ? "" : `<button class="ev-cfg" title="${esc(t("cal.details"))}">${icon("settings")}</button>
+              <button class="ev-del" title="${esc(t("dday.delete"))}">${icon("x")}</button>`}
             </div>`,
             )
             .join("")
@@ -538,7 +548,9 @@ export default {
                 (e) => `
               <div class="bc-ev ${eventDone(e, d) ? "done" : ""}${tagAttrs(e).cls}${matches(e) ? " hit" : ""}" data-id="${esc(e.id)}" title="${esc(unparse(e))}"${tagAttrs(e).style}>
                 ${
-                  e.dday
+                  e.ro
+                    ? `<span class="ev-rep" title="${esc(t("cal.imported", { name: e.tags[0] }))}">${icon("calendar")}</span>`
+                    : e.dday
                     ? `<span class="ev-rep" title="${esc(t("cal.dday_item"))}">${icon("pin")}</span>`
                     : `<input type="checkbox" ${eventDone(e, d) ? "checked" : ""}>${e.repeat ? `<span class="ev-rep" title="${esc(repeatLabel(t, e))}">${icon("repeat")}</span>` : ""}`
                 }<span class="bc-t">${e.time ? `<b>${esc(e.time)}</b> ` : ""}${esc(e.title)}</span>
@@ -910,7 +922,8 @@ export default {
         return render();
       }
       if (e.target.closest(".ev-link")) {
-        const ev = byId(e.target.closest("[data-id]").dataset.id);
+        const id = e.target.closest("[data-id]").dataset.id;
+        const ev = all().find((x) => x.id === id);
         if (ev?.url) api.openUrl(ev.url);
         return;
       }
@@ -932,8 +945,8 @@ export default {
       if (more) return openDay(more.closest(".bc").dataset.d);
       // one click edits an entry's text, in the day list and in big squares alike
       const line = e.target.closest(".bc-t, .ev-title");
-      if (line && !line.querySelector("input"))
-        return editInline(line, byId(line.closest("[data-id]").dataset.id));
+      const lineEv = line && byId(line.closest("[data-id]").dataset.id); // undefined for an imported entry
+      if (lineEv && !line.querySelector("input")) return editInline(line, lineEv);
       // one click opens the day list in both views; in big squares a double-click types in place instead
       const cell = e.target.closest(".bc");
       if (cell && !e.target.closest("input")) {
@@ -994,7 +1007,7 @@ export default {
       if (e.key === "F2") {
         const row = e.target.closest(".ev, .bc-ev");
         const span = row?.querySelector(".ev-title, .bc-t");
-        if (span) {
+        if (span && byId(row.dataset.id)) {
           e.preventDefault();
           return editInline(span, byId(row.dataset.id));
         }
@@ -1055,7 +1068,30 @@ export default {
       renderLater();
     };
     api.onStore("calcolors", loadColors);
-    api.onConfig(renderLater);
+    // imported entries, for the subscriptions Settings lists now (a removed one vanishes at once, a rename shows)
+    const buildSubs = () => {
+      subList = [];
+      subDays = new Map();
+      for (const sub of subsOf(api.config))
+        (subRaw[sub.id]?.items || []).forEach((it, i) => {
+          if (typeof it?.date !== "string" || typeof it.title !== "string") return;
+          const e = { ...it, id: `ics:${sub.id}:${i}`, tags: [sub.name || "iCal"], ro: true };
+          subList.push(e);
+          if (!subDays.has(e.date)) subDays.set(e.date, []);
+          subDays.get(e.date).push(e);
+        });
+    };
+    const loadSubs = async () => {
+      const c = await api.store.get("calsubs").catch(() => null);
+      subRaw = c && typeof c === "object" ? c : {};
+      buildSubs();
+      renderLater();
+    };
+    api.onStore("calsubs", loadSubs);
+    api.onConfig(() => {
+      buildSubs();
+      renderLater();
+    });
     loadHolidays().then((h) => {
       hol = h;
       renderLater();
@@ -1064,6 +1100,7 @@ export default {
     render();
     load();
     loadColors();
+    loadSubs();
     return {
       destroy() {
         ro.disconnect();

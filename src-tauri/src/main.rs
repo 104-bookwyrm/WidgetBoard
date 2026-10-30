@@ -1115,6 +1115,22 @@ fn emit_primary(app: AppHandle, state: State<AppState>, event: String, payload: 
     Ok(())
 }
 
+/// Calendar subscription: the text of an .ics link (webcal:// is read as https://), up to 5 MB.
+/// async + blocking thread, like backup_now: a slow server must not freeze the windows.
+#[tauri::command]
+async fn fetch_ics(url: String) -> Result<String, String> {
+    let url = url.trim();
+    let rest = ["webcal://", "https://"]
+        .iter()
+        .find_map(|s| url.get(..s.len()).filter(|p| p.eq_ignore_ascii_case(s)).map(|_| &url[s.len()..]))
+        .ok_or("only https:// and webcal:// links")?;
+    let url = format!("https://{rest}");
+    let bytes = tauri::async_runtime::spawn_blocking(move || updater::fetch(&url, 5 << 20))
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
+}
+
 /// Replace every widget at once (loading a layout preset); all boards reload.
 #[tauri::command]
 fn replace_widgets(app: AppHandle, state: State<AppState>, widgets: Vec<Value>) -> Result<(), String> {
@@ -2225,7 +2241,8 @@ fn main() {
             restore_backup,
             list_backups,
             open_backups_folder,
-            emit_primary
+            emit_primary,
+            fetch_ics
         ])
         .build(tauri::generate_context!())
         .expect("error while running WidgetBoard")

@@ -391,6 +391,8 @@ export function createMockTauri({ memory = false } = {}) {
       case "set_interacting":
       case "raise_board":
         return;
+      case "fetch_ics": // the browser's fetch (CORS applies); Rust refuses anything but https:// and webcal://
+        return fetch(args.url.replace(/^webcal:/i, "https:")).then((r) => (r.ok ? r.text() : Promise.reject(new Error("HTTP " + r.status))));
       case "emit_primary":
         native(cmd, args.event, args.payload);
         emit(args.event, args.payload, "board-0");

@@ -512,7 +512,65 @@ function saveRemoves(arr) {
     renderHolidayRemoves();
   });
 }
+// -- calendar subscriptions (config.calendar.subscriptions, whole-array replace). The primary board fetches them
+// (calsubs.js) and writes data/calsubs.json, read here only for each one's last refresh or error.
+const calSubs = () =>
+  Array.isArray(data?.config?.calendar?.subscriptions) ? data.config.calendar.subscriptions : [];
+let subState = {};
+function saveSubs(list) {
+  if (data.config) data.config.calendar = { ...(data.config.calendar || {}), subscriptions: list };
+  return invoke("save_config", { patch: { calendar: { subscriptions: list } } }).then(() => {
+    saved();
+    renderSubs();
+    refreshSubsNow();
+  });
+}
+const refreshSubsNow = () =>
+  invoke("emit_primary", { event: "calsubs-refresh", payload: null }).catch(() => {});
+function renderSubs() {
+  const host = $("#cal-sub-list");
+  host.innerHTML = "";
+  for (const s of calSubs()) {
+    const st = subState[s.id];
+    const row = document.createElement("div");
+    row.className = "set-list-row";
+    const txt = document.createElement("span");
+    txt.className = "grow";
+    const when = st?.at
+      ? new Date(st.at).toLocaleString(data.app.lang === "ko" ? "ko-KR" : "en-US", { dateStyle: "medium", timeStyle: "short" })
+      : "";
+    txt.textContent = `${s.name} - ${
+      st?.error ? t("set.cal.sub_failed") : when ? t("set.cal.sub_at", { when, n: st.items?.length ?? 0 }) : t("set.cal.sub_pending")
+    }`;
+    if (st?.error) txt.title = st.error;
+    row.append(txt, btn("✕", () => saveSubs(calSubs().filter((x) => x.id !== s.id))));
+    host.append(row);
+  }
+}
+async function loadSubState() {
+  const v = await invoke("store_get", { key: "calsubs" }).catch(() => null);
+  subState = v && typeof v === "object" ? v : {};
+  renderSubs();
+}
 function bindTimer() {
+  const subUrl = $("#cal-sub-url");
+  subUrl.oninput = () => subUrl.setCustomValidity("");
+  $("#cal-sub-add").onclick = () => {
+    const url = subUrl.value.trim();
+    if (!/^(https|webcal):\/\/\S+$/i.test(url)) {
+      subUrl.setCustomValidity(t("set.cal.sub_bad_url"));
+      return subUrl.reportValidity();
+    }
+    if (calSubs().some((s) => s.url === url)) return;
+    let name = $("#cal-sub-name").value.trim();
+    try {
+      name ||= new URL(url).hostname;
+    } catch {}
+    saveSubs([...calSubs(), { id: crypto.randomUUID(), name: name || "iCal", url }]).then(() => {
+      $("#cal-sub-name").value = subUrl.value = "";
+    });
+  };
+  $("#cal-sub-refresh").onclick = refreshSubsNow;
   bindUiControls('[data-page="widgets"] [data-ui]');
   $("#timer-preset-add").onclick = () => {
     presets.push({ label: "", time: "" });
@@ -563,6 +621,7 @@ function fillTimer() {
   $("#cal-country").value = holidays().country ?? "KR";
   renderHolidayAdds();
   renderHolidayRemoves();
+  loadSubState();
 }
 
 // ---- Backup & data page ----
@@ -875,6 +934,7 @@ async function init() {
     fillUiControls('[data-page="widgets"] [data-ui]');
   });
   await listen("update-status", showUpdate);
+  await listen("store-changed", (p) => p?.key === "calsubs" && loadSubState());
   await listen("restoring", () => {
     const o = document.createElement("div");
     o.id = "restoring";
