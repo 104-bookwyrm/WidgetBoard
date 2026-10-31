@@ -177,6 +177,7 @@ function helpEntry(entry, className = "") {
   body.textContent = t(`help.${entry.id}.body`);
   article.append(title, body);
   for (const section of entry.sections || []) {
+    if (section === "windows" && !data?.features?.systemMedia) continue;
     const heading = document.createElement("h4");
     heading.textContent = t(GUIDE_SECTION_TITLES[`${entry.type}.${section}`]);
     const detail = document.createElement("p");
@@ -375,6 +376,7 @@ function showUpdate(info) {
   a.disabled = $("#about-update-skip").disabled = !!info.busy;
 }
 function bindAbout() {
+  if (!data?.features?.updates) return;
   $("#about-update").onchange = () =>
     invoke("save_config", {
       patch: { update: { check: $("#about-update").value } },
@@ -397,6 +399,7 @@ function bindAbout() {
 }
 function fillAbout() {
   $("#about-version").textContent = `WidgetBoard v${data.version || ""}`.trim();
+  $("#about-updates").hidden = !data?.features?.updates;
   // ponytail: Google stamps the submit time, so app info is only version and language
   const report = $("#about-report");
   report.hidden = !REPORT_FORM.url;
@@ -404,9 +407,10 @@ function fillAbout() {
     invoke("open_url", {
       url: REPORT_FORM.url.replace("APPINFO", encodeURIComponent(`v${data.version} ${data.app.lang}`)),
     }).catch(() => {});
-  invoke("update_status")
-    .then(showUpdate)
-    .catch(() => {});
+  if (data?.features?.updates)
+    invoke("update_status")
+      .then(showUpdate)
+      .catch(() => {});
 }
 
 // ---- Timer & calendar page ----
@@ -843,9 +847,10 @@ function bindAppearance() {
   fontField($("#th-font"));
   $("#th-font").addEventListener("change", () => {
     const name = cleanFont($("#th-font").value);
-    const val = name
-      ? `"${name}", "Malgun Gothic", system-ui, sans-serif`
+    const fallback = data.platform === "macos"
+      ? '-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", system-ui, sans-serif'
       : '"Segoe UI Variable", "Segoe UI", "Malgun Gothic", system-ui, sans-serif';
+    const val = name ? `"${name}", ${fallback}` : fallback;
     saveTheme(setVar(themeCss, "--font", val));
   });
   $("#th-file").onclick = () => invoke("open_theme_file").catch(() => {});

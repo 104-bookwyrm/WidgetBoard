@@ -91,11 +91,11 @@
   "help.guide.showcase.title": "쇼케이스",
   "help.guide.showcase.body": "좋아하는 사람이나 대상을 위한 카드입니다. 이름, 생일, 사진, 번갈아 나오는 문구를 담습니다. 이름을 클릭하거나 우클릭해 ‘편집’을 선택하면 이름과 생일을 정합니다. 사진은 카드 위로 드래그해 놓으면 추가됩니다.",
   "help.guide.nowplaying.title": "지금 재생 중",
-  "help.guide.nowplaying.body": "Windows에서 재생 중인 미디어를 보여 주고 조작하며 내 오디오 파일도 재생합니다. Windows에서만 쓸 수 있습니다.",
+  "help.guide.nowplaying.body": "내 오디오 파일을 작은 데스크톱 플레이어에서 재생합니다. Windows에서는 다른 앱에서 재생 중인 미디어도 보여 주고 조작할 수 있습니다.",
   "help.guide.nowplaying.windows": "브라우저나 Spotify 같은 플레이어에서 재생 중인 곡의 제목과 표지 이미지를 보여 줍니다. 이전, 재생, 다음 버튼으로 조작합니다. 플레이어가 여러 개 열려 있으면 전환 버튼으로 바꿉니다.",
   "help.guide.nowplaying.files": "‘내 파일’은 내 컴퓨터에 있는 오디오 파일을 재생합니다. ‘내 파일’을 열고 더하기 버튼을 누르거나 파일을 드래그해 놓으면 트랙이 추가됩니다. 음량, 셔플, 반복 버튼은 위쪽에 있습니다.",
   "help.hint.edit_first.title": "레이아웃 편집 중",
   "help.hint.edit_first.body": "위젯의 제목 표시줄을 드래그하면 위젯이 움직입니다. 위젯을 우클릭하면 종류를 바꾸거나 ‘모양’을 엽니다. 다 했으면 ‘완료’를 누르거나 Esc를 누르세요.",
-  "help.hint.tray_pin.title": "위젯보드는 작업 표시줄에 있습니다",
-  "help.hint.tray_pin.body": "아이콘을 우클릭하면 위젯을 추가하거나 레이아웃을 편집할 수 있습니다. 아이콘이 보이지 않으면 작업 표시줄의 ^ 버튼을 누르고 위젯보드 아이콘을 작업 표시줄로 드래그하세요."
+  "help.hint.tray_pin.title": "위젯보드는 가까이에 있습니다",
+  "help.hint.tray_pin.body": "메뉴 막대나 작업 표시줄의 위젯보드 아이콘을 사용해 위젯 추가, 레이아웃 편집, 설정 열기, 종료를 할 수 있습니다."
 }

@@ -11,7 +11,7 @@
   "np.files": "내 파일",
   "sum.paused": "일시정지",
   "sum.np_none": "재생 중인 미디어 없음",
-  "hint.nowplaying": "재생 중 곡이나 영상 조작",
+  "hint.nowplaying": "내 오디오 파일 재생",
   "ap.add": "트랙 추가",
   "ap.play": "재생",
   "ap.volume": "음량",

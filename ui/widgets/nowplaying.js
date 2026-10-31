@@ -1,8 +1,5 @@
-// Now Playing: whatever Windows' media controls report (YouTube in Chrome/Edge/Whale/Firefox, Spotify,
-// the Media Player app...). Title, channel/artist, artwork, progress, and prev / play-pause / next. Click the bar to jump.
-// The cycle button switches between sources when several are open (e.g. a YouTube tab and Spotify).
-// "My files" plays the user's own audio in a hidden <audio>. WebView2 registers it with Windows like any other
-// player, so it comes back through the same media payload; the widget never draws a second display.
+// Now Playing: local audio on every platform, plus system media sessions where the native backend supports them.
+// "My files" uses a hidden <audio> and registers a standard Media Session with the operating system.
 import { icon } from "../icons.js";
 import { esc, dropZone } from "../util.js";
 
@@ -167,7 +164,7 @@ export default {
     let receivedAt = Date.now();
     let tick = null;
 
-    // -- own files: a hidden <audio>, shown to Windows (and back to this widget) as a media session --
+    // -- own files: a hidden <audio> exposed to the OS as a standard media session --
     const me = {};
     const audio = new Audio();
     audio.volume = s.volume;

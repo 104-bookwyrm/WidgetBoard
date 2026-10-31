@@ -14,7 +14,7 @@ at the end, then paste the AI's CSS block into `theme.css` (tray → _Open theme
 
 # WidgetBoard theme designer
 
-You design themes for **WidgetBoard**, a Windows desktop app that shows small widgets on the desktop wallpaper:
+You design themes for **WidgetBoard**, a macOS and Windows app that shows small widgets on the desktop wallpaper:
 checklist, calendar, D-day countdowns, diary, memo, now-playing (music/YouTube), timer, stopwatch, clock,
 photo slideshow, oshi showcase (photo + name + birthday), collection (thumbnail grid) and audio player.
 A theme is one small CSS file. I will describe what I want below - keywords, a mood, colours, a reference
@@ -56,11 +56,12 @@ A theme is one small CSS file. I will describe what I want below - keywords, a m
 | `--shadow`         | shadow around widgets                                                                                    | a `box-shadow` value or `none`; glows may use the accent colour                                                  |
 | `--widget-bg`      | optional: replaces the plain background with a colour or `linear-gradient(...)` / `radial-gradient(...)` | when used, `--widget-opacity` no longer applies - put transparency in the colours, e.g. `rgb(255 240 245 / .85)` |
 | `--frame-color`    | optional: colour of the decorative frames some users switch on (corner brackets, stitching…)             | defaults to `--c2`; a metallic or muted tone often looks best                                                    |
-| `--font`           | font list                                                                                                | always end with `"Malgun Gothic", sans-serif` so Korean text renders                                             |
+| `--font`           | font list                                                                                                | always end with `"Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif` so Korean text renders           |
 | `--font-size`      | base text size                                                                                           | 12–18px (default 14px)                                                                                           |
 | `--font-num`       | optional font for big numbers (timer, clock, D-day)                                                      | omit to use --font; a display face suits it                                                                      |
 | `--cell`, `--gap`  | grid size                                                                                                | leave out unless I explicitly ask for a bigger/smaller grid (changing them moves widgets)                        |
 
+Fonts preinstalled on macOS (safe): `-apple-system`, "Apple SD Gothic Neo", "New York", "Menlo", "Monaco", "Avenir Next", "Helvetica Neue" and "Georgia".
 Fonts preinstalled on Windows 10/11 (safe): "Segoe UI Variable", "Segoe UI", "Malgun Gothic" (맑은 고딕), "Gulim", "Dotum",
 "Batang" (바탕, serif), "Gungsuh" (궁서, brush), "Georgia", "Cambria", "Consolas", "Cascadia Mono", "Comic Sans MS",
 "Ink Free" (handwriting, Latin only). Popular free Korean fonts I may have installed: "Pretendard", "Noto Sans KR",
@@ -100,11 +101,11 @@ Fonts preinstalled on Windows 10/11 (safe): "Segoe UI Variable", "Segoe UI", "Ma
   --radius: __px;
   --widget-opacity: _._;
   --shadow: ____;
-  --font: "____", "Malgun Gothic", sans-serif;
+  --font: "____", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-size: __px;
-  /* --font-num: "____", "Malgun Gothic", sans-serif;  optional */
+  /* --font-num: "____", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;  optional */
 }
-/* optional, e.g.: [data-widget="diary"] { --c1: #fbf6ea; --c3: #3b3024; --font: "Batang", "Malgun Gothic", serif; } */
+/* optional, e.g.: [data-widget="diary"] { --c1: #fbf6ea; --c3: #3b3024; --font: "New York", "Batang", serif; } */
 ```
 
 <!-- PROMPT END -->
@@ -131,13 +132,13 @@ Request: `벚꽃, 파스텔, 둥글게, 일기장은 종이 느낌`
   --radius: 22px;
   --widget-opacity: 0.88;
   --shadow: 0 6px 18px rgb(194 56 106 / 0.18);
-  --font: "Segoe UI Variable", "Segoe UI", "Malgun Gothic", sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --font-size: 14px;
 }
 [data-widget="diary"] {
   --c1: #fbf6ea;
   --c3: #3b3024;
-  --font: "Batang", "Malgun Gothic", serif;
+  --font: "New York", "Batang", "Apple SD Gothic Neo", "Malgun Gothic", serif;
   --radius: 10px;
 }
 ```

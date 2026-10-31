@@ -91,11 +91,11 @@
   "help.guide.showcase.title": "Showcase",
   "help.guide.showcase.body": "A display card for someone or something you care about, with a name, birthday, photos and rotating quotes. Click the name to set the name and birthday, or right-click and choose Edit. Drop photos onto it to add them.",
   "help.guide.nowplaying.title": "Now Playing",
-  "help.guide.nowplaying.body": "Shows and controls whatever Windows is playing, and can play your own audio files. It works on Windows only.",
+  "help.guide.nowplaying.body": "Plays your own audio files in a compact desktop player. On Windows it can also show and control media playing in other apps.",
   "help.guide.nowplaying.windows": "It shows the title and cover of whatever Windows is playing, from a browser or a player such as Spotify. Previous, play and next buttons control it. With several players open, the switch button cycles between them.",
   "help.guide.nowplaying.files": "My files plays audio from your own computer. Open it, then add tracks with the plus button or by dropping files. Its header has volume, shuffle and loop.",
   "help.hint.edit_first.title": "Edit layout is on",
   "help.hint.edit_first.body": "Drag a widget's top strip to move it. Right-click a widget to change its type or open Appearance. Click Done or press Esc to finish.",
-  "help.hint.tray_pin.title": "WidgetBoard stays in the taskbar",
-  "help.hint.tray_pin.body": "Right-click its icon to add widgets or edit the layout. If you don't see it, click ^ on the taskbar and drag the WidgetBoard icon onto the taskbar."
+  "help.hint.tray_pin.title": "WidgetBoard stays nearby",
+  "help.hint.tray_pin.body": "Use the WidgetBoard icon in the menu bar or taskbar to add widgets, edit the layout, open Settings, or quit."
 }

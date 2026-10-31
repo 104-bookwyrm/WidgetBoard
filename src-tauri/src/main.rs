@@ -21,6 +21,7 @@ mod flush;
 mod layer;
 mod media;
 mod migrate;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod updater;
 
 use serde::{Deserialize, Serialize};
@@ -393,6 +394,7 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
         "config": read_config(&state.dir),
         "autostart": autostart_get(window.app_handle()),
         "platform": PLATFORM,
+        "features": { "systemMedia": cfg!(windows), "updates": cfg!(windows) },
         "configBroken": i_am_primary && config_broken(&state.dir),
         "migrateError": if i_am_primary { state.migrate_error.clone() } else { None },
         "assetsDir": state.dir.join("assets"),
@@ -562,9 +564,9 @@ fn list_assets(state: State<AppState>) -> Vec<String> {
     v.into_iter().map(|(_, n)| n).collect()
 }
 
-/// Installed font families (from the Windows font registry), de-duplicated.
+/// Installed font families, de-duplicated. AppKit must be queried on macOS's main thread.
 #[tauri::command]
-fn list_fonts() -> Vec<String> {
+fn list_fonts(app: AppHandle) -> Vec<String> {
     #[allow(unused_mut)] // populated by platform-specific implementations
     let mut set = std::collections::BTreeSet::new();
     #[cfg(windows)]
@@ -593,6 +595,32 @@ fn list_fonts() -> Vec<String> {
             }
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::MainThreadMarker;
+        use objc2_app_kit::NSFontManager;
+        let (send, recv) = std::sync::mpsc::channel();
+        if app.run_on_main_thread(move || {
+            let families = MainThreadMarker::new()
+                .map(NSFontManager::sharedFontManager)
+                .map(|manager| {
+                    manager
+                        .availableFontFamilies()
+                        .iter()
+                        .map(|family| family.to_string())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let _ = send.send(families);
+        }).is_ok() {
+            for family in recv.recv_timeout(Duration::from_secs(2)).unwrap_or_default() {
+                if !family.is_empty() {
+                    set.insert(family);
+                }
+            }
+        }
+    }
+    let _ = app;
     set.into_iter().collect()
 }
 
@@ -1023,6 +1051,7 @@ fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
         "config": read_config(&state.dir),
         "autostart": { "on": autostart_get(&app), "disabledByWindows": autostart_target().is_some() && disabled_by_windows() },
         "platform": PLATFORM,
+        "features": { "systemMedia": cfg!(windows), "updates": cfg!(windows) },
         "version": updater::CURRENT,
         "displays": state.boards.lock().unwrap().clone(),
         "widgets": widgets,
@@ -2084,6 +2113,7 @@ fn spawn_auto_backup(app: AppHandle) {
     });
 }
 
+#[cfg(windows)]
 fn spawn_updater(app: AppHandle) {
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(180));
@@ -2138,6 +2168,7 @@ fn wait_for_parent() {
 }
 /// Startup: install a verified pending update (then relaunch the new exe and quit); tidy up after the last one.
 /// Returns the version just installed, once, for a "updated to vX" toast.
+#[cfg(windows)]
 fn install_pending_update(dir: &Path) -> Option<String> {
     let updates = dir.join("updates");
     let exe = std::env::current_exe().ok()?;
@@ -2350,7 +2381,10 @@ fn main() {
                 ))?;
             }
             let dir = app.path().app_data_dir()?;
+            #[cfg(windows)]
             let just_updated = install_pending_update(&dir); // may relaunch the new exe and exit
+            #[cfg(not(windows))]
+            let just_updated = None;
             for sub in ["assets", "data", "diary", "updates"] {
                 fs::create_dir_all(dir.join(sub))?;
             }
@@ -2404,6 +2438,7 @@ fn main() {
             build_tray(&handle)?;
             spawn_hit_test(handle.clone());
             spawn_monitor_watch(handle.clone());
+            #[cfg(windows)]
             spawn_updater(handle.clone());
             spawn_auto_backup(handle.clone());
             spawn_file_watch(handle, app.state::<AppState>().dir.clone());

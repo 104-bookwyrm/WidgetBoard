@@ -11,7 +11,7 @@
   "np.files": "My files",
   "sum.paused": "paused",
   "sum.np_none": "Nothing playing",
-  "hint.nowplaying": "Controls what Windows is playing",
+  "hint.nowplaying": "Plays your audio files",
   "ap.add": "Add tracks",
   "ap.play": "Play",
   "ap.volume": "Volume",

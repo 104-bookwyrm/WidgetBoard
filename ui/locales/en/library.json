@@ -67,6 +67,6 @@
   "gal.image.3": "In the grid, drag a tile to reorder it. Double-click one to name it.",
   "gal.showcase.1": "Click the name to set the name and birthday.",
   "gal.showcase.2": "Drop photos onto the card to add them.",
-  "gal.nowplaying.1": "Shows and controls what Windows is playing.",
-  "gal.nowplaying.2": "My files plays audio files from your PC."
+  "gal.nowplaying.1": "A compact player for your own audio files.",
+  "gal.nowplaying.2": "Drop files onto the widget or add them from My files."
 }

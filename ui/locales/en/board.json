@@ -105,7 +105,7 @@
   "tut.back": "Back",
   "tut.skip": "Skip tutorial",
   "tut.finish": "Finish",
-  "tut.t1.tray": "WidgetBoard lives in the taskbar. Right-click its icon.",
+  "tut.t1.tray": "WidgetBoard lives in the menu bar or taskbar. Click or right-click its icon.",
   "tut.t1.edit": "Choose Edit layout.",
   "tut.t1.grid": "Widgets snap to this grid. Faded widgets are hidden and keep their spot.",
   "tut.t1.move": "Drag a widget by its top strip.",

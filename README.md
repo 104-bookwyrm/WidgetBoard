@@ -1,12 +1,16 @@
 # WidgetBoard
 
-Grid-based desktop widgets for Windows: a checklist, calendar, D-days, diary, memos, a timer with stopwatch and
+Grid-based desktop widgets for macOS and Windows: a checklist, calendar, D-days, diary, memos, a timer with stopwatch and
 pomodoro modes, Now Playing, pictures, a world clock and an oshi (최애) showcase card. They live on your desktop,
 snap to a grid and stay out of the way of your other windows.
 Korean by default, English available. Version 0.15.
 
-Built with Tauri 2: a small Rust core and a plain HTML/CSS/JS interface with no build step. One ~5 MB exe, no
-installer, nothing running in the background except the app itself.
+Built with Tauri 2: a small Rust core and a plain HTML/CSS/JS interface with no build step.
+
+> **macOS port:** the `mac-port` branch builds a native menu-bar `.app` and `.dmg`. It uses AppKit fonts,
+> Open at Login, native notifications, Command shortcuts, all-Spaces desktop boards and macOS Application Support.
+> Local audio works; Windows-wide media sessions and the old executable-swapping updater are intentionally disabled.
+> See [the Mac product and engineering notes](docs/macos-port.md).
 
 - [Features](#features) · [Run](#run) · [Everyday use](#everyday-use) · [Settings](#settings) ·
   [Names, hiding and closed widgets](#names-hiding-and-closed-widgets) · [Backup and restore](#backup-and-restore) ·
@@ -46,7 +50,11 @@ installer, nothing running in the background except the app itself.
 
 ## Run
 
-Run `WidgetBoard.exe`. It needs the WebView2 runtime, which Windows 10/11 already have. The exe is unsigned, so
+On macOS, install the Rust targets once with `rustup target add aarch64-apple-darwin x86_64-apple-darwin`,
+then use `npm install` and `npm run build:mac`. Open the resulting `WidgetBoard.app` from
+`src-tauri/target/release/bundle/macos`. Distribution builds still need Apple signing and notarization.
+
+On Windows, run `WidgetBoard.exe`. It needs the WebView2 runtime, which Windows 10/11 already have. The exe is unsigned, so
 SmartScreen may ask once: _More info → Run anyway_. Starting it a second time just shows the running copy.
 To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자동 실행_.
 

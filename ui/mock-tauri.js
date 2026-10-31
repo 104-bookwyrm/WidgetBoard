@@ -209,6 +209,8 @@ export function createMockTauri({ memory = false } = {}) {
           assetsDir: "",
           themesDir: "",
           autostart: !!store.getItem("wb-autostart"),
+          platform: "macos",
+          features: { systemMedia: false, updates: false },
           // launched 0: every saved run counts as started in this launch, unless a test seeds wb-session
           session: get("wb-session", { launched: 0, closed: null }),
           justUpdated: window.__mockJustUpdated ?? null,
@@ -227,6 +229,8 @@ export function createMockTauri({ memory = false } = {}) {
             on: !!store.getItem("wb-autostart"),
             disabledByWindows: !!window.__mockAutostartDisabled,
           },
+          platform: "macos",
+          features: { systemMedia: false, updates: false },
         };
       case "save_config":
         if (window.__mockConfigBroken) throw "config_broken";

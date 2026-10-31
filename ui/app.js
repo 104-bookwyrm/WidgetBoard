@@ -757,8 +757,16 @@ function helpPopover(id, { tray = false } = {}) {
     const pin = document.createElement("div");
     pin.className = "help-tray-pin";
     pin.setAttribute("aria-hidden", "true");
-    // a mini taskbar: the icon is dragged out of the ^ overflow flyout onto the taskbar
-    pin.innerHTML = `<svg viewBox="0 0 220 72">
+    // A compact platform cue: menu bar on macOS, taskbar overflow on Windows.
+    pin.innerHTML = document.documentElement.dataset.platform === "macos"
+      ? `<svg viewBox="0 0 220 72">
+          <rect class="tp-bar" x="0" y="0" width="220" height="22" rx="4"/>
+          <circle class="tp-other" cx="170" cy="11" r="4"/>
+          <circle class="tp-other" cx="188" cy="11" r="4"/>
+          <image href="tutorial/assets/tray-icon.png" x="201" y="3" width="16" height="16"/>
+          <path class="tp-cursor" d="M205 25v12l4-4 3 6 3-2-3-5h6z"/>
+        </svg>`
+      : `<svg viewBox="0 0 220 72">
       <rect class="tp-bar" x="0" y="52" width="220" height="20" rx="4"/>
       <path class="tp-chev" d="M146 65l4-5 4 5"/>
       <rect class="tp-other" x="186" y="58" width="8" height="8" rx="2"/>

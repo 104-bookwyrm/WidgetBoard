@@ -1,7 +1,7 @@
 [package]
 name = "widgetboard"
 version = "0.16.0"
-description = "Lightweight, grid-based desktop widgets for Windows"
+description = "Lightweight, grid-based desktop widgets for macOS and Windows"
 edition = "2021"
 
 [build-dependencies]
@@ -22,6 +22,9 @@ sha2 = "0.10"
 [target.'cfg(target_os = "macos")'.dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 tauri-plugin-autostart = "2"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSFontManager"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSEnumerator", "NSString"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
