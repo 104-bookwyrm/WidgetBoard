@@ -375,8 +375,12 @@ export function createMockTauri({ memory = false } = {}) {
         const i = list.findIndex((x) => x.name.toLowerCase() === name.toLowerCase());
         if (i >= 0 && !args.overwrite) throw "exists";
         const png = "data:image/png;base64," + args.png;
-        if (args.file === "full.png") {
-          if (i >= 0) list[i].full = png;
+        if (args.file === "full.png" || args.file === "skin-template.png") {
+          if (i >= 0) list[i][args.file] = png;
+        } else if (String(args.file || "").startsWith("skins/")) {
+          const skin = { name: args.file.slice(6, -4), png, mtime: Date.now() };
+          const t = i >= 0 ? list[i] : list[list.push({ name, mtime: 0, txt: "", skins: [] }) - 1];
+          t.skins = [...(t.skins || []).filter((k) => k.name !== skin.name), skin];
         } else {
           const entry = { name, mtime: Date.now(), txt: args.txt, png };
           if (i >= 0) list[i] = { ...list[i], ...entry };

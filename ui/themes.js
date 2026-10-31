@@ -2,7 +2,7 @@
 // Each level names a theme; the most specific wins: one widget > all widgets of its type > the board.
 // A theme applied to a level brings its board row plus its row for the widget's type; empty squares fall through.
 // Hand-picked colours from a widget's Look panel are inline styles, so they still win over every level.
-import { readSheet, drawSheet, BLOCKS, BASIC, slotsOf, encodeCode, decodeCode } from "./palette.js";
+import { readSheet, drawSheet, drawSkinTemplate, drawSkinExample, BLOCKS, BASIC, slotsOf, encodeCode, decodeCode } from "./palette.js";
 import { cleanFont } from "./theme.js";
 import { isLight } from "./util.js";
 
@@ -23,6 +23,7 @@ export function parseTxt(txt) {
     else if (key === "corners" && n >= 0 && n <= 60) vars["--radius"] = `${n}px`;
     else if (key === "outline" && n >= 0 && n <= 8) vars["--line-width"] = `${n}px`;
     else if (key === "opacity" && n >= 0 && n <= 1) vars["--widget-opacity"] = String(n);
+    else if (key === "edge" && n >= 4 && n <= 96) vars["--skin-w"] = `${n}px`; // a skin's corner size on screen
   }
   return vars;
 }
@@ -44,21 +45,64 @@ async function decode(url) {
 export async function loadThemes(invoke, themesDir, convert) {
   const list = await invoke("list_themes").catch(() => []);
   const sep = themesDir.includes("\\") ? "\\" : "/";
+  const urlOf = (f) => f.png ?? `${convert(themesDir + sep + String(f.file).split("/").join(sep))}?v=${f.mtime}`;
   const out = [];
   for (const info of Array.isArray(list) ? list : []) {
-    const hit = cache.get(info.name);
-    if (hit && hit.mtime === info.mtime) {
-      out.push(hit.theme);
-      continue;
+    let theme = cache.get(info.name)?.mtime === info.mtime ? cache.get(info.name).theme : null;
+    if (!theme) {
+      const url = info.file || info.png ? urlOf(info) : "";
+      // a folder with skins only has no sheet; an unreadable sheet leaves the theme out rather than break the board
+      const colors = url ? await decode(url).catch(() => null) : {};
+      if (!colors) continue;
+      theme = { name: info.name, colors, vars: parseTxt(info.txt), skinRules: parseSkins(info.txt), txt: info.txt || "", url };
+      cache.set(info.name, { mtime: info.mtime, theme });
     }
-    const url = info.png ?? `${convert(themesDir + sep + String(info.file).split("/").join(sep))}?v=${info.mtime}`;
-    const colors = await decode(url).catch(() => null);
-    if (!colors) continue; // unreadable image: leave it out rather than break the board
-    const theme = { name: info.name, colors, vars: parseTxt(info.txt), txt: info.txt || "", url };
-    cache.set(info.name, { mtime: info.mtime, theme });
+    // skins: name (lower case) -> { name, url }; read fresh, since a repainted skin keeps the theme's mtime
+    theme.skins = new Map((info.skins || []).map((k) => [String(k.name).toLowerCase(), { name: k.name, url: urlOf(k) }]));
     out.push(theme);
   }
   return out;
+}
+
+/** theme.txt skin lines: "skin = name" (every widget) and "skin.<type or group> = name". */
+function parseSkins(txt) {
+  const out = {};
+  for (const line of String(txt || "").split(/\r?\n/)) {
+    const m = line.replace(/#.*/, "").match(/^\s*skin(?:\.([^\s=]+))?\s*=\s*(.+?)\s*$/i);
+    if (m) out[(m[1] || "*").toLowerCase()] = m[2].toLowerCase();
+  }
+  return out;
+}
+
+// In one theme: a theme.txt line for the type, a skin file named after the type, the same for the group, then the
+// "skin =" line. names: { type: [...], group: [...] }, ids and shown names (메모.png works like memo.png).
+function pickSkin(t, names) {
+  for (const list of [names.type, names.group])
+    for (const n of list) {
+      const k = String(n).toLowerCase();
+      const hit = t.skins.get(t.skinRules[k] ?? "") ?? t.skins.get(k);
+      if (hit) return hit.url;
+    }
+  return t.skins.get(t.skinRules["*"] ?? "")?.url ?? null;
+}
+
+/**
+ * The nine-slice skin a widget wears (a URL) or null. w.skin is the widget's own pick: "" follow its themes, "-" none,
+ * "Theme/skin" that one. Otherwise its theme levels in order: this widget's, its type's, the board's.
+ */
+export function skinFor(themes, assign, w, kind, names) {
+  if (w.skin === "-") return null;
+  const by = new Map(themes.map((t) => [t.name, t]));
+  if (w.skin) {
+    const i = w.skin.indexOf("/");
+    return by.get(w.skin.slice(0, i))?.skins.get(w.skin.slice(i + 1).toLowerCase())?.url ?? null;
+  }
+  for (const name of [w.theme, assign?.types?.[kind], assign?.board]) {
+    const t = name && by.get(name);
+    const url = t && pickSkin(t, names);
+    if (url) return url;
+  }
+  return null;
 }
 
 // A row's colours as CSS declarations. Where the accent is set but its partners are not, derive them the same way
@@ -172,4 +216,14 @@ export async function seedThemes(invoke, defaultCss, currentCss, names) {
   await saveTheme(invoke, names.base, base.colors, "", { rows: BASIC }).catch(() => {});
   await saveTheme(invoke, names.mine, mine.colors, "", { rows: BASIC }).catch(() => {});
   await saveTheme(invoke, names.blank, {}, "", { rows: BASIC, full: true }).catch(() => {});
+}
+
+/** Once per install: the skin template and an example skin, in the template folder if it still exists. */
+export async function seedSkins(invoke, blank, example) {
+  const list = await invoke("list_themes").catch(() => []);
+  if (!list.some((t) => t.name === blank)) return;
+  const b64 = (c) => c.toDataURL("image/png").split(",")[1];
+  const put = (file, c) => invoke("save_theme_pack", { name: blank, png: b64(c), txt: "", overwrite: true, file });
+  await put("skin-template.png", await drawSkinTemplate());
+  await put(`skins/${example}.png`, drawSkinExample());
 }

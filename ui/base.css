@@ -183,6 +183,28 @@ body.edit #board.free {
   background: color-mix(in srgb, var(--c1) 35%, transparent);
 }
 
+/* nine-slice skin (themes/<name>/skins/*.png, see themes.js): corners are the image's outer thirds and stay put,
+   edges and middle stretch. The skin is the widget's box, so the surface, outline, rounding and frame step aside. */
+.w-skin {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  border: var(--skin-w, 24px) solid transparent;
+  border-image: var(--skin-img) 33.3333% fill / var(--skin-w, 24px) stretch;
+}
+.widget.skinned {
+  background: transparent;
+  border-color: transparent;
+  border-radius: 0;
+}
+.widget.skinned > .w-skin {
+  display: block;
+}
+.widget.skinned > .w-frame {
+  display: none;
+}
+
 .w-body {
   position: absolute;
   inset: 0;

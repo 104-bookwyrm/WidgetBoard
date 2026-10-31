@@ -73,5 +73,6 @@
   "fmt.h24": "24시간",
   "themes.seed.base": "기본",
   "themes.seed.mine": "내 테마",
-  "themes.seed.blank": "빈 템플릿"
+  "themes.seed.blank": "빈 템플릿",
+  "themes.seed.skin_example": "예시"
 }

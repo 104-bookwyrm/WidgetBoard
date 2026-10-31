@@ -18,7 +18,7 @@ import {
 import { sanitize, toHex, firstFamily, cleanFont, fontField } from "./theme.js";
 import { icon } from "./icons.js";
 import { refreshSubs, subsOf, REFRESH_MS } from "./calsubs.js";
-import { loadThemes, buildCss, seedThemes } from "./themes.js";
+import { loadThemes, buildCss, seedThemes, seedSkins, skinFor } from "./themes.js";
 import REGISTRY, { HOSTS } from "./widgets/index.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import GROUPS from "./widgets/groups.json" with { type: "json" };
@@ -896,6 +896,7 @@ function sanitizeWidget(w, def) {
   if (!w.colors || typeof w.colors !== "object" || Array.isArray(w.colors))
     delete w.colors;
   if (typeof w.theme !== "string" || !w.theme || w.theme.length > 60) delete w.theme;
+  if (typeof w.skin !== "string" || !w.skin || w.skin.length > 130) delete w.skin;
   if (
     w.frame !== undefined &&
     w.frame !== "custom" &&
@@ -941,6 +942,7 @@ function mount(w) {
   el.setAttribute("aria-label", name);
   el.innerHTML = `
     <div class="w-bg" hidden></div>
+    <div class="w-skin" aria-hidden="true"></div>
     <div class="w-body"></div>
     <div class="w-frame" aria-hidden="true"></div>
     <div class="w-head">
@@ -1122,6 +1124,7 @@ function mount(w) {
   applyColors(el, w);
   applyFrame(el, w);
   wireFrame(el, w, def, inst);
+  applySkin(w, el);
 }
 
 function applyBg(el, w) {
@@ -1194,12 +1197,13 @@ $("#fp-size").addEventListener("input", () => {
 $("#fp-reset").onclick = () => {
   if (!fontTarget) return;
   const { w, el } = fontTarget;
-  for (const k of ["font", "fontSize", "colors", "frame", "frameSvg", "theme"])
+  for (const k of ["font", "fontSize", "colors", "frame", "frameSvg", "theme", "skin"])
     delete w[k];
   applyFont(el, w);
   applyColors(el, w);
   applyFrame(el, w);
   applyThemeCss();
+  applySkin(w, el);
   save(w);
   openFontPanel(w, el);
 };
@@ -1240,7 +1244,30 @@ function fillThemePickers(w) {
   const kind = shownType(w);
   fill($("#fp-theme-type"), t("look.theme_follow_board"), config.themes?.types?.[kind]);
   $("#fp-theme-type-label").textContent = t("look.theme_type", { name: t(`widget.${kind}`) });
+  // skins: follow the themes, none, or one skin from any theme (grouped by theme)
+  const skin = $("#fp-skin");
+  skin.replaceChildren(
+    new Option(t("look.skin_follow"), ""),
+    new Option(t("look.skin_none"), "-"),
+    ...themes
+      .filter((th) => th.skins.size)
+      .map((th) => {
+        const g = document.createElement("optgroup");
+        g.label = th.name;
+        g.append(...[...th.skins.values()].map((k) => new Option(k.name, `${th.name}/${k.name}`)));
+        return g;
+      }),
+  );
+  skin.value = w.skin ?? "";
+  if (skin.value !== (w.skin ?? "")) skin.value = ""; // the picked skin is gone (renamed or deleted)
 }
+$("#fp-skin").addEventListener("change", () => {
+  if (!fontTarget) return;
+  const { w, el } = fontTarget;
+  w.skin = $("#fp-skin").value || undefined;
+  save(w);
+  applySkin(w, el);
+});
 $("#fp-theme").addEventListener("change", () => {
   if (!fontTarget) return;
   const { w } = fontTarget;
@@ -1566,6 +1593,7 @@ async function openMenu(w, el, at) {
     items = [
       ...ownBlock,
       { text: t("menu.look"), action: () => openFontPanel(w, el) },
+      { text: t("menu.capture"), action: () => captureWidget(w, el).catch(reportError) },
       { text: t("menu.unpin"), action: releasePin },
       { item: "Separator" },
       ...closeFind,
@@ -1576,6 +1604,7 @@ async function openMenu(w, el, at) {
     items = [
       ...ownBlock,
       { text: t("menu.look"), action: () => openFontPanel(w, el) },
+      { text: t("menu.capture"), action: () => captureWidget(w, el).catch(reportError) },
       { text: t("menu.set_bg"), action: () => setBg(w, el) },
       ...(w.bg
         ? [
@@ -1616,6 +1645,7 @@ async function openMenu(w, el, at) {
     items = [
       ...ownBlock,
       { text: t("menu.look"), action: () => openFontPanel(w, el) },
+      { text: t("menu.capture"), action: () => captureWidget(w, el).catch(reportError) },
       document.body.classList.contains("focus-mode")
         ? { text: t("focus.exit"), action: exitFocus }
         : { text: t("focus.enter"), action: () => enterFocus(w.id) },
@@ -2047,11 +2077,91 @@ let themes = [];
 function applyThemeCss() {
   const kinds = widgets.map((w) => ({ id: w.id, type: shownType(w), theme: w.theme }));
   $("#palette-theme").textContent = buildCss(themes, config.themes, kinds);
+  for (const w of widgets) applySkin(w);
   syncScheme();
+}
+// nine-slice skin (themes/<name>/skins/): the image becomes the widget's box; see .w-skin in base.css.
+// Picks are "" (follow), "-" (none) or "Theme/skin"; config.skins holds Settings' picks: { board, types: { memo } }.
+function applySkin(w, el = mounted.get(w.id)?.el) {
+  if (!el) return;
+  const kind = shownType(w), group = groupOf(kind)?.id;
+  const names = { type: [kind, t(`widget.${kind}`)], group: group ? [group, t(`group.${group}`)] : [] };
+  // the widget's own pick, then Settings' pick for its type, then for every widget, then whatever its themes give
+  const pick = w.skin || config.skins?.types?.[kind] || config.skins?.board || "";
+  const url = skinFor(themes, config.themes, { ...w, skin: pick }, kind, names);
+  el.classList.toggle("skinned", !!url);
+  el.style.setProperty("--skin-img", url ? `url("${url}")` : "");
 }
 async function refreshThemes() {
   themes = await loadThemes(invoke, themesDir, T.core.convertFileSrc);
   applyThemeCss();
+}
+
+// ---------------- capture: the layout export (tray) and "capture this widget" (widget menu) ----------------
+// Screen pixels come from Rust (capture_screen, boards lifted in front); files go to Pictures\WidgetBoard.
+async function grab(x, y, w, h) {
+  const [cx, cy, cw, ch] = [x, y, w, h].map(Math.round);
+  const buf = await invoke("capture_screen", { x: cx, y: cy, w: cw, h: ch });
+  const c = Object.assign(document.createElement("canvas"), { width: cw, height: ch });
+  c.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(buf), cw, ch), 0, 0);
+  return c;
+}
+const savePng = (name, c) => invoke("save_export", { name, png: c.toDataURL("image/png").split(",")[1] });
+const openExports = () => ({ label: t("export.open"), fn: () => invoke("open_exports_folder").catch(() => {}) });
+// physical pixels of this board window and per CSS pixel (display scale times zoom)
+async function boardPixels() {
+  const pos = await win.innerPosition(), size = await win.innerSize();
+  return { pos, size, k: size.width / innerWidth };
+}
+
+/** Each widget's outline and name at real screen pixels, for artists to paint around. */
+function drawOutlines(g, k) {
+  const line = Math.max(2, Math.round(2 * k)), px = Math.round(13 * k), pad = Math.round(4 * k);
+  g.font = `${px}px "Malgun Gothic", "Segoe UI", sans-serif`;
+  g.textBaseline = "top";
+  g.lineWidth = line;
+  for (const w of widgets) {
+    const el = mounted.get(w.id)?.el;
+    if (!el || w.hidden) continue;
+    const r = el.getBoundingClientRect();
+    const [x, y, ww, hh] = [r.left, r.top, r.width, r.height].map((v) => Math.round(v * k));
+    g.strokeStyle = g.fillStyle = "#ff2d87";
+    g.strokeRect(x + line / 2, y + line / 2, ww - line, hh - line);
+    const label = `${widgetName(w)}  ${ww}×${hh}  (${x}, ${y})`;
+    g.fillRect(x, y, g.measureText(label).width + pad * 2, px + pad * 2);
+    g.fillStyle = "#fff";
+    g.fillText(label, x + pad, y + pad);
+  }
+}
+
+/** Layout export: this board's screen, the outlines on a transparent layer, and both together (one set per monitor). */
+async function exportLayout(stamp) {
+  const { pos, size, k } = await boardPixels();
+  const shot = await grab(pos.x, pos.y, size.width, size.height);
+  const lines = Object.assign(document.createElement("canvas"), { width: size.width, height: size.height });
+  drawOutlines(lines.getContext("2d"), k);
+  const both = Object.assign(document.createElement("canvas"), { width: size.width, height: size.height });
+  both.getContext("2d").drawImage(shot, 0, 0);
+  both.getContext("2d").drawImage(lines, 0, 0);
+  const n = displays.find((d) => d.display === myDisplay)?.index ?? 1;
+  const base = `${t("export.name")} ${stamp} ${t("menu.display", { n })}`;
+  for (const [key, c] of [["export.screen", shot], ["export.outline", lines], ["export.both", both]])
+    await savePng(`${base} ${t(key)}`, c);
+  if (isPrimary) toast(t("export.done"), openExports());
+}
+
+async function captureWidget(w, el) {
+  const { pos, k } = await boardPixels();
+  const r = el.getBoundingClientRect();
+  const c = await grab(pos.x + r.left * k, pos.y + r.top * k, r.width * k, r.height * k);
+  const d = new Date(), two = (v) => String(v).padStart(2, "0");
+  const stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
+  // the clipboard first (paste straight into a chat or Clip Studio), then a file for keeping
+  const px = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+  const copied = await invoke("copy_image", new Uint8Array(px.buffer), { headers: { w: String(c.width), h: String(c.height) } })
+    .then(() => true, () => false);
+  await savePng(`${widgetName(w)} ${stamp}`, c);
+  toast(t(copied ? "capture.done" : "capture.saved"), openExports());
 }
 
 // ---------------- edit mode ----------------
@@ -2875,6 +2985,10 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
       });
       await invoke("save_config", { patch: { themes: { seeded: true } } });
     }
+    if (isPrimary && !DEMO && !PIN && !config.themes?.skins) {
+      await seedSkins(invoke, t("themes.seed.blank"), t("themes.seed.skin_example"));
+      await invoke("save_config", { patch: { themes: { skins: 1 } } });
+    }
     await refreshThemes();
   })().catch(reportError);
   setTimeout(() => (reflow(), (document.documentElement.dataset.reflowed = "")), 400);
@@ -2984,6 +3098,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     configSubs.forEach((cb) => cb(config));
   });
   await listen("themes-changed", () => refreshThemes().catch(reportError));
+  await listen("export-layout", (e) => !DEMO && !PIN && exportLayout(e.payload).catch(reportError));
   await onBoard("apply-layout", (e) =>
     applySavedLayout(e.payload).catch(reportError),
   );

@@ -12,5 +12,8 @@
   "pal.s.hol": "휴일",
   "pal.s.sat": "토요일",
   "pal.s.danger": "경고",
-  "pal.s.stamp": "도장"
+  "pal.s.stamp": "도장",
+  "pal.skin.fixed": "고정",
+  "pal.skin.stretch": "늘어남",
+  "pal.skin.middle": "가운데 (늘어남)"
 }

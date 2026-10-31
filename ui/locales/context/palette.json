@@ -12,5 +12,8 @@
   "pal.s.hol": "Label over a colour sheet square: Sundays and holidays in the calendar. Korean: 2 letters.",
   "pal.s.sat": "Label over a colour sheet square: Saturdays in the calendar. Short.",
   "pal.s.danger": "Label over a colour sheet square: warning colour (delete confirmations). Korean: 2 letters.",
-  "pal.s.stamp": "Label over a colour sheet square: the checklist's all-done stamp. Korean: 2 letters."
+  "pal.s.stamp": "Label over a colour sheet square: the checklist's all-done stamp. Korean: 2 letters.",
+  "pal.skin.fixed": "Printed in each corner cell of the skin template: this part keeps its size. 1 word. Fits in 100px.",
+  "pal.skin.stretch": "Printed in each edge cell of the skin template: this part stretches with the widget. 1 word.",
+  "pal.skin.middle": "Printed in the middle cell of the skin template: the middle stretches both ways. Short, fits in 100px."
 }

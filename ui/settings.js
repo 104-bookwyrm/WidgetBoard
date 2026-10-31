@@ -4,6 +4,7 @@ import { createMockTauri } from "./mock-tauri.js";
 import { loadLang, t, applyStatic } from "./i18n.js";
 import { loadCatalogue, readHelp, patchHelp } from "./help.js";
 import REPORT_FORM from "./report-form.json" with { type: "json" };
+import GROUPS from "./widgets/groups.json" with { type: "json" };
 import { tzOptions, osZone, syncScheme, appWindow, DATE_STYLES, dateStyleSample } from "./util.js";
 import {
   sanitize,
@@ -872,6 +873,7 @@ async function fillThemes() {
   for (const th of themeList) card(th.name, th.name, th.url);
   $("#th-active-note").hidden = !cur;
   $("#th-active-note").textContent = cur ? t("themes.active_note", { name: cur }) : "";
+  fillSkins();
 }
 async function setBoardTheme(name) {
   await invoke("save_config", { patch: { themes: { board: name || null } } });
@@ -887,6 +889,7 @@ function currentLook() {
 const rowsFor = (colors) => (Object.keys(colors).some((b) => BLOCKS.indexOf(b) >= BASIC) ? BLOCKS.length : BASIC);
 function bindThemes() {
   $("#th-folder").onclick = () => invoke("open_themes_folder").catch(() => {});
+  $("#sk-template").onclick = () => invoke("open_themes_folder", { name: t("themes.seed.blank") }).catch(() => {});
   $("#th-save").onclick = () => {
     $("#th-save-name").value = uniqueName(t("themes.seed.mine"), themeList.map((x) => x.name));
     $("#th-save-box").hidden = false;
@@ -922,6 +925,49 @@ function bindThemes() {
     $("#th-code-box").hidden = true;
     await setBoardTheme(name);
   };
+}
+
+// ---- Skins: a pick for every widget and per type (config.skins). Theme skins come after these; a pick in a
+// widget's own Look panel still wins. Picks: "" follow, "-" none, "Theme/skin". ----
+function fillSkins() {
+  const skins = themeList.flatMap((th) => [...th.skins.values()].map((k) => ({ theme: th.name, ...k })));
+  const urlOf = (v) => skins.find((k) => `${k.theme}/${k.name}` === v)?.url ?? "";
+  const rows = $("#sk-rows");
+  rows.replaceChildren();
+  $("#sk-empty").hidden = skins.length > 0;
+  const kinds = [["", t("skins.all")], ...GROUPS.flatMap((g) => g.widgets).map((k) => [k, t(`widget.${k}`)])];
+  for (const [kind, label] of kinds) {
+    const cur = (kind ? data.config?.skins?.types?.[kind] : data.config?.skins?.board) ?? "";
+    const sel = document.createElement("select");
+    sel.append(new Option(t(kind ? "skins.follow_all" : "skins.follow_theme"), ""), new Option(t("skins.none"), "-"));
+    for (const th of themeList.filter((x) => x.skins.size)) {
+      const g = Object.assign(document.createElement("optgroup"), { label: th.name });
+      g.append(...[...th.skins.values()].map((k) => new Option(k.name, `${th.name}/${k.name}`)));
+      sel.append(g);
+    }
+    sel.value = cur;
+    if (sel.value !== cur) sel.value = ""; // its skin was renamed or deleted
+    const pic = Object.assign(document.createElement("img"), { alt: "" });
+    // an empty src resolves to the page's own URL, so test the skin URL itself
+    const show = (u) => ((pic.hidden = !u), u && (pic.src = u));
+    show(urlOf(sel.value));
+    sel.setAttribute("aria-label", label);
+    sel.onchange = async () => {
+      const v = sel.value || null;
+      await invoke("save_config", { patch: { skins: kind ? { types: { [kind]: v } } : { board: v } } });
+      const sk = { ...data.config?.skins, types: { ...data.config?.skins?.types } };
+      if (kind) sk.types[kind] = v ?? undefined;
+      else sk.board = v ?? undefined;
+      data.config = { ...data.config, skins: sk };
+      show(urlOf(sel.value));
+      saved();
+    };
+    const row = Object.assign(document.createElement("div"), { className: "set-row" });
+    const box = document.createElement("span");
+    box.append(pic, sel);
+    row.append(Object.assign(document.createElement("label"), { textContent: label }), box);
+    rows.append(row);
+  }
 }
 
 async function fillFontList() {

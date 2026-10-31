@@ -12,5 +12,8 @@
   "pal.s.hol": "Hol",
   "pal.s.sat": "Sat",
   "pal.s.danger": "Warn",
-  "pal.s.stamp": "Stamp"
+  "pal.s.stamp": "Stamp",
+  "pal.skin.fixed": "Fixed",
+  "pal.skin.stretch": "Stretches",
+  "pal.skin.middle": "Middle (stretches)"
 }

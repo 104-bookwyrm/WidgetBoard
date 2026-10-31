@@ -8,5 +8,6 @@
   "fmt.h24": "Time format choice: 24-hour clock. Short.",
   "themes.seed.base": "Name of the starter theme folder with the built-in colours. Becomes a folder name. 1 word.",
   "themes.seed.mine": "Name of the starter theme folder copied from the user's current look, for them to edit. Also the base for new saved themes (My theme 2). Becomes a folder name. 2 words.",
-  "themes.seed.blank": "Name of the starter folder holding the empty Basic and Full colour sheets to paint. Becomes a folder name. 2 words."
+  "themes.seed.blank": "Name of the starter folder holding the empty Basic and Full colour sheets to paint. Becomes a folder name. 2 words.",
+  "themes.seed.skin_example": "File name of the example skin put in the blank template folder (skins/<name>.png). 1 word."
 }

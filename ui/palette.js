@@ -101,6 +101,46 @@ export async function drawSheet(colors = {}, rows = BLOCKS.length, code = "ko") 
   return c;
 }
 
+// ---- nine-slice skins (themes/<name>/skins/*.png): the image's outer thirds are the fixed corners ----
+const SKIN = 300; // template size; any size works, the thirds are what count
+
+/** skin-template.png: transparent, guide lines on the thirds and what each part does. Artists hide it and paint. */
+export async function drawSkinTemplate(code = "ko") {
+  const L = await strings(code);
+  const c = Object.assign(document.createElement("canvas"), { width: SKIN, height: SKIN });
+  const g = c.getContext("2d"), third = SKIN / 3;
+  g.strokeStyle = "#00a8c8";
+  g.setLineDash([6, 4]);
+  g.lineWidth = 1;
+  for (const p of [third, third * 2]) {
+    g.strokeRect(p + 0.5, 0.5, 0, SKIN - 1);
+    g.strokeRect(0.5, p + 0.5, SKIN - 1, 0);
+  }
+  g.setLineDash([]);
+  g.strokeRect(0.5, 0.5, SKIN - 1, SKIN - 1);
+  g.fillStyle = "#00a8c8";
+  g.font = `12px "Malgun Gothic", "Segoe UI", sans-serif`;
+  g.textAlign = "center";
+  for (const [x, y, k] of [[0, 0, "fixed"], [2, 0, "fixed"], [0, 2, "fixed"], [2, 2, "fixed"], [1, 0, "stretch"],
+    [1, 2, "stretch"], [0, 1, "stretch"], [2, 1, "stretch"], [1, 1, "middle"]])
+    g.fillText(L[`pal.skin.${k}`], third * x + third / 2, third * y + third / 2 + 4);
+  return c;
+}
+
+/** An example skin: a dark panel with a pink rim, readable with the default light text. */
+export function drawSkinExample() {
+  const c = Object.assign(document.createElement("canvas"), { width: SKIN, height: SKIN });
+  const g = c.getContext("2d");
+  g.beginPath();
+  g.roundRect(12, 12, SKIN - 24, SKIN - 24, 56);
+  g.fillStyle = "rgb(42 35 51 / 0.92)";
+  g.fill();
+  g.lineWidth = 14; // shown at about a quarter size, so draw it bold
+  g.strokeStyle = "#e58fb5";
+  g.stroke();
+  return c;
+}
+
 const near = (d, o, hex, tol) =>
   Math.abs(d[o] - parseInt(hex.slice(1, 3), 16)) <= tol &&
   Math.abs(d[o + 1] - parseInt(hex.slice(3, 5), 16)) <= tol &&

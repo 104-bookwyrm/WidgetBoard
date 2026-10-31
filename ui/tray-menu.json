@@ -2,6 +2,7 @@
   { "id": "add", "label": "tray.add_widget" },
   { "id": "edit", "label": "tray.edit_layout" },
   { "id": "toggle", "label": "tray.show_hide" },
+  { "id": "export", "label": "tray.export_layout" },
   "-",
   { "id": "library", "label": "tray.library" },
   { "id": "settings", "label": "tray.settings" },

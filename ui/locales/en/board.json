@@ -130,6 +130,18 @@
   "look.theme": "Theme",
   "look.theme_widget": "This widget",
   "look.theme_type": "All {name} widgets",
-  "look.theme_follow_type": "Follow the type",
-  "look.theme_follow_board": "Follow the board"
+  "look.theme_follow_type": "Same as the type",
+  "look.theme_follow_board": "Same as the board",
+  "look.skin": "Skin",
+  "look.skin_follow": "Same as Settings",
+  "look.skin_none": "None",
+  "menu.capture": "Capture widget",
+  "export.name": "Layout",
+  "export.screen": "screen",
+  "export.outline": "outlines",
+  "export.both": "combined",
+  "export.done": "Layout saved to Pictures\\WidgetBoard.",
+  "export.open": "Open folder",
+  "capture.done": "Widget image copied to the clipboard and saved to Pictures\\WidgetBoard.",
+  "capture.saved": "Widget captured to Pictures\\WidgetBoard."
 }

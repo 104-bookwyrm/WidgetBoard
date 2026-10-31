@@ -16,6 +16,7 @@ use std::{
 };
 
 mod backup_policy;
+mod capture;
 mod content;
 mod flush;
 mod layer;
@@ -54,7 +55,7 @@ fn widget_ids() -> Vec<&'static str> {
 /// Tray menu order (same file the demo reads): (id, label key) per entry, "-" is a separator.
 /// Ids must be ones `build_menu` knows (TRAY_PLAIN plus the special-cased add and edit).
 /// Kept short on purpose: language, theme, data folder and update checks live in Settings.
-const TRAY_PLAIN: &[&str] = &["toggle", "library", "settings", "quit"];
+const TRAY_PLAIN: &[&str] = &["toggle", "export", "library", "settings", "quit"];
 fn tray_menu() -> &'static Vec<(String, String)> {
     static M: OnceLock<Vec<(String, String)>> = OnceLock::new();
     M.get_or_init(|| {
@@ -619,6 +620,69 @@ fn open_theme_file(state: State<AppState>) {
     open_path(&state.dir.join("theme.css"));
 }
 
+// ---------- screen capture: layout export and "capture this widget" (see capture.rs, ui/app.js) ----------
+
+/// RGBA pixels of a screen rectangle (physical pixels) with the boards lifted in front for the shot, then put back.
+/// One capture at a time, so two boards exporting together never drop each other mid-shot.
+#[tauri::command]
+async fn capture_screen(app: AppHandle, x: i32, y: i32, w: i32, h: i32) -> Result<tauri::ipc::Response, String> {
+    static CAPTURE: Mutex<()> = Mutex::new(());
+    if !(1..=16384).contains(&w) || !(1..=16384).contains(&h) {
+        return Err("bad size".into());
+    }
+    let _one = CAPTURE.lock().map_err(|e| e.to_string())?;
+    for b in boards(&app) {
+        layer::set_topmost(&b, true);
+    }
+    std::thread::sleep(Duration::from_millis(200)); // let the lifted boards paint
+    let px = capture::grab(x, y, w, h);
+    apply_layer(&app); // back where they were (or still on top in edit mode)
+    px.map(tauri::ipc::Response::new).ok_or_else(|| "capture failed".into())
+}
+
+/// Copy captured pixels to the clipboard. JS: invoke("copy_image", rgbaBytes, { headers: { w, h } })
+#[tauri::command]
+fn copy_image(request: Request) -> Result<(), String> {
+    let InvokeBody::Raw(rgba) = request.body() else {
+        return Err("expected raw bytes".into());
+    };
+    let num = |k: &str| request.headers().get(k).and_then(|v| v.to_str().ok()).and_then(|v| v.parse().ok()).unwrap_or(0);
+    capture::to_clipboard(rgba, num("w"), num("h"))
+}
+
+fn exports_dir(app: &AppHandle, dir: &Path) -> PathBuf {
+    app.path().picture_dir().map(|d| d.join("WidgetBoard")).unwrap_or_else(|_| dir.join("exports"))
+}
+
+/// Save a PNG (base64) into Pictures\WidgetBoard as `name`.png; an existing file is kept and a number added.
+#[tauri::command]
+fn save_export(app: AppHandle, state: State<AppState>, name: String, png: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(png.as_bytes()).map_err(|e| e.to_string())?;
+    if !bytes.starts_with(b"\x89PNG") {
+        return Err("not a PNG".into());
+    }
+    let dir = exports_dir(&app, &state.dir);
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let base = theme_name(&name)?;
+    let mut path = dir.join(format!("{base}.png"));
+    for n in 2.. {
+        if !path.exists() {
+            break;
+        }
+        path = dir.join(format!("{base} ({n}).png"));
+    }
+    fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn open_exports_folder(app: AppHandle, state: State<AppState>) {
+    let dir = exports_dir(&app, &state.dir);
+    let _ = fs::create_dir_all(&dir);
+    open_path(&dir);
+}
+
 // ---------- theme folders: themes/<name>/palette.png + theme.txt (see ui/palette.js, ui/themes.js) ----------
 
 /// A theme folder name that stays one folder: no path parts, no characters Windows rejects.
@@ -680,14 +744,34 @@ fn list_themes(state: State<AppState>) -> Vec<Value> {
     let entries: Vec<PathBuf> = fs::read_dir(&root).into_iter().flatten().flatten().map(|e| e.path()).collect();
     let mut v: Vec<(String, Value)> = Vec::new();
     for p in entries.iter().filter(|p| p.is_dir()) {
-        let Some(img) = theme_image(p) else { continue };
         let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-        let file = format!("{}/{}", name, img.file_name().unwrap_or_default().to_string_lossy());
+        // nine-slice skins: themes/<name>/skins/<skin>.png, named by design
+        let mut skins: Vec<Value> = fs::read_dir(p.join("skins"))
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.path())
+            .filter(|s| is_image(s))
+            .map(|s| {
+                json!({
+                    "name": s.file_stem().unwrap_or_default().to_string_lossy(),
+                    "file": format!("{}/skins/{}", name, s.file_name().unwrap_or_default().to_string_lossy()),
+                    "mtime": mtime_ms(&s),
+                })
+            })
+            .collect();
+        skins.sort_by_key(|s| s["name"].as_str().unwrap_or_default().to_lowercase());
+        let img = theme_image(p);
+        if img.is_none() && skins.is_empty() {
+            continue;
+        }
+        let file = img.as_ref().map(|i| format!("{}/{}", name, i.file_name().unwrap_or_default().to_string_lossy()));
         v.push((name.to_lowercase(), json!({
             "name": name,
             "file": file,
-            "mtime": mtime_ms(&img).max(mtime_ms(&p.join("theme.txt"))),
+            "mtime": img.as_deref().map(mtime_ms).unwrap_or(0).max(mtime_ms(&p.join("theme.txt"))),
             "txt": fs::read_to_string(p.join("theme.txt")).unwrap_or_default(),
+            "skins": skins,
         })));
     }
     for p in entries.iter().filter(|p| is_image(p)) {
@@ -696,7 +780,7 @@ fn list_themes(state: State<AppState>) -> Vec<Value> {
             continue;
         }
         let file = p.file_name().unwrap_or_default().to_string_lossy().to_string();
-        v.push((name.to_lowercase(), json!({ "name": name, "file": file, "mtime": mtime_ms(p), "txt": "" })));
+        v.push((name.to_lowercase(), json!({ "name": name, "file": file, "mtime": mtime_ms(p), "txt": "", "skins": [] })));
     }
     v.sort_by(|a, b| a.0.cmp(&b.0));
     v.into_iter().map(|(_, i)| i).collect()
@@ -715,9 +799,13 @@ fn save_theme_pack(
 ) -> Result<String, String> {
     use base64::Engine;
     writable()?;
+    // palette.png (+ theme.txt), the Full template, the skin template, or a skin: skins/<name>.png
     let file = match file.as_deref() {
-        None | Some("palette.png") => "palette.png",
-        Some("full.png") => "full.png",
+        None | Some("palette.png") => "palette.png".to_string(),
+        Some(f @ ("full.png" | "skin-template.png")) => f.to_string(),
+        Some(f) if f.starts_with("skins/") && f.ends_with(".png") => {
+            format!("skins/{}.png", theme_name(&f["skins/".len()..f.len() - 4])?)
+        }
         Some(_) => return Err("bad file".into()),
     };
     let name = theme_name(&name)?;
@@ -729,19 +817,21 @@ fn save_theme_pack(
     if !bytes.starts_with(b"\x89PNG") {
         return Err("not a PNG".into());
     }
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    write_atomic(&dir.join(file), &bytes)?;
+    fs::create_dir_all(dir.join("skins")).map_err(|e| e.to_string())?;
+    write_atomic(&dir.join(&file), &bytes)?;
     if file == "palette.png" {
         write_atomic(&dir.join("theme.txt"), txt.as_bytes())?;
     }
     Ok(name)
 }
 
+/// Open themes/, or one theme's folder when `name` is given and exists (the template folder, for skins).
 #[tauri::command]
-fn open_themes_folder(state: State<AppState>) {
+fn open_themes_folder(state: State<AppState>, name: Option<String>) {
     let dir = state.dir.join("themes");
     let _ = fs::create_dir_all(&dir);
-    open_path(&dir);
+    let one = name.and_then(|n| theme_name(&n).ok()).map(|n| dir.join(n)).filter(|d| d.is_dir());
+    open_path(one.as_deref().unwrap_or(&dir));
 }
 
 /// Changes anywhere in themes/ (a repaint saved from Clip Studio, a folder dropped in or renamed): the paths and the
@@ -758,6 +848,9 @@ fn themes_sig(dir: &Path) -> (u64, u64) {
         note(&p); // a folder, or a sheet dropped straight into themes/
         for f in fs::read_dir(&p).into_iter().flatten().flatten() {
             note(&f.path());
+            for s in fs::read_dir(f.path()).into_iter().flatten().flatten() {
+                note(&s.path()); // inside skins/
+            }
         }
     }
     (fnv1a(names.as_bytes()), newest)
@@ -2220,6 +2313,10 @@ fn on_menu(app: &AppHandle, id: &str) {
             let _ = open_library_window(app, "items");
         }
         "toggle" => toggle_boards(app),
+        // every board exports its own monitor; one stamp names the set
+        "export" => {
+            let _ = app.emit("export-layout", local_stamp());
+        }
         "quit" => app.exit(0),
         "update-available" => {
             let _ = open_settings_window(app, "about");
@@ -2385,6 +2482,10 @@ fn main() {
             list_themes,
             save_theme_pack,
             open_themes_folder,
+            capture_screen,
+            copy_image,
+            save_export,
+            open_exports_folder,
             get_settings,
             set_app,
             open_settings,

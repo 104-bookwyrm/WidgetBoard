@@ -32,5 +32,14 @@
   "themes.pasted": "Folder name for a theme made from a pasted code (numbered when repeated). 2 words.",
   "themes.exists": "Toast when the typed theme name is already used. Full sentences.",
   "themes.saved": "Toast after saving a theme. {name} is the theme name.",
-  "themes.active_note": "Note above the colour pickers while a theme folder is in use: the theme's painted colours win over these pickers. {name} is the theme. Full sentences."
+  "themes.active_note": "Note above the colour pickers while a theme folder is in use: the theme's painted colours win over these pickers. {name} is the theme. Full sentences.",
+  "skins.title": "Settings > Appearance: heading of the skin section. 1 word.",
+  "skins.hint": "Under the skin heading: what a skin is and the priority order (this section over theme skins; the widget's own Look menu pick over everything). Full sentences; the menu name must match the real label.",
+  "skins.template_hint": "Second hint: start from skin-template.png in the blank template folder; the outer third keeps its size, the rest stretches; where to put the finished file. Full sentences.",
+  "skins.all": "Row label for the skin every widget gets. 2 words.",
+  "skins.follow_theme": "Option on the all-widgets row: no pick here, use the skins the themes set. Short.",
+  "skins.follow_all": "Option on a widget-type row: use the all-widgets row's pick. Short.",
+  "skins.none": "Option: no skin. 1 word.",
+  "skins.open_template": "Button: opens the blank template folder that holds the skin template and an example skin.",
+  "skins.empty": "Shown when no theme folder has any skin yet; says where to put one. Full sentences."
 }

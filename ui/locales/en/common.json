@@ -73,5 +73,6 @@
   "fmt.h24": "24-hour",
   "themes.seed.base": "Default",
   "themes.seed.mine": "My theme",
-  "themes.seed.blank": "Blank template"
+  "themes.seed.blank": "Blank template",
+  "themes.seed.skin_example": "Example"
 }

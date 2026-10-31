@@ -46,5 +46,17 @@
   "look.theme_widget": "Label of the picker that sets a theme for this one widget only. 1 to 2 words.",
   "look.theme_type": "Label of the picker that sets a theme for every widget of this type. {name} is the widget type (Clock, Memo). Short.",
   "look.theme_follow_type": "First option of the this-widget picker: no own theme, use the one set for its type. Short.",
-  "look.theme_follow_board": "First option of the all-of-this-type picker: no type theme, use the board's theme. Short."
+  "look.theme_follow_board": "First option of the all-of-this-type picker: no type theme, use the board's theme. Short.",
+  "look.skin": "Look panel label of the skin picker (a decorative image frame for the widget). 1 word.",
+  "look.skin_follow": "First skin option: use whatever skin this widget's themes give it. Short.",
+  "look.skin_none": "Skin option: no skin on this widget. 1 word.",
+  "menu.capture": "Widget right-click menu item: saves a picture of this widget as it looks on screen. 2 words.",
+  "export.name": "First word of the exported file names (Layout 20261031-1645 Monitor 1 screen.png). 1 word.",
+  "export.screen": "Last word of the exported screenshot file name. 1 word.",
+  "export.outline": "Last word of the exported transparent outline layer file name. 1 word.",
+  "export.both": "Last word of the exported file with screenshot and outlines together. 1 word.",
+  "export.done": "Toast after the layout export; names where the files went. Full sentence.",
+  "export.open": "Button on the export and capture toasts: opens the folder with the files. 2 words.",
+  "capture.done": "Toast after capturing one widget: copied to the clipboard and saved to a file; names the folder. Full sentences.",
+  "capture.saved": "Toast after capturing one widget when the clipboard copy failed: saved to a file only. Full sentence."
 }

@@ -29,5 +29,6 @@
   "tray.library": "위젯 메뉴…",
   "lib.title": "위젯 메뉴",
   "widget.pomodoro": "포모도로",
-  "demo.title": "위젯보드 체험"
+  "demo.title": "위젯보드 체험",
+  "tray.export_layout": "레이아웃 내보내기"
 }

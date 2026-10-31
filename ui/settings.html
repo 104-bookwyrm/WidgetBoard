@@ -280,6 +280,16 @@
         background: var(--c1);
         border: 1px dashed var(--line-color);
       }
+      #sk-rows .set-row > span {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #sk-rows img {
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+      }
       #th-paste-result {
         font-size: 0.85em;
         margin: 6px 0;
@@ -404,6 +414,17 @@
                 <button id="th-code-apply" class="primary" data-i18n="themes.code_apply"></button>
                 <button id="th-code-cancel" data-i18n="set.close"></button>
               </div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend data-i18n="skins.title"></legend>
+            <p class="hint" data-i18n="skins.hint"></p>
+            <p class="hint" data-i18n="skins.template_hint"></p>
+            <div id="sk-rows"></div>
+            <p id="sk-empty" class="hint" data-i18n="skins.empty" hidden></p>
+            <div class="set-row set-add">
+              <button id="sk-template" data-i18n="skins.open_template"></button>
             </div>
           </fieldset>
 

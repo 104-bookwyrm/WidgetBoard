@@ -182,5 +182,14 @@
   "themes.pasted": "Pasted theme",
   "themes.exists": "A theme with that name already exists. Use another name.",
   "themes.saved": "Saved the theme ‘{name}’.",
-  "themes.active_note": "Using the theme ‘{name}’. Colours and settings set in the theme take priority over these."
+  "themes.active_note": "Using the theme ‘{name}’. Colours and settings set in the theme take priority over these.",
+  "skins.title": "Skins",
+  "skins.hint": "A skin is a picture that frames a widget. A skin picked here wins over the skins a theme sets. A skin picked in the widget's right-click menu > ‘Appearance’ wins over everything.",
+  "skins.template_hint": "Start a new skin from skin-template.png in the ‘Blank template’ folder. The outer third of the picture keeps its size and the rest stretches. Put the finished PNG in the skins folder inside a theme folder.",
+  "skins.all": "All widgets",
+  "skins.follow_theme": "Same as the theme",
+  "skins.follow_all": "Same as all widgets",
+  "skins.none": "None",
+  "skins.open_template": "Open template folder",
+  "skins.empty": "No skins yet. Put a PNG file in the skins folder inside a theme folder."
 }

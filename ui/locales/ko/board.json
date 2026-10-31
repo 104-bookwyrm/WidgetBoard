@@ -130,6 +130,18 @@
   "look.theme": "테마",
   "look.theme_widget": "이 위젯",
   "look.theme_type": "모든 {name}",
-  "look.theme_follow_type": "종류 설정 따름",
-  "look.theme_follow_board": "보드 테마 따름"
+  "look.theme_follow_type": "종류 설정과 같게",
+  "look.theme_follow_board": "보드 테마와 같게",
+  "look.skin": "스킨",
+  "look.skin_follow": "설정과 같게",
+  "look.skin_none": "없음",
+  "menu.capture": "위젯 캡처",
+  "export.name": "레이아웃",
+  "export.screen": "화면",
+  "export.outline": "윤곽",
+  "export.both": "합본",
+  "export.done": "레이아웃을 사진 폴더의 WidgetBoard 폴더에 저장했습니다.",
+  "export.open": "폴더 열기",
+  "capture.done": "위젯 이미지가 클립보드에 복사되었습니다. 사진 폴더에도 저장했습니다.",
+  "capture.saved": "위젯이 사진 폴더의 WidgetBoard 폴더에 저장했습니다."
 }

@@ -29,5 +29,6 @@
   "tray.library": "Widget menu…",
   "lib.title": "Widget menu",
   "widget.pomodoro": "Pomodoro",
-  "demo.title": "WidgetBoard demo"
+  "demo.title": "WidgetBoard demo",
+  "tray.export_layout": "Export layout"
 }
