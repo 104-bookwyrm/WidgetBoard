@@ -126,5 +126,10 @@
   "lay.sample.exam": "Final exam",
   "lay.sample.words": "Learn 30 English words",
   "lay.sample.workbook": "Math workbook, chapter 2",
-  "lay.sample.debut": "Debut day"
+  "lay.sample.debut": "Debut day",
+  "look.theme": "Theme",
+  "look.theme_widget": "This widget",
+  "look.theme_type": "All {name} widgets",
+  "look.theme_follow_type": "Follow the type",
+  "look.theme_follow_board": "Follow the board"
 }

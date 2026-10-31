@@ -2,12 +2,12 @@
   "memo.placeholder": "Memo…",
   "memo.color": "Memo colour",
   "memo.color.theme": "Theme",
-  "memo.color.yellow": "Yellow",
-  "memo.color.pink": "Pink",
-  "memo.color.green": "Green",
-  "memo.color.blue": "Blue",
-  "memo.color.purple": "Purple",
-  "memo.color.orange": "Orange",
+  "memo.color.yellow": "Paper 1",
+  "memo.color.pink": "Paper 2",
+  "memo.color.green": "Paper 3",
+  "memo.color.blue": "Paper 4",
+  "memo.color.purple": "Paper 5",
+  "memo.color.orange": "Paper 6",
   "sum.memo_empty": "Empty memo",
   "hint.memo": "Just type, it saves"
 }

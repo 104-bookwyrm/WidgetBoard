@@ -207,6 +207,7 @@ export function createMockTauri({ memory = false } = {}) {
           ),
           theme: store.getItem("wb-theme") || "",
           assetsDir: "",
+          themesDir: "",
           autostart: !!store.getItem("wb-autostart"),
           // launched 0: every saved run counts as started in this launch, unless a test seeds wb-session
           session: get("wb-session", { launched: 0, closed: null }),
@@ -364,6 +365,30 @@ export function createMockTauri({ memory = false } = {}) {
         return URL.createObjectURL(new Blob([args]));
       case "list_assets":
         return [];
+      // theme folders: [{ name, mtime, txt, png (data URL), full? }] in one key
+      case "list_themes":
+        return get("wb-themes", []);
+      case "save_theme_pack": {
+        const list = get("wb-themes", []);
+        const name = String(args.name).replace(/[\/:*?"<>|]/g, "").trim().slice(0, 60);
+        if (!name) throw "bad theme name";
+        const i = list.findIndex((x) => x.name.toLowerCase() === name.toLowerCase());
+        if (i >= 0 && !args.overwrite) throw "exists";
+        const png = "data:image/png;base64," + args.png;
+        if (args.file === "full.png") {
+          if (i >= 0) list[i].full = png;
+        } else {
+          const entry = { name, mtime: Date.now(), txt: args.txt, png };
+          if (i >= 0) list[i] = { ...list[i], ...entry };
+          else list.push(entry);
+        }
+        set("wb-themes", list);
+        emit("themes-changed");
+        return name;
+      }
+      case "open_themes_folder":
+        native(cmd);
+        return;
       case "list_fonts":
         return [
           "Malgun Gothic",

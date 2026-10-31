@@ -11,10 +11,12 @@ import {
   toHex,
   firstFamily,
   cleanFont,
+  fontField,
   checkTheme,
   contrastWarnings,
   copyText,
 } from "./theme.js";
+import { loadThemes, fromCss, saveTheme as saveThemePack, uniqueName, encodeCode, decodeCode, BLOCKS, BASIC } from "./themes.js";
 
 // RULE: every backend call goes through T. Never call window.__TAURI__ directly: the mock (tests, browser
 // preview, the demo) only replaces T, so a direct call reaches real app data from a page that must not touch it.
@@ -822,6 +824,7 @@ function bindAppearance() {
       saveTheme(setVar(themeCss, i.dataset.var, val())),
     );
   }
+  fontField($("#th-font"));
   $("#th-font").addEventListener("change", () => {
     const name = cleanFont($("#th-font").value);
     const val = name
@@ -846,6 +849,81 @@ function bindAppearance() {
   $("#th-paste-apply").onclick = aiApply;
   $("#th-undo").onclick = aiUndo;
 }
+// ---- Theme folders (themes.js): one card per folder, save the current look, the text theme code ----
+let themeList = [];
+const boardThemeName = () => data?.config?.themes?.board ?? "";
+async function fillThemes() {
+  themeList = await loadThemes(invoke, data.themesDir || "", T.core.convertFileSrc);
+  // a renamed or deleted folder: the board already fell back to theme.css, so say that here too
+  const cur = themeList.some((x) => x.name === boardThemeName()) ? boardThemeName() : "";
+  const grid = $("#th-grid");
+  grid.replaceChildren();
+  const card = (name, label, img) => {
+    const b = document.createElement("button");
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(name === cur));
+    const pic = img ? Object.assign(document.createElement("img"), { src: img, alt: "" }) : document.createElement("span");
+    if (!img) pic.className = "none";
+    b.append(pic, Object.assign(document.createElement("span"), { textContent: label }));
+    b.onclick = () => setBoardTheme(name);
+    grid.append(b);
+  };
+  card("", t("themes.none"));
+  for (const th of themeList) card(th.name, th.name, th.url);
+  $("#th-active-note").hidden = !cur;
+  $("#th-active-note").textContent = cur ? t("themes.active_note", { name: cur }) : "";
+}
+async function setBoardTheme(name) {
+  await invoke("save_config", { patch: { themes: { board: name || null } } });
+  data.config = { ...data.config, themes: { ...data.config?.themes, board: name || undefined } };
+  saved();
+  fillThemes();
+}
+// the look on screen now: the board's theme folder if one is set, otherwise theme.css
+function currentLook() {
+  const th = themeList.find((x) => x.name === boardThemeName());
+  return th ? { colors: th.colors, txt: th.txt } : fromCss(themeCss);
+}
+const rowsFor = (colors) => (Object.keys(colors).some((b) => BLOCKS.indexOf(b) >= BASIC) ? BLOCKS.length : BASIC);
+function bindThemes() {
+  $("#th-folder").onclick = () => invoke("open_themes_folder").catch(() => {});
+  $("#th-save").onclick = () => {
+    $("#th-save-name").value = uniqueName(t("themes.seed.mine"), themeList.map((x) => x.name));
+    $("#th-save-box").hidden = false;
+    $("#th-save-name").select();
+  };
+  $("#th-save-cancel").onclick = () => ($("#th-save-box").hidden = true);
+  $("#th-save-ok").onclick = async () => {
+    const name = $("#th-save-name").value.trim();
+    if (!name) return;
+    if (themeList.some((x) => x.name.toLowerCase() === name.toLowerCase())) return flash(t("themes.exists"));
+    const look = currentLook();
+    await saveThemePack(invoke, name, look.colors, look.txt, { rows: rowsFor(look.colors) });
+    $("#th-save-box").hidden = true;
+    flash(t("themes.saved", { name }));
+    fillThemes();
+  };
+  $("#th-code-copy").onclick = async () => {
+    await copyText(encodeCode(currentLook().colors));
+    flash(t("themes.code_copied"));
+  };
+  $("#th-code-paste").onclick = () => {
+    $("#th-code-box").hidden = false;
+    $("#th-code-text").value = "";
+    $("#th-code-text").focus();
+  };
+  $("#th-code-cancel").onclick = () => ($("#th-code-box").hidden = true);
+  $("#th-code-apply").onclick = async () => {
+    const colors = decodeCode($("#th-code-text").value);
+    if (!colors || !Object.keys(colors).length) return flash(t("themes.code_bad"));
+    const name = await saveThemePack(invoke, uniqueName(t("themes.pasted"), themeList.map((x) => x.name)), colors, "", {
+      rows: rowsFor(colors),
+    });
+    $("#th-code-box").hidden = true;
+    await setBoardTheme(name);
+  };
+}
+
 async function fillFontList() {
   const fonts = await invoke("list_fonts").catch(() => []);
   const dl = $("#th-font-list");
@@ -897,6 +975,8 @@ async function init() {
   bindAppearance();
   fillTheme();
   fillFontList();
+  bindThemes();
+  fillThemes().catch(() => {});
   bindWidgets();
   fillWidgets();
   showPage(new URLSearchParams(location.search).get("page") || "general");
@@ -925,8 +1005,10 @@ async function init() {
     applyA11y();
     $("#a11y-motion").checked = !!data?.app?.reduceMotion;
   });
+  await listen("themes-changed", () => fillThemes().catch(() => {}));
   await listen("config-changed", (cfg) => {
     if (data) data.config = cfg;
+    fillThemes().catch(() => {});
     applyA11y();
     fillGeneral();
     fillA11y();

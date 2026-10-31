@@ -1,0 +1,16 @@
+{
+  "pal.title": "Title printed at the top of the theme colour sheet image (palette.png). Short.",
+  "pal.board": "Row name on the colour sheet for the board-wide colours. 1 word.",
+  "pal.how": "One line on the colour sheet: a checkered square is not set and uses the board's colour; on the board row it means the app default. Keep short, it shares one line with the legend.",
+  "pal.s.c1": "Label over a colour sheet square: widget background. Korean: 2 letters.",
+  "pal.s.c2": "Label over a colour sheet square: accent (buttons, highlights). Korean: 2 letters.",
+  "pal.s.c3": "Label over a colour sheet square: text colour. Korean: 2 letters.",
+  "pal.n.on_accent": "Legend entry for a numbered square: text and icons drawn on accent-coloured buttons.",
+  "pal.n.line": "Legend entry for a numbered square: the outline around each widget.",
+  "pal.n.frame": "Legend entry for a numbered square: the frame decoration chosen in the widget Look menu.",
+  "pal.n.memo_text": "Legend entry for a numbered square: text colour on memo paper.",
+  "pal.s.hol": "Label over a colour sheet square: Sundays and holidays in the calendar. Korean: 2 letters.",
+  "pal.s.sat": "Label over a colour sheet square: Saturdays in the calendar. Short.",
+  "pal.s.danger": "Label over a colour sheet square: warning colour (delete confirmations). Korean: 2 letters.",
+  "pal.s.stamp": "Label over a colour sheet square: the checklist's all-done stamp. Korean: 2 letters."
+}

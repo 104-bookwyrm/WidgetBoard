@@ -1,0 +1,16 @@
+{
+  "pal.title": "위젯보드 색팔레트",
+  "pal.board": "보드",
+  "pal.how": "투명 체크무늬 칸은 보드 색을 참조하고, 보드 줄의 투명칸은 기본값을 사용합니다.",
+  "pal.s.c1": "배경",
+  "pal.s.c2": "강조",
+  "pal.s.c3": "글자",
+  "pal.n.on_accent": "강조색 위 글자",
+  "pal.n.line": "테두리 선",
+  "pal.n.frame": "테두리 장식",
+  "pal.n.memo_text": "메모 글씨",
+  "pal.s.hol": "휴일",
+  "pal.s.sat": "토요일",
+  "pal.s.danger": "경고",
+  "pal.s.stamp": "도장"
+}

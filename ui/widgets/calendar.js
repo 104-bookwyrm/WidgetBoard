@@ -107,6 +107,8 @@ export default {
   size: { w: 4, h: 5 },
   min: { w: 3, h: 3 },
   defaults: { filter: {}, view: "mini" },
+  // theme sheet colours after surface/accent/text (append only; see palette.js)
+  palette: MARKS.map((hex, i) => ({ short: `cal.mark_${i + 1}`, v: `--mark-${i + 1}`, default: hex })),
   css: `
     .cal { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
       display: flex; flex-direction: column; gap: var(--space-3);

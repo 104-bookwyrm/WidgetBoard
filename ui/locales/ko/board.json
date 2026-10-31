@@ -126,5 +126,10 @@
   "lay.sample.exam": "기말고사",
   "lay.sample.words": "영어 단어 30개 외우기",
   "lay.sample.workbook": "수학 문제집 2단원 풀기",
-  "lay.sample.debut": "데뷔일"
+  "lay.sample.debut": "데뷔일",
+  "look.theme": "테마",
+  "look.theme_widget": "이 위젯",
+  "look.theme_type": "모든 {name}",
+  "look.theme_follow_type": "종류 설정 따름",
+  "look.theme_follow_board": "보드 테마 따름"
 }

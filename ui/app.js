@@ -15,9 +15,10 @@ import {
   setWeekStart,
   assetUrl as assetUrlOf,
 } from "./util.js";
-import { sanitize, toHex, firstFamily, cleanFont } from "./theme.js";
+import { sanitize, toHex, firstFamily, cleanFont, fontField } from "./theme.js";
 import { icon } from "./icons.js";
 import { refreshSubs, subsOf, REFRESH_MS } from "./calsubs.js";
+import { loadThemes, buildCss, seedThemes } from "./themes.js";
 import REGISTRY, { HOSTS } from "./widgets/index.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import GROUPS from "./widgets/groups.json" with { type: "json" };
@@ -78,6 +79,7 @@ const pinned = new Set(); // ids running in a pin window: kept in `widgets` (the
 let myDisplay = "";
 let displays = []; // [{ label, display, index, primary }]
 let assetsDir = "";
+let themesDir = "";
 let editMode = false;
 let lang = "ko";
 let config = {};
@@ -893,6 +895,7 @@ function sanitizeWidget(w, def) {
   if (!(w.fontSize >= 6 && w.fontSize <= 96)) delete w.fontSize;
   if (!w.colors || typeof w.colors !== "object" || Array.isArray(w.colors))
     delete w.colors;
+  if (typeof w.theme !== "string" || !w.theme || w.theme.length > 60) delete w.theme;
   if (
     w.frame !== undefined &&
     w.frame !== "custom" &&
@@ -930,6 +933,7 @@ function mount(w) {
   el.className = "widget";
   el.dataset.widget = w.type;
   el.dataset.id = w.id;
+  el.dataset.kind = shownType(w); // what theme levels match: a stopwatch is stored as a timer
   el.classList.toggle("w-hidden", !!w.hidden);
   el.classList.toggle("locked", !!w.locked);
   const name = widgetName(w);
@@ -1171,6 +1175,7 @@ function closeFontPanel() {
   fontTarget = null;
   syncHits();
 }
+fontField($("#fp-family"));
 $("#fp-family").addEventListener("change", () => {
   if (!fontTarget) return;
   const { w, el } = fontTarget;
@@ -1189,11 +1194,12 @@ $("#fp-size").addEventListener("input", () => {
 $("#fp-reset").onclick = () => {
   if (!fontTarget) return;
   const { w, el } = fontTarget;
-  for (const k of ["font", "fontSize", "colors", "frame", "frameSvg"])
+  for (const k of ["font", "fontSize", "colors", "frame", "frameSvg", "theme"])
     delete w[k];
   applyFont(el, w);
   applyColors(el, w);
   applyFrame(el, w);
+  applyThemeCss();
   save(w);
   openFontPanel(w, el);
 };
@@ -1222,7 +1228,33 @@ function fillLook(w, el) {
           );
   }
   $("#fp-frame").value = w.frame ?? "";
+  fillThemePickers(w);
 }
+// Look panel: this widget's theme, and the theme for every widget of its type (config.themes.types)
+function fillThemePickers(w) {
+  const fill = (sel, follow, cur) => {
+    sel.replaceChildren(new Option(follow, ""), ...themes.map((th) => new Option(th.name, th.name)));
+    sel.value = themes.some((th) => th.name === cur) ? cur : "";
+  };
+  fill($("#fp-theme"), t("look.theme_follow_type"), w.theme);
+  const kind = shownType(w);
+  fill($("#fp-theme-type"), t("look.theme_follow_board"), config.themes?.types?.[kind]);
+  $("#fp-theme-type-label").textContent = t("look.theme_type", { name: t(`widget.${kind}`) });
+}
+$("#fp-theme").addEventListener("change", () => {
+  if (!fontTarget) return;
+  const { w } = fontTarget;
+  w.theme = $("#fp-theme").value || undefined;
+  save(w);
+  applyThemeCss();
+});
+$("#fp-theme-type").addEventListener("change", () => {
+  if (!fontTarget) return;
+  const type = shownType(fontTarget.w), name = $("#fp-theme-type").value;
+  config = { ...config, themes: { ...config.themes, types: { ...config.themes?.types, [type]: name || undefined } } };
+  applyThemeCss();
+  invoke("save_config", { patch: { themes: { types: { [type]: name || null } } } }).catch(reportError);
+});
 for (const lab of document.querySelectorAll("#font-panel [data-col]")) {
   const k = lab.dataset.col;
   const inp = lab.querySelector("input");
@@ -1363,11 +1395,13 @@ function hintOf(w) {
 function applyHint(el, w) {
   const hint = el.querySelector(".w-hint");
   hint.textContent = hint.title = hintOf(w);
+  el.dataset.kind = shownType(w); // a mode switch (timer to stopwatch) moves it to that type's theme
 }
 function applyName(w) {
   const el = mounted.get(w.id)?.el;
   if (!el) return;
   const name = widgetName(w);
+  el.dataset.kind = shownType(w);
   el.setAttribute("aria-label", name);
   el.querySelector(".w-head .title").textContent = name;
   el.querySelector(".grip").title = t("a11y.grip", { name });
@@ -2006,6 +2040,18 @@ function applyTheme(css) {
   syncScheme();
   syncHits();
   reflowSoon();
+}
+
+// Theme folders (themes.js): config.themes names the board's and each type's theme, w.theme a single widget's.
+let themes = [];
+function applyThemeCss() {
+  const kinds = widgets.map((w) => ({ id: w.id, type: shownType(w), theme: w.theme }));
+  $("#palette-theme").textContent = buildCss(themes, config.themes, kinds);
+  syncScheme();
+}
+async function refreshThemes() {
+  themes = await loadThemes(invoke, themesDir, T.core.convertFileSrc);
+  applyThemeCss();
 }
 
 // ---------------- edit mode ----------------
@@ -2795,6 +2841,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   isPrimary = !!st.primary;
   displays = st.displays || [];
   assetsDir = st.assetsDir || "";
+  themesDir = st.themesDir || "";
   applyTheme(st.theme);
   for (const item of await invoke("content_list").catch(() => [])) contents.set(item.id, item);
   // before mounting: a widget's first write (a Showcase birthday, a D-day migration) must reach its siblings
@@ -2818,6 +2865,18 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     }
   }
   if (freeMode()) setLayers(layerOrder()); // one z per widget (older layouts could share one)
+  // theme images decode in the background; the board shows theme.css meanwhile. First run: the starter themes,
+  // once (a flag, so starters the user deleted stay deleted)
+  (async () => {
+    if (isPrimary && !DEMO && !PIN && !config.themes?.seeded) {
+      const defaultCss = await fetch("default-theme.css").then((r) => r.text()).catch(() => "");
+      await seedThemes(invoke, defaultCss, st.theme || defaultCss, {
+        base: t("themes.seed.base"), mine: t("themes.seed.mine"), blank: t("themes.seed.blank"),
+      });
+      await invoke("save_config", { patch: { themes: { seeded: true } } });
+    }
+    await refreshThemes();
+  })().catch(reportError);
   setTimeout(() => (reflow(), (document.documentElement.dataset.reflowed = "")), 400);
   setEdit(!PIN && !!st.edit);
   syncHits();
@@ -2921,8 +2980,10 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
   await listen("config-changed", (e) => {
     config = e.payload || {};
     applyUi();
+    applyThemeCss();
     configSubs.forEach((cb) => cb(config));
   });
+  await listen("themes-changed", () => refreshThemes().catch(reportError));
   await onBoard("apply-layout", (e) =>
     applySavedLayout(e.payload).catch(reportError),
   );

@@ -38,6 +38,23 @@ export const cleanFont = (f) =>
     .trim()
     .slice(0, 80);
 
+/** A font field with a suggestion list. Chromium only suggests fonts containing the typed text, so the field
+ * empties while focused (the current font shows as the placeholder) and gets it back if nothing was picked. */
+export function fontField(input) {
+  let kept = "",
+    hint = "";
+  input.addEventListener("focus", () => {
+    kept = input.value;
+    hint = input.placeholder;
+    if (kept) input.placeholder = kept;
+    input.value = "";
+  });
+  input.addEventListener("blur", () => {
+    input.placeholder = hint;
+    if (!input.value) input.value = kept;
+  });
+}
+
 /** Pull the CSS out of an AI answer: the first ``` block if there is one, otherwise the whole text. */
 export function extractCss(text) {
   const m = String(text).match(/```(?:css)?\s*\n([\s\S]*?)```/i);

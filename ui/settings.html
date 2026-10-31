@@ -251,6 +251,35 @@
         border-radius: 6px;
         background: var(--c1);
       }
+      #th-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 8px;
+        margin: 8px 0;
+      }
+      #th-grid button {
+        display: grid;
+        gap: 4px;
+        padding: 6px;
+        text-align: left;
+      }
+      #th-grid button[aria-checked="true"] {
+        outline: 2px solid var(--c2);
+        outline-offset: 1px;
+      }
+      #th-grid img,
+      #th-grid .none {
+        width: 100%;
+        aspect-ratio: 3 / 1;
+        object-fit: cover;
+        object-position: left top;
+        border-radius: 4px;
+        background: #fff;
+      }
+      #th-grid .none {
+        background: var(--c1);
+        border: 1px dashed var(--line-color);
+      }
       #th-paste-result {
         font-size: 0.85em;
         margin: 6px 0;
@@ -355,7 +384,32 @@
           <h2 data-i18n="set.nav.appearance">모양</h2>
 
           <fieldset>
+            <legend data-i18n="themes.title"></legend>
+            <p class="hint" data-i18n="themes.hint"></p>
+            <div id="th-grid" role="radiogroup"></div>
+            <div class="set-row set-add">
+              <button id="th-folder" data-i18n="themes.open_folder"></button>
+              <button id="th-save" data-i18n="themes.save_current"></button>
+              <button id="th-code-copy" data-i18n="themes.code_copy"></button>
+              <button id="th-code-paste" data-i18n="themes.code_paste"></button>
+            </div>
+            <div id="th-save-box" class="set-row set-add" hidden>
+              <input id="th-save-name" maxlength="60" />
+              <button id="th-save-ok" class="primary" data-i18n="themes.save"></button>
+              <button id="th-save-cancel" data-i18n="set.close"></button>
+            </div>
+            <div id="th-code-box" hidden>
+              <textarea id="th-code-text" spellcheck="false" rows="3" style="width: 100%"></textarea>
+              <div class="set-row set-add">
+                <button id="th-code-apply" class="primary" data-i18n="themes.code_apply"></button>
+                <button id="th-code-cancel" data-i18n="set.close"></button>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset>
             <legend data-i18n="theme.title"></legend>
+            <p id="th-active-note" class="hint" hidden></p>
             <div class="set-row">
               <label for="th-c1" data-i18n="theme.surface"></label>
               <input type="color" id="th-c1" data-var="--c1" />

@@ -9,18 +9,26 @@ export const COLORS = {
   purple: "#e2d6ff",
   orange: "#ffd9b3",
 };
+// paper n follows the theme (--memo-n, see palette.js); these colours are the fallback
+const PAPERS = Object.keys(COLORS).filter((c) => COLORS[c]);
+const paper = (c) => (COLORS[c] ? `var(--memo-${PAPERS.indexOf(c) + 1}, ${COLORS[c]})` : null);
 
 export default {
   size: { w: 3, h: 3 },
   min: { w: 2, h: 2 },
   defaults: { text: "", color: "yellow" },
+  // theme sheet colours after surface/accent/text (append only; see palette.js)
+  palette: [
+    ...PAPERS.map((c, i) => ({ short: `memo.color.${c}`, v: `--memo-${i + 1}`, default: COLORS[c] })),
+    { note: "pal.n.memo_text", v: "--memo-text", default: "#2a2a2a" },
+  ],
   css: `
     .memo { position: absolute; inset: 0; display: flex; flex-direction: column; box-sizing: border-box; padding: var(--head-h) calc(var(--pad) + 2px) var(--pad); }
-    .memo.paper { background: color-mix(in srgb, var(--memo-bg) calc(var(--widget-opacity) * 100% + 10%), transparent); color: #2a2a2a; }
+    .memo.paper { background: color-mix(in srgb, var(--memo-bg) calc(var(--widget-opacity) * 100% + 10%), transparent); color: var(--memo-text, #2a2a2a); }
     .memo textarea { flex: 1; min-height: 0; resize: none; border: 0; border-radius: 0; padding: 0; background: transparent;
       color: inherit; line-height: 1.55; scrollbar-width: thin; overflow-wrap: anywhere; }
     .memo textarea:focus { border: 0; }
-    .memo.paper textarea::placeholder { color: #2a2a2a; opacity: .45; }
+    .memo.paper textarea::placeholder { color: var(--memo-text, #2a2a2a); opacity: .45; }
     .memo-colors { position: absolute; right: 8px; bottom: 6px; display: flex; gap: var(--space-2); opacity: 0; transition: opacity .15s; }
     .widget:hover .memo-colors { opacity: 1; }
     .memo-colors button { width: 14px; height: 14px; padding: 0; border-radius: 50%;
@@ -40,7 +48,7 @@ export default {
         <div class="memo-colors">${Object.keys(COLORS)
           .map(
             (c) =>
-              `<button data-c="${c}" title="${t("memo.color." + c)}" style="--dot:${COLORS[c] ?? "transparent"}"></button>`,
+              `<button data-c="${c}" title="${t("memo.color." + c)}" style="--dot:${paper(c) ?? "transparent"}"></button>`,
           )
           .join("")}</div>
       </div>`;
@@ -50,7 +58,7 @@ export default {
 
     function paint() {
       box.classList.toggle("paper", !!COLORS[s.color]);
-      box.style.setProperty("--memo-bg", COLORS[s.color] ?? "transparent");
+      box.style.setProperty("--memo-bg", paper(s.color) ?? "transparent");
       box
         .querySelectorAll("[data-c]")
         .forEach((b) => b.classList.toggle("on", b.dataset.c === s.color));

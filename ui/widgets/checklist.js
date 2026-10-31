@@ -227,7 +227,7 @@ export default {
           })
           .join("");
 
-      // "day well done" stamp — only the Today tab, only when everything's ticked
+      // "day well done" stamp: only the Today tab, only when everything's ticked
       box.querySelector(".ck-stamp")?.remove();
       if (s.stamp && s.tab === "today" && rows.length && done === rows.length) {
         const rot =

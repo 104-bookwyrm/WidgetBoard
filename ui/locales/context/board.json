@@ -41,5 +41,10 @@
   "lay.sample.exam": "Title of a sample D-day countdown (30 days out) added the first time the user applies the Study layout. 1 to 3 words, no full stop.",
   "lay.sample.words": "Sample to-do added with the Study layout. A short study task, no full stop.",
   "lay.sample.workbook": "Sample to-do added with the Study layout. A short study task, no full stop.",
-  "lay.sample.debut": "Title of a sample D-day added with the Oshi layout. It counts up from a date one year ago (the idol's debut), with 100-day milestones. 1 to 3 words, no full stop."
+  "lay.sample.debut": "Title of a sample D-day added with the Oshi layout. It counts up from a date one year ago (the idol's debut), with 100-day milestones. 1 to 3 words, no full stop.",
+  "look.theme": "Small heading in the widget Look panel, above the two theme pickers. 1 word.",
+  "look.theme_widget": "Label of the picker that sets a theme for this one widget only. 1 to 2 words.",
+  "look.theme_type": "Label of the picker that sets a theme for every widget of this type. {name} is the widget type (Clock, Memo). Short.",
+  "look.theme_follow_type": "First option of the this-widget picker: no own theme, use the one set for its type. Short.",
+  "look.theme_follow_board": "First option of the all-of-this-type picker: no type theme, use the board's theme. Short."
 }

@@ -365,6 +365,7 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
         "configBroken": i_am_primary && config_broken(&state.dir),
         "migrateError": if i_am_primary { state.migrate_error.clone() } else { None },
         "assetsDir": state.dir.join("assets"),
+        "themesDir": state.dir.join("themes"),
         "version": updater::CURRENT,
         "justUpdated": if i_am_primary { state.just_updated.lock().unwrap().take() } else { None },
         "session": state.session,
@@ -618,6 +619,150 @@ fn open_theme_file(state: State<AppState>) {
     open_path(&state.dir.join("theme.css"));
 }
 
+// ---------- theme folders: themes/<name>/palette.png + theme.txt (see ui/palette.js, ui/themes.js) ----------
+
+/// A theme folder name that stays one folder: no path parts, no characters Windows rejects.
+fn theme_name(name: &str) -> Result<String, String> {
+    let n: String = name
+        .chars()
+        .filter(|c| !c.is_control() && !matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .collect::<String>()
+        .trim()
+        .trim_matches('.')
+        .chars()
+        .take(60)
+        .collect();
+    if n.trim().is_empty() {
+        Err("bad theme name".into())
+    } else {
+        Ok(n)
+    }
+}
+
+fn mtime_ms(p: &Path) -> u64 {
+    fs::metadata(p)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn is_image(p: &Path) -> bool {
+    let ext = p.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    p.is_file() && matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp")
+}
+
+/// The sheet in a theme folder: palette.png, then any palette.*, then any other image but the Full template
+/// (a shared sheet downloaded from a chat app keeps its own name and format).
+fn theme_image(dir: &Path) -> Option<PathBuf> {
+    let rank = |p: &PathBuf| {
+        let name = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let stem = p.file_stem().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+        (name != "palette.png", stem != "palette", name)
+    };
+    let mut files: Vec<PathBuf> = fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| is_image(p) && p.file_stem().map(|s| s.to_string_lossy().to_lowercase() != "full").unwrap_or(false))
+        .collect();
+    files.sort_by_key(rank);
+    files.into_iter().next()
+}
+
+/// Every theme: a folder with a sheet image (+ theme.txt), or a sheet image dropped straight into themes/ (named by
+/// its file name; a folder of the same name wins). `file` is the image's path inside themes/, `mtime` a cache key.
+#[tauri::command]
+fn list_themes(state: State<AppState>) -> Vec<Value> {
+    let root = state.dir.join("themes");
+    let entries: Vec<PathBuf> = fs::read_dir(&root).into_iter().flatten().flatten().map(|e| e.path()).collect();
+    let mut v: Vec<(String, Value)> = Vec::new();
+    for p in entries.iter().filter(|p| p.is_dir()) {
+        let Some(img) = theme_image(p) else { continue };
+        let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let file = format!("{}/{}", name, img.file_name().unwrap_or_default().to_string_lossy());
+        v.push((name.to_lowercase(), json!({
+            "name": name,
+            "file": file,
+            "mtime": mtime_ms(&img).max(mtime_ms(&p.join("theme.txt"))),
+            "txt": fs::read_to_string(p.join("theme.txt")).unwrap_or_default(),
+        })));
+    }
+    for p in entries.iter().filter(|p| is_image(p)) {
+        let name = p.file_stem().unwrap_or_default().to_string_lossy().to_string();
+        if v.iter().any(|(k, _)| *k == name.to_lowercase()) {
+            continue;
+        }
+        let file = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+        v.push((name.to_lowercase(), json!({ "name": name, "file": file, "mtime": mtime_ms(p), "txt": "" })));
+    }
+    v.sort_by(|a, b| a.0.cmp(&b.0));
+    v.into_iter().map(|(_, i)| i).collect()
+}
+
+/// Write a theme folder. `png` is base64. An existing folder is only replaced when `overwrite`; returns the name used.
+/// `file: "full.png"` adds the Full template next to palette.png (and leaves theme.txt alone).
+#[tauri::command]
+fn save_theme_pack(
+    state: State<AppState>,
+    name: String,
+    png: String,
+    txt: String,
+    overwrite: bool,
+    file: Option<String>,
+) -> Result<String, String> {
+    use base64::Engine;
+    writable()?;
+    let file = match file.as_deref() {
+        None | Some("palette.png") => "palette.png",
+        Some("full.png") => "full.png",
+        Some(_) => return Err("bad file".into()),
+    };
+    let name = theme_name(&name)?;
+    let dir = state.dir.join("themes").join(&name);
+    if dir.exists() && !overwrite {
+        return Err("exists".into());
+    }
+    let bytes = base64::engine::general_purpose::STANDARD.decode(png.as_bytes()).map_err(|e| e.to_string())?;
+    if !bytes.starts_with(b"\x89PNG") {
+        return Err("not a PNG".into());
+    }
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    write_atomic(&dir.join(file), &bytes)?;
+    if file == "palette.png" {
+        write_atomic(&dir.join("theme.txt"), txt.as_bytes())?;
+    }
+    Ok(name)
+}
+
+#[tauri::command]
+fn open_themes_folder(state: State<AppState>) {
+    let dir = state.dir.join("themes");
+    let _ = fs::create_dir_all(&dir);
+    open_path(&dir);
+}
+
+/// Changes anywhere in themes/ (a repaint saved from Clip Studio, a folder dropped in or renamed): the paths and the
+/// newest change time. Paths, because a rename changes neither the file count nor any file's time.
+fn themes_sig(dir: &Path) -> (u64, u64) {
+    let (mut names, mut newest) = (String::new(), 0);
+    let mut note = |p: &Path| {
+        names.push_str(&p.to_string_lossy());
+        names.push('\n');
+        newest = newest.max(mtime_ms(p));
+    };
+    for e in fs::read_dir(dir.join("themes")).into_iter().flatten().flatten() {
+        let p = e.path();
+        note(&p); // a folder, or a sheet dropped straight into themes/
+        for f in fs::read_dir(&p).into_iter().flatten().flatten() {
+            note(&f.path());
+        }
+    }
+    (fnv1a(names.as_bytes()), newest)
+}
+
 /// Merge `patch` into config.json (objects merge recursively; other values replace). Used by the Settings panel.
 #[tauri::command]
 fn save_config(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(), String> {
@@ -827,6 +972,7 @@ fn get_settings(state: State<AppState>) -> Value {
         "widgetTypes": widget_ids(),
         "dataDir": state.dir.to_string_lossy(),
         "assetsDir": state.dir.join("assets"),
+        "themesDir": state.dir.join("themes"),
     })
 }
 
@@ -1349,10 +1495,14 @@ fn spawn_file_watch(app: AppHandle, dir: PathBuf) {
     std::thread::spawn(move || {
         let mtime = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).ok();
         let (theme, config) = (dir.join("theme.css"), dir.join("config.json"));
-        let (mut lt, mut lc) = (mtime(&theme), mtime(&config));
+        let (mut lt, mut lc, mut ls) = (mtime(&theme), mtime(&config), themes_sig(&dir));
         loop {
             std::thread::sleep(Duration::from_millis(800));
-            let (t, c) = (mtime(&theme), mtime(&config));
+            let (t, c, s) = (mtime(&theme), mtime(&config), themes_sig(&dir));
+            if s != ls {
+                ls = s;
+                let _ = app.emit("themes-changed", ());
+            }
             if t != lt {
                 lt = t;
                 if let Ok(css) = fs::read_to_string(&theme) {
@@ -2232,6 +2382,9 @@ fn main() {
             unpin_widget,
             set_edit_mode,
             open_theme_file,
+            list_themes,
+            save_theme_pack,
+            open_themes_folder,
             get_settings,
             set_app,
             open_settings,

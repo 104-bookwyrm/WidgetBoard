@@ -167,5 +167,20 @@
   "set.tutorial.seen": "Seen",
   "set.tutorial.whats_new": "What's new",
   "set.guide.try": "Try it",
-  "set.about.report": "Report a problem"
+  "set.about.report": "Report a problem",
+  "themes.title": "Choose a theme",
+  "themes.hint": "A theme is a picture in the themes folder. Repaint it and save, and the board changes right away.",
+  "themes.none": "Use the colours below",
+  "themes.open_folder": "Open themes folder",
+  "themes.save_current": "Save the current look as a theme…",
+  "themes.save": "Save",
+  "themes.code_copy": "Copy theme code",
+  "themes.code_paste": "Paste a theme code…",
+  "themes.code_apply": "Apply theme",
+  "themes.code_copied": "Theme code copied.",
+  "themes.code_bad": "No theme code found. Paste a code that starts with WB1:.",
+  "themes.pasted": "Pasted theme",
+  "themes.exists": "A theme with that name already exists. Use another name.",
+  "themes.saved": "Saved the theme ‘{name}’.",
+  "themes.active_note": "Using the theme ‘{name}’. Colours and settings set in the theme take priority over these."
 }

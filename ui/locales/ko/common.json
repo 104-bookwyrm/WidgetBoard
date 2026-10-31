@@ -70,5 +70,8 @@
   "fmt.follow": "설정과 같게",
   "fmt.h12": "12시간",
   "fmt.h12plain": "12시간 (오전/오후 없이)",
-  "fmt.h24": "24시간"
+  "fmt.h24": "24시간",
+  "themes.seed.base": "기본",
+  "themes.seed.mine": "내 테마",
+  "themes.seed.blank": "빈 템플릿"
 }

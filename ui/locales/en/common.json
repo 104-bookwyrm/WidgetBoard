@@ -70,5 +70,8 @@
   "fmt.follow": "Same as Settings",
   "fmt.h12": "12-hour",
   "fmt.h12plain": "12-hour, no AM/PM",
-  "fmt.h24": "24-hour"
+  "fmt.h24": "24-hour",
+  "themes.seed.base": "Default",
+  "themes.seed.mine": "My theme",
+  "themes.seed.blank": "Blank template"
 }

@@ -17,5 +17,20 @@
   "set.cal.sub_at": "Status after a subscription's name in the list: {n} entries, {when} = date and time of the last successful download.",
   "set.cal.sub_pending": "Status after a just-added subscription that has not been downloaded yet.",
   "set.cal.sub_failed": "Status after a subscription whose last download failed; the technical reason shows as a tooltip. The last good copy stays in the calendar.",
-  "set.cal.sub_bad_url": "Browser validation bubble on the link box when the text is not an https:// or webcal:// link."
+  "set.cal.sub_bad_url": "Browser validation bubble on the link box when the text is not an https:// or webcal:// link.",
+  "themes.title": "Settings > Appearance: heading of the theme picker (one card per theme folder). Short.",
+  "themes.hint": "Under the theme picker: a theme is an image in the themes folder; repainting and saving it changes the board at once. One or two sentences.",
+  "themes.none": "First theme card: no theme folder, use the colour settings below it on the page. Short.",
+  "themes.open_folder": "Button: opens the themes folder in Explorer.",
+  "themes.save_current": "Button that opens a name box to save the current look as a new theme folder. Ends with an ellipsis.",
+  "themes.save": "Button next to the name box: saves the theme.",
+  "themes.code_copy": "Button: copies the active theme as a short text code (WB1:...) for chat apps.",
+  "themes.code_paste": "Button that opens a box to paste a theme code. Ends with an ellipsis.",
+  "themes.code_apply": "Button under the paste box: makes a theme from the code and uses it.",
+  "themes.code_copied": "Toast after copying a theme code. Full sentence.",
+  "themes.code_bad": "Toast when the pasted text has no theme code; says what a code starts with. Full sentences.",
+  "themes.pasted": "Folder name for a theme made from a pasted code (numbered when repeated). 2 words.",
+  "themes.exists": "Toast when the typed theme name is already used. Full sentences.",
+  "themes.saved": "Toast after saving a theme. {name} is the theme name.",
+  "themes.active_note": "Note above the colour pickers while a theme folder is in use: the theme's painted colours win over these pickers. {name} is the theme. Full sentences."
 }

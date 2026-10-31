@@ -1,0 +1,16 @@
+{
+  "pal.title": "WidgetBoard colours",
+  "pal.board": "Board",
+  "pal.how": "Checkered squares use the board's colour; on the board row, the default",
+  "pal.s.c1": "Bg",
+  "pal.s.c2": "Accent",
+  "pal.s.c3": "Text",
+  "pal.n.on_accent": "Text on accent",
+  "pal.n.line": "Outline",
+  "pal.n.frame": "Frame decoration",
+  "pal.n.memo_text": "Memo text",
+  "pal.s.hol": "Hol",
+  "pal.s.sat": "Sat",
+  "pal.s.danger": "Warn",
+  "pal.s.stamp": "Stamp"
+}
