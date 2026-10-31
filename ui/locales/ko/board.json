@@ -78,7 +78,7 @@
   "menu.unpin": "보드로 돌려놓기",
   "layers.open": "레이어",
   "layers.title": "레이어",
-  "layers.hint": "위가 앞입니다. 줄을 끌어 순서를 바꿉니다. Ctrl+] / Ctrl+[로 선택한 위젯을 한 칸씩, Shift를 함께 누르면 맨 앞이나 맨 뒤로 옮깁니다.",
+  "layers.hint": "위가 앞입니다. 줄을 끌어 순서를 바꿉니다. Command/Ctrl+] 또는 [로 선택한 위젯을 한 칸씩, Shift를 함께 누르면 맨 앞이나 맨 뒤로 옮깁니다.",
   "layers.show": "보이기",
   "layers.hide": "숨기기",
   "layers.lock": "위치 잠금",

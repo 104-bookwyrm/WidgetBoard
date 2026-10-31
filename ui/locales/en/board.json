@@ -78,7 +78,7 @@
   "menu.unpin": "Back to board",
   "layers.open": "Layers",
   "layers.title": "Layers",
-  "layers.hint": "Top is front. Drag a row to change the order. Ctrl+] / Ctrl+[ moves the selected widget one layer, with Shift to the front or back.",
+  "layers.hint": "Top is front. Drag a row to change the order. Command/Ctrl+] and [ moves the selected widget one layer, with Shift to the front or back.",
   "layers.show": "Show",
   "layers.hide": "Hide",
   "layers.lock": "Lock position",

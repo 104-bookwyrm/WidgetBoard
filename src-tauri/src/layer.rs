@@ -117,13 +117,37 @@ mod win {
 #[cfg(windows)]
 pub use win::{keep_back, raise, set_topmost};
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+pub fn keep_back(w: &tauri::WebviewWindow) {
+    // Match macOS desktop widgets: present on every Space, above the wallpaper but below apps.
+    let _ = w.set_visible_on_all_workspaces(true);
+    let _ = w.set_always_on_bottom(true);
+}
+#[cfg(target_os = "macos")]
+pub fn raise(w: &tauri::WebviewWindow) {
+    // An explicit menu-bar/global-shortcut request temporarily returns the board to normal app
+    // z-order. The next foreground app naturally covers it again.
+    let _ = w.set_always_on_bottom(false);
+    let _ = w.set_focus();
+}
+#[cfg(target_os = "macos")]
+pub fn set_topmost(w: &tauri::WebviewWindow, on: bool) {
+    if on {
+        let _ = w.set_always_on_bottom(false);
+        let _ = w.set_always_on_top(true);
+    } else {
+        let _ = w.set_always_on_top(false);
+        let _ = w.set_always_on_bottom(true);
+    }
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
 pub fn keep_back(_w: &tauri::WebviewWindow) {}
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "macos")))]
 pub fn raise(w: &tauri::WebviewWindow) {
     let _ = w.set_focus();
 }
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "macos")))]
 pub fn set_topmost(w: &tauri::WebviewWindow, on: bool) {
     let _ = w.set_always_on_top(on);
 }

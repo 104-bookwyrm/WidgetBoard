@@ -6,6 +6,7 @@
 use serde_json::{json, Value};
 use std::sync::{mpsc, Arc, Mutex};
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub enum Cmd {
     PlayPause,
     Next,

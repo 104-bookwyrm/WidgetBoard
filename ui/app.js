@@ -1691,7 +1691,8 @@ function wireFrame(el, w, def, inst) {
       e.preventDefault();
       return announceSummary(w);
     }
-    if (freeMode() && e.ctrlKey && (e.code === "BracketRight" || e.code === "BracketLeft")) {
+    const primaryModifier = e.ctrlKey || (document.documentElement.dataset.platform === "macos" && e.metaKey);
+    if (freeMode() && primaryModifier && (e.code === "BracketRight" || e.code === "BracketLeft")) {
       // art-program shortcuts: Ctrl+] / Ctrl+[ one layer, with Shift to the front / back
       e.preventDefault();
       const up = e.code === "BracketRight";
@@ -2802,6 +2803,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
 (async function boot() {
   if (PIN) document.body.classList.add("pin");
   const st = await invoke("load_state");
+  document.documentElement.dataset.platform = st.platform || "windows";
   session = { launched: 0, closed: null, ...st.session };
   lang = st.lang || "ko";
   config = st.config || {};

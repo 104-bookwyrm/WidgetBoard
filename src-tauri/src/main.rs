@@ -28,14 +28,40 @@ use serde_json::{json, Value};
 use tauri::{
     ipc::{InvokeBody, Request},
     menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    webview::ScrollBarStyle,
+    tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Wry,
 };
+
+#[cfg(not(target_os = "macos"))]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 
 const DEFAULT_THEME: &str = include_str!("../../ui/default-theme.css");
 const DEFAULT_CONFIG: &str = include_str!("default-config.json");
 const TRAY_ID: &str = "main";
+
+#[cfg(target_os = "macos")]
+const PLATFORM: &str = "macos";
+#[cfg(windows)]
+const PLATFORM: &str = "windows";
+#[cfg(all(not(windows), not(target_os = "macos")))]
+const PLATFORM: &str = "linux";
+
+/// WebView2's Fluent overlay scrollbars are Windows-only. Keep that appearance on Windows
+/// without leaking the choice into every window builder or breaking other desktop targets.
+trait PlatformWebviewBuilderExt: Sized {
+    fn platform_scrollbars(self) -> Self;
+}
+
+impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> PlatformWebviewBuilderExt for WebviewWindowBuilder<'a, R, M> {
+    fn platform_scrollbars(self) -> Self {
+        #[cfg(windows)]
+        {
+            return self.scroll_bar_style(tauri::webview::ScrollBarStyle::FluentOverlay);
+        }
+        #[cfg(not(windows))]
+        self
+    }
+}
 
 /// Widget groups for the add menus (same file the UI loads); ids must match the REGISTRY in ui/app.js.
 fn widget_groups() -> &'static Vec<(String, Vec<String>)> {
@@ -211,7 +237,9 @@ fn read_json<T: for<'de> Deserialize<'de>>(p: &Path) -> Option<T> {
 fn open_path(p: &Path) {
     #[cfg(windows)]
     let _ = std::process::Command::new("explorer").arg(p).spawn();
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("/usr/bin/open").arg(p).spawn();
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(p).spawn();
 }
 
@@ -230,7 +258,9 @@ fn open_url(url: String) -> Result<(), String> {
         use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
         ShellExecuteW(None, w!("open"), &HSTRING::from(url.as_str()), None, None, SW_SHOWNORMAL);
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let _ = std::process::Command::new("/usr/bin/open").arg(&url).spawn();
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
     Ok(())
 }
@@ -361,7 +391,8 @@ fn load_state(window: WebviewWindow, state: State<AppState>) -> Value {
         "reduceMotion": settings.reduce_motion,
         "edit": state.edit.load(Ordering::Relaxed),
         "config": read_config(&state.dir),
-        "autostart": autostart_get(),
+        "autostart": autostart_get(window.app_handle()),
+        "platform": PLATFORM,
         "configBroken": i_am_primary && config_broken(&state.dir),
         "migrateError": if i_am_primary { state.migrate_error.clone() } else { None },
         "assetsDir": state.dir.join("assets"),
@@ -534,6 +565,7 @@ fn list_assets(state: State<AppState>) -> Vec<String> {
 /// Installed font families (from the Windows font registry), de-duplicated.
 #[tauri::command]
 fn list_fonts() -> Vec<String> {
+    #[allow(unused_mut)] // populated by platform-specific implementations
     let mut set = std::collections::BTreeSet::new();
     #[cfg(windows)]
     {
@@ -795,16 +827,20 @@ fn save_config(app: AppHandle, state: State<AppState>, patch: Value) -> Result<(
     Ok(())
 }
 
+#[cfg(windows)]
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 /// The Run / StartupApproved value name: "WidgetBoard" for the production build, its own name for any other
 /// build (devtest), so toggling autostart there never repoints the real entry. Set once at startup.
+#[cfg(windows)]
 static RUN_NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+#[cfg(windows)]
 fn run_name() -> &'static str {
     RUN_NAME.get().map(String::as_str).unwrap_or("WidgetBoard")
 }
 
 /// Task Manager's Startup tab keeps its own on/off here: a REG_BINARY whose first byte is 02 when enabled and
 /// 03 (plus a timestamp) when the user disabled it. Odd = disabled (checked against this machine's entries).
+#[cfg(windows)]
 const APPROVED_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
 /// The Run entry's target, quotes removed (None = no entry).
@@ -837,25 +873,34 @@ fn disabled_by_windows() -> bool {
 }
 
 /// Start with Windows: a Run entry pointing at this exe that Task Manager has not disabled.
-fn autostart_get() -> bool {
-    autostart_target().is_some() && !disabled_by_windows()
+fn autostart_get(app: &AppHandle) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        return app.autolaunch().is_enabled().unwrap_or(false);
+    }
+    #[cfg(windows)]
+    return autostart_target().is_some() && !disabled_by_windows();
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    false
 }
 
 /// At startup: a Run entry whose exe is gone (the app was moved) is pointed at this exe. Only an entry that
 /// already exists is touched, and only by the production build, so a devtest run never takes it over.
-fn repair_autostart(identifier: &str) {
+fn repair_autostart(app: &AppHandle, identifier: &str) {
+    let _ = app;
     if identifier != PRODUCTION_IDENTIFIER {
         return;
     }
     if let Some(target) = autostart_target() {
         if !Path::new(&target).exists() {
-            let _ = set_autostart(true);
+            let _ = set_autostart(app.clone(), true);
         }
     }
 }
 
 #[tauri::command]
-fn set_autostart(on: bool) -> Result<bool, String> {
+fn set_autostart(app: AppHandle, on: bool) -> Result<bool, String> {
     #[cfg(windows)]
     {
         use winreg::{enums::HKEY_CURRENT_USER, RegKey};
@@ -871,8 +916,19 @@ fn set_autostart(on: bool) -> Result<bool, String> {
             let _ = key.delete_value(run_name());
         }
     }
+    #[cfg(target_os = "macos")]
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let manager = app.autolaunch();
+        if on {
+            manager.enable().map_err(|e| e.to_string())?;
+        } else {
+            manager.disable().map_err(|e| e.to_string())?;
+        }
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     let _ = on;
-    Ok(autostart_get())
+    Ok(autostart_get(&app))
 }
 
 // ---------- assets + memo archive ----------
@@ -947,7 +1003,7 @@ fn memo_archive_list(state: State<AppState>) -> Vec<Value> {
 
 /// Everything the standalone settings window needs in one call.
 #[tauri::command]
-fn get_settings(state: State<AppState>) -> Value {
+fn get_settings(app: AppHandle, state: State<AppState>) -> Value {
     let s = state.settings.lock().unwrap().clone();
     let widgets: Vec<Value> = state
         .widgets
@@ -965,7 +1021,8 @@ fn get_settings(state: State<AppState>) -> Value {
         "app": { "lang": s.lang, "reduceMotion": s.reduce_motion },
         "theme": theme,
         "config": read_config(&state.dir),
-        "autostart": { "on": autostart_get(), "disabledByWindows": autostart_target().is_some() && disabled_by_windows() },
+        "autostart": { "on": autostart_get(&app), "disabledByWindows": autostart_target().is_some() && disabled_by_windows() },
+        "platform": PLATFORM,
         "version": updater::CURRENT,
         "displays": state.boards.lock().unwrap().clone(),
         "widgets": widgets,
@@ -1029,7 +1086,7 @@ fn open_settings_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
     }
     let lang = app.state::<AppState>().settings.lock().unwrap().lang.clone();
     let w = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App(format!("settings.html?page={page}").into()))
-        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
+        .platform_scrollbars()
         .title(tr(&lang, "set.title"))
         .inner_size(760.0, 560.0)
         .min_inner_size(560.0, 420.0)
@@ -1081,7 +1138,7 @@ fn open_demo_window(app: &AppHandle, origin: &str, focus: Option<&str>) -> tauri
     let init = format!("window.__demoInit = {};", json!({ "theme": theme, "config": config }));
     let url = format!("index.html?{}", demo_query(focus));
     let w = WebviewWindowBuilder::new(app, "demo", WebviewUrl::App(url.into()))
-        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
+        .platform_scrollbars()
         .title(tr(&lang, "demo.title"))
         .initialization_script(init)
         .background_color(tauri::window::Color(24, 25, 28, 255)) // opaque: the desktop never shows through
@@ -1145,7 +1202,7 @@ fn open_library_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
     }
     let lang = app.state::<AppState>().settings.lock().unwrap().lang.clone();
     let w = WebviewWindowBuilder::new(app, "library", WebviewUrl::App(format!("library.html?page={page}").into()))
-        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
+        .platform_scrollbars()
         .title(tr(&lang, "lib.title"))
         .inner_size(960.0, 620.0)
         .min_inner_size(420.0, 360.0)
@@ -1398,7 +1455,7 @@ async fn pin_widget(app: AppHandle, window: WebviewWindow, id: String, rect: Rec
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let (x, y, w, h) = pin_rect((origin.x, origin.y), rect, z, scale);
     let pin = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(format!("index.html?pin={id}").into()))
-        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
+        .platform_scrollbars()
         .title("WidgetBoard")
         .transparent(true)
         .decorations(false)
@@ -1633,7 +1690,7 @@ fn create_boards(app: &AppHandle) -> tauri::Result<()> {
         let init = if tutorial_debug { "window.__tutorialDebug = true;" } else { "" };
         let w = WebviewWindowBuilder::new(app, &b.label, WebviewUrl::App("index.html".into()))
         .initialization_script(init)
-        .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
+        .platform_scrollbars()
             .title("WidgetBoard")
             // start at the right size so the page never lays out on a wrong-sized board
             .position(wa.position.x as f64 / sf, wa.position.y as f64 / sf)
@@ -1739,7 +1796,11 @@ fn local_stamp() -> String {
     let t = unsafe { GetLocalTime() };
     format!("{:04}{:02}{:02}-{:02}{:02}", t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute)
 }
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn local_stamp() -> String {
+    chrono::Local::now().format("%Y%m%d-%H%M").to_string()
+}
+#[cfg(all(not(windows), not(target_os = "macos")))]
 fn local_stamp() -> String {
     now_secs().to_string()
 }
@@ -2252,13 +2313,18 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .icon(if dev { dev_mark(&icon) } else { icon })
         .tooltip(if dev { "WidgetBoard (dev)" } else { "WidgetBoard" })
         .menu(&build_menu(app)?)
-        .show_menu_on_left_click(false)
+        // Menu-bar items conventionally open on a primary click; Windows keeps its explicit
+        // left-click-to-reveal behavior and opens the tray menu with the secondary button.
+        .show_menu_on_left_click(cfg!(target_os = "macos"))
         .on_menu_event(|app, ev| on_menu(app, ev.id().as_ref()))
         .on_tray_icon_event(|tray, ev| {
+            #[cfg(not(target_os = "macos"))]
             // left-click only shows (a stray click must not hide anything); hiding is the menu's Show/hide
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = ev {
                 raise_boards(tray.app_handle());
             }
+            #[cfg(target_os = "macos")]
+            let _ = (tray, ev);
         })
         .build(app)?;
     Ok(())
@@ -2275,6 +2341,14 @@ fn main() {
             let _ = app.emit("toast", "toast.already_running");
         }))
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                app.handle().set_activation_policy(tauri::ActivationPolicy::Accessory)?;
+                app.handle().plugin(tauri_plugin_autostart::init(
+                    tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                    None,
+                ))?;
+            }
             let dir = app.path().app_data_dir()?;
             let just_updated = install_pending_update(&dir); // may relaunch the new exe and exit
             for sub in ["assets", "data", "diary", "updates"] {
@@ -2295,8 +2369,9 @@ fn main() {
             let migrate_error = migrate_error.or(migrate::merge_checklist(&dir, &backups_root(app.handle(), &dir)).err());
             let settings = load_settings(&dir);
             let id = app.config().identifier.clone();
+            #[cfg(windows)]
             let _ = RUN_NAME.set(if id == PRODUCTION_IDENTIFIER { "WidgetBoard".into() } else { format!("WidgetBoard ({id})") });
-            repair_autostart(&id);
+            repair_autostart(app.handle(), &id);
             let content = content::load(&dir);
             // timers, stopwatches and pomodoros that ran when the app last closed stop at that moment (app.js)
             let closed = read_json::<Value>(&dir.join("data").join("closed.json")).and_then(|v| v["at"].as_u64());

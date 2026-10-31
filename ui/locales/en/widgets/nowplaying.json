@@ -1,7 +1,7 @@
 {
   "np.none": "Nothing is playing",
   "np.hint": "Play something in YouTube, Spotify… and it shows here",
-  "np.unsupported": "Works on Windows only",
+  "np.unsupported": "System media controls are not available on this Mac yet",
   "np.prev": "Previous",
   "np.next": "Next",
   "np.play": "Play",

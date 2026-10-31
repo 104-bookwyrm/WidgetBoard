@@ -1,7 +1,7 @@
 {
   "np.none": "재생 중인 미디어가 없습니다.",
   "np.hint": "유튜브나 치지직 등에서 재생하면 여기에 표시됩니다.",
-  "np.unsupported": "Windows에서만 지원하는 기능입니다.",
+  "np.unsupported": "Mac 시스템 미디어 제어는 아직 지원되지 않습니다.",
   "np.prev": "이전",
   "np.next": "다음",
   "np.play": "재생",

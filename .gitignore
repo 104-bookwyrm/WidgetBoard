@@ -33,3 +33,6 @@ shots/
 
 # dev docs (architecture map, design records, QA worksheets)
 docs/
+!docs/
+docs/*
+!docs/macos-port.md

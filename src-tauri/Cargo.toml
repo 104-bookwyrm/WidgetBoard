@@ -8,7 +8,7 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
+tauri = { version = "2", features = ["tray-icon", "protocol-asset", "macos-private-api"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-single-instance = "2"
@@ -18,6 +18,10 @@ tauri-plugin-notification = "2"
 # self-update: release signatures + hashes (pure Rust, small)
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 sha2 = "0.10"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+tauri-plugin-autostart = "2"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

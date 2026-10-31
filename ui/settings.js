@@ -249,6 +249,22 @@ function fillGeneral() {
       saved();
     });
 
+  if (data.platform === "macos") {
+    const hotkey = $("#a11y-hotkey");
+    const current = cfgUi().hotkey || "";
+    hotkey.innerHTML = [
+      ["", t("set.off")],
+      ["CommandOrControl+Alt+W", "⌘ ⌥ W"],
+      ["CommandOrControl+Alt+Space", "⌘ ⌥ Space"],
+      ["CommandOrControl+Shift+F12", "⌘ ⇧ F12"],
+    ].map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+    if (current.startsWith("Ctrl+")) {
+      const migrated = current.replace("Ctrl+", "CommandOrControl+");
+      invoke("save_config", { patch: { ui: { hotkey: migrated } } }).catch(() => {});
+      hotkey.value = migrated;
+    } else hotkey.value = current;
+  }
+
   const week = $("#set-weekstart");
   week.value = cfgUi().weekStart || "default";
   week.onchange = () =>
@@ -954,6 +970,7 @@ function fillWidgets() {
 // ---- init ----
 async function init() {
   data = await invoke("get_settings");
+  document.documentElement.dataset.platform = data.platform || "windows";
   applyTheme(data.theme);
   await loadLang(data.app.lang, "settings");
   [helpCatalogue, helpState] = await Promise.all([loadCatalogue(), readHelp(invoke)]);
@@ -1039,9 +1056,9 @@ async function init() {
       $("#th-paste").hidden = true;
       $("#th-ai-paste").focus();
     } else if (e.key === "Escape") win.close();
-    else if (e.ctrlKey && (e.key === "Tab" || e.key === "PageDown"))
+    else if ((e.ctrlKey || (data.platform === "macos" && e.metaKey)) && (e.key === "Tab" || e.key === "PageDown"))
       (e.preventDefault(), cyclePage(e.shiftKey ? -1 : 1));
-    else if (e.ctrlKey && e.key === "PageUp")
+    else if ((e.ctrlKey || (data.platform === "macos" && e.metaKey)) && e.key === "PageUp")
       (e.preventDefault(), cyclePage(-1));
   });
 }
