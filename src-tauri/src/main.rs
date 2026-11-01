@@ -901,6 +901,37 @@ fn run_name() -> &'static str {
 /// 03 (plus a timestamp) when the user disabled it. Odd = disabled (checked against this machine's entries).
 const APPROVED_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
+/// Parse the executable target from the registry command, which is quoted when written by WidgetBoard.
+fn normalized_autostart_target(raw: &str) -> PathBuf {
+    let raw = raw.trim();
+    let target = if let Some(quoted) = raw.strip_prefix('"') {
+        quoted.split_once('"').map_or(quoted, |(target, _)| target)
+    } else {
+        raw
+    };
+    PathBuf::from(target)
+}
+
+/// Missing entries remain missing. Windows path comparisons are case-insensitive.
+fn should_repair_autostart(existing: Option<&str>, current: &Path) -> bool {
+    let Some(existing) = existing else { return false };
+    let existing = normalized_autostart_target(existing).to_string_lossy().replace('/', "\\");
+    let current = current.to_string_lossy().replace('/', "\\");
+    !existing.eq_ignore_ascii_case(&current)
+}
+
+/// Write the Run value without changing Task Manager's separate enabled/disabled state.
+fn write_autostart_target() -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let (key, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(RUN_KEY).map_err(|e| e.to_string())?;
+        key.set_value(run_name(), &format!("\"{}\"", exe.display())).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// The Run entry's target, quotes removed (None = no entry).
 fn autostart_target() -> Option<String> {
     #[cfg(windows)]
@@ -941,10 +972,10 @@ fn repair_autostart(identifier: &str) {
     if identifier != PRODUCTION_IDENTIFIER {
         return;
     }
-    if let Some(target) = autostart_target() {
-        if !Path::new(&target).exists() {
-            let _ = set_autostart(true);
-        }
+    let Some(target) = autostart_target() else { return };
+    let Ok(current) = std::env::current_exe() else { return };
+    if should_repair_autostart(Some(&target), &current) {
+        let _ = write_autostart_target();
     }
 }
 
@@ -955,8 +986,7 @@ fn set_autostart(on: bool) -> Result<bool, String> {
         use winreg::{enums::HKEY_CURRENT_USER, RegKey};
         let (key, _) = RegKey::predef(HKEY_CURRENT_USER).create_subkey(RUN_KEY).map_err(|e| e.to_string())?;
         if on {
-            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-            key.set_value(run_name(), &format!("\"{}\"", exe.display())).map_err(|e| e.to_string())?;
+            write_autostart_target()?;
             // turning it on here also clears a "Disabled" set in Task Manager
             if let Ok(approved) = RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags(APPROVED_KEY, winreg::enums::KEY_SET_VALUE) {
                 let _ = approved.delete_value(run_name());
@@ -2509,6 +2539,52 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn autostart_missing_run_entry_stays_absent() {
+        let current = PathBuf::from(r"C:\Users\Yoon\AppData\Local\Programs\WidgetBoard\WidgetBoard.exe");
+        assert!(!should_repair_autostart(None, &current));
+    }
+
+    #[test]
+    fn autostart_matching_path_needs_no_repair() {
+        let current = PathBuf::from(r"C:\Users\Yoon\AppData\Local\Programs\WidgetBoard\WidgetBoard.exe");
+        assert!(!should_repair_autostart(
+            Some(r"C:\Users\Yoon\AppData\Local\Programs\WidgetBoard\WidgetBoard.exe"),
+            &current
+        ));
+    }
+
+    #[test]
+    fn autostart_quoted_portable_path_needs_repair() {
+        let current = PathBuf::from(r"C:\Users\Yoon\AppData\Local\Programs\WidgetBoard\WidgetBoard.exe");
+        assert!(should_repair_autostart(
+            Some(r#""D:\Downloads\WidgetBoard.exe""#),
+            &current
+        ));
+    }
+
+    #[test]
+    fn autostart_path_comparison_ignores_case() {
+        let current = PathBuf::from(r"C:\Users\Yoon\AppData\Local\Programs\WidgetBoard\WidgetBoard.exe");
+        assert!(!should_repair_autostart(
+            Some(r"c:\users\yoon\appdata\local\programs\widgetboard\widgetboard.exe"),
+            &current
+        ));
+    }
+
+    #[test]
+    fn autostart_installed_path_with_spaces_matches() {
+        let current = PathBuf::from(r"C:\Users\Yoon\AppData\Local\Programs\Widget Board\WidgetBoard.exe");
+        assert_eq!(
+            normalized_autostart_target(r#""C:\Users\Yoon\AppData\Local\Programs\Widget Board\WidgetBoard.exe""#),
+            current
+        );
+        assert!(!should_repair_autostart(
+            Some(r#""C:\Users\Yoon\AppData\Local\Programs\Widget Board\WidgetBoard.exe""#),
+            &current
+        ));
+    }
 
     #[test]
     fn pin_rect_maps_css_px_to_physical_screen() {
