@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import test, { after } from 'node:test';
@@ -159,6 +159,23 @@ test('signer invokes one configured adapter with an absolute path', async () => 
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test('signer preserves a signed NSIS nst temporary uninstaller before it is deleted', async () => {
+  const f = signingFixture();
+  f.pe = path.join(f.root, 'nstA17F.tmp');
+  writeFileSync(f.pe, Buffer.from('MZ temporary NSIS uninstaller'));
+  try {
+    const record = await signTest(f);
+    const preserved = path.join(f.tmp, 'widgetboard-authenticode-evidence', 'nsis-uninstaller.exe');
+    assert.equal(record.callbackRole, 'nsis-uninstaller');
+    assert.equal(record.path, f.pe);
+    assert.equal(record.identity, normalizeIdentity(f.pe));
+    assert.equal(record.preservedPath, preserved);
+    assert.equal(record.preservedSha256, crypto.createHash('sha256').update(readFileSync(preserved)).digest('hex'));
+    unlinkSync(f.pe);
+    assert.equal(readFileSync(preserved).toString().includes('FAKE-AUTHENTICODE-SIGNATURE'), true);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test('signer rejects missing adapter', async () => {
   const f = signingFixture();
   try { await assert.rejects(signTest(f, { env: { WIDGETBOARD_AUTHENTICODE_ADAPTER: '' } }), /WIDGETBOARD_AUTHENTICODE_ADAPTER/); }
@@ -204,26 +221,49 @@ function assemblyFixture() {
   writeFileSync(path.join(root, 'package.json'), JSON.stringify({ devDependencies: { '@tauri-apps/cli': '2.11.4' } }));
   mkdirSync(path.join(root, 'src-tauri'), { recursive: true });
   writeFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), JSON.stringify({ version: '1.2.3', plugins: { updater: { pubkey: keys.pubkey } } }));
+  cpSync(path.join(process.cwd(), 'tools', 'release', 'minisign-verifier'), path.join(root, 'tools', 'release', 'minisign-verifier'), { recursive: true });
   const pluginDir = path.join(root, 'src-tauri', 'target', 'release', 'nsis', 'x64', 'Plugins', 'x86-unicode');
   mkdirSync(pluginDir, { recursive: true });
+  const uninstaller = path.join(root, 'nsis-temp', 'nstA17F.tmp');
+  const runnerTemp = path.join(root, 'runner-temp');
+  const preservedUninstaller = path.join(runnerTemp, 'widgetboard-authenticode-evidence', 'nsis-uninstaller.exe');
+  mkdirSync(path.dirname(preservedUninstaller), { recursive: true });
   const callbackPaths = [
     path.join(root, 'src-tauri', 'target', 'release', 'widgetboard.exe'),
     ...['NSISdl.dll', 'StartMenu.dll', 'System.dll', 'nsDialogs.dll', 'additional/nsis_tauri_utils.dll'].map((name) => path.join(pluginDir, name)),
-    path.join(root, 'src-tauri', 'target', 'release', 'nsis', 'x64', 'uninstall.exe'),
+    uninstaller,
     installer,
   ];
   for (const [index, file] of callbackPaths.entries()) {
     mkdirSync(path.dirname(file), { recursive: true });
     if (file !== installer) writeFileSync(file, Buffer.from(`callback PE ${index}`));
   }
-  const evidence = path.join(root, 'authenticode.jsonl');
+  writeFileSync(preservedUninstaller, Buffer.concat([readFileSync(uninstaller), Buffer.from('\nAUTHENTICODE-SIGNED') ]));
+  unlinkSync(uninstaller);
+  const evidence = path.join(runnerTemp, 'widgetboard-authenticode.jsonl');
   const roles = ['application', 'nsis-plugin:nsisdl.dll', 'nsis-plugin:startmenu.dll', 'nsis-plugin:system.dll', 'nsis-plugin:nsdialogs.dll', 'nsis-plugin:additional/nsis_tauri_utils.dll', 'nsis-uninstaller', 'final-installer'];
   const records = callbackPaths.map((file, index) => {
-    const digest = crypto.createHash('sha256').update(readFileSync(file)).digest('hex');
-    return { status: 'success', authenticodeStatus: 'Valid', path: file, identity: normalizeIdentity(file), callbackRole: roles[index], sha256Before: 'b'.repeat(64), sha256: digest, subject: 'CN=WidgetBoard', timestampSubject: 'CN=Timestamp', timestampThumbprint: 'T'.repeat(40) };
+    const bytes = index === 6 ? readFileSync(preservedUninstaller) : readFileSync(file);
+    const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+    return { status: 'success', authenticodeStatus: 'Valid', path: file, identity: normalizeIdentity(file), callbackRole: roles[index], sha256Before: 'b'.repeat(64), sha256: digest, ...(index === 6 ? { preservedPath: preservedUninstaller, preservedSha256: digest } : {}), subject: 'CN=WidgetBoard', timestampSubject: 'CN=Timestamp', timestampThumbprint: 'T'.repeat(40) };
   });
   writeFileSync(evidence, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
   return { root, installer, signature, bytes, evidence, context: { tag: 'v1.2.3', version: '1.2.3', sha: 'a'.repeat(40), notesPath: 'RELEASE_NOTES.md' } };
+}
+
+function runPowerShellVerifier(fixture, output) {
+  const scriptDirectory = path.join(fixture.root, 'tools', 'release');
+  mkdirSync(scriptDirectory, { recursive: true });
+  const sourceScript = readFileSync(path.join(process.cwd(), 'tools', 'release', 'verify.ps1'), 'utf8');
+  const targetRoot = process.cwd().replaceAll("'", "''");
+  const fixtureRoot = fixture.root.replaceAll("'", "''");
+  const testScript = sourceScript
+    .replace(/^\$scriptRepositoryRoot = .*$/m, `$scriptRepositoryRoot = '${targetRoot}'`)
+    .replace(/^\$repositoryRoot = \$scriptRepositoryRoot$/m, `$repositoryRoot = '${fixtureRoot}'`);
+  const script = path.join(scriptDirectory, 'verify.ps1');
+  writeFileSync(script, testScript, 'utf8');
+  const command = `$ErrorActionPreference='Stop'; function global:Get-AuthenticodeSignature { param([string]$LiteralPath) [pscustomobject]@{ Status='Valid'; SignerCertificate=[pscustomobject]@{ Subject='CN=WidgetBoard'; Thumbprint='A' }; TimeStamperCertificate=[pscustomobject]@{ Subject='CN=Timestamp'; Thumbprint='B' } } }; function global:Get-FileHash { param([string]$LiteralPath,[string]$Algorithm) $sha=[System.Security.Cryptography.SHA256]::Create(); try { $stream=[System.IO.File]::OpenRead($LiteralPath); try { $hex=[BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-','') } finally { $stream.Dispose() } } finally { $sha.Dispose() }; [pscustomobject]@{ Hash=$hex } }; & '${script.replaceAll("'", "''")}' -ReleaseDirectory '${output.directory.replaceAll("'", "''")}' -ExpectedSubject 'CN=WidgetBoard'`;
+  return execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command], { cwd: process.cwd(), encoding: 'utf8' });
 }
 
 let testSigningKeys;
@@ -331,6 +371,53 @@ test('assembler refuses stale release staging output', () => {
     mkdirSync(staging, { recursive: true });
     writeFileSync(path.join(staging, 'old-artifact.txt'), 'stale');
     assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /empty|stale|nonempty/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('assembler and PowerShell verifier accept a deleted nst temporary uninstaller with preserved signed bytes', { skip: process.platform !== 'win32' }, () => {
+  const f = assemblyFixture();
+  try {
+    const out = assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence });
+    const metadata = JSON.parse(readFileSync(out.metadata, 'utf8'));
+    metadata.installerSourcePath = metadata.installerSourcePath.toUpperCase();
+    metadata.signerEvidenceDirectory = metadata.signerEvidenceDirectory.toUpperCase();
+    for (const entry of metadata.signerEvidence) {
+      entry.path = entry.path.toUpperCase();
+      if (entry.preservedPath) entry.preservedPath = entry.preservedPath.toUpperCase();
+    }
+    writeFileSync(out.metadata, `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+    const metadataHash = crypto.createHash('sha256').update(readFileSync(out.metadata)).digest('hex');
+    const checksums = readFileSync(out.checksums, 'utf8').replace(/^[0-9a-f]{64}(  release-metadata\.json)$/m, `${metadataHash}$1`);
+    writeFileSync(out.checksums, checksums, 'utf8');
+    const stdout = runPowerShellVerifier(f, out);
+    assert.match(stdout, /Verified v1\.2\.3 installer/);
+    const uninstaller = metadata.signerEvidence.find((entry) => entry.callbackRole === 'nsis-uninstaller');
+    assert.equal(readFileSync(uninstaller.preservedPath.toLowerCase()).length > 0, true);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('PowerShell verifier rejects missing or changed preserved NSIS uninstaller bytes', { skip: process.platform !== 'win32' }, () => {
+  const f = assemblyFixture();
+  try {
+    const out = assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence });
+    const metadata = JSON.parse(readFileSync(out.metadata, 'utf8'));
+    const uninstaller = metadata.signerEvidence.find((entry) => entry.callbackRole === 'nsis-uninstaller');
+    unlinkSync(uninstaller.preservedPath);
+    assert.throws(() => runPowerShellVerifier(f, out), /preserved NSIS uninstaller bytes are missing/i);
+    writeFileSync(uninstaller.preservedPath, 'changed preserved bytes');
+    assert.throws(() => runPowerShellVerifier(f, out), /preserved NSIS uninstaller SHA-256 mismatch/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('assembler rejects missing or changed preserved uninstaller bytes', () => {
+  const f = assemblyFixture();
+  try {
+    let records = readFileSync(f.evidence, 'utf8').trim().split(/\r?\n/).map(JSON.parse);
+    const uninstaller = records.find((entry) => entry.callbackRole === 'nsis-uninstaller');
+    unlinkSync(uninstaller.preservedPath);
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /preserved|uninstaller/i);
+    writeFileSync(uninstaller.preservedPath, 'changed');
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /preserved|digest|uninstaller/i);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 

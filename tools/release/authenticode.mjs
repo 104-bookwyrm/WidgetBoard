@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, constants, copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -13,13 +13,32 @@ function callbackRole(file) {
   const normalized = normalizeIdentity(file);
   const basename = path.basename(file).toLowerCase();
   if (basename === 'widgetboard.exe' && normalized.includes('/src-tauri/target/release/')) return 'application';
-  if (basename === 'uninstall.exe') return 'nsis-uninstaller';
+  if (/^nst.*\.tmp$/i.test(basename)) return 'nsis-uninstaller';
   if (nsisPlugins.has(basename) && normalized.includes('/nsis/x64/plugins/x86-unicode/')) {
     const relative = normalized.split('/nsis/x64/plugins/x86-unicode/').at(-1);
     return `nsis-plugin:${relative}`;
   }
   if (/^widgetboard_.+_x64-setup\.exe$/i.test(path.basename(file))) return 'final-installer';
   return 'unclassified';
+}
+
+function preserveNsisUninstaller(file, runnerTemp, digest) {
+  const evidenceDirectory = path.resolve(runnerTemp, 'widgetboard-authenticode-evidence');
+  mkdirSync(runnerTemp, { recursive: true });
+  mkdirSync(evidenceDirectory, { recursive: true });
+  const runnerRoot = realpathSync(runnerTemp);
+  const resolvedEvidenceDirectory = realpathSync(evidenceDirectory);
+  const relative = path.relative(runnerRoot, resolvedEvidenceDirectory);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('NSIS uninstaller evidence directory escapes RUNNER_TEMP');
+  const preservedPath = path.join(resolvedEvidenceDirectory, 'nsis-uninstaller.exe');
+  if (existsSync(preservedPath)) throw new Error(`NSIS uninstaller evidence already exists: ${preservedPath}`);
+  copyFileSync(file, preservedPath, constants.COPYFILE_EXCL);
+  const preservedSha256 = sha256(preservedPath);
+  if (preservedSha256 !== digest) {
+    rmSync(preservedPath, { force: true });
+    throw new Error('Preserved NSIS uninstaller bytes do not match the signed callback bytes');
+  }
+  return { preservedPath, preservedSha256 };
 }
 
 function requireSetting(env, key) {
@@ -43,20 +62,23 @@ export async function signArtifact({ file, env = process.env, runAdapter, inspec
   if (signature?.status !== 'Valid') throw new Error(`Authenticode Status must be Valid; received ${signature?.status ?? 'missing'}`);
   if (signature?.subject !== expectedSubject) throw new Error(`Authenticode subject mismatch: expected ${expectedSubject}; received ${signature?.subject ?? 'missing'}`);
   if (typeof signature?.timestampSubject !== 'string' || !signature.timestampSubject.trim()) throw new Error('Authenticode timestamp certificate is required');
+  mkdirSync(runnerTemp, { recursive: true });
+  const role = callbackRole(absoluteFile);
+  const preserved = role === 'nsis-uninstaller' ? preserveNsisUninstaller(absoluteFile, runnerTemp, after) : {};
   const record = {
     status: 'success',
     path: absoluteFile,
     identity: normalizeIdentity(absoluteFile),
-    callbackRole: callbackRole(absoluteFile),
+    callbackRole: role,
     sha256Before: before,
     sha256: after,
     authenticodeStatus: signature.status,
     subject: signature.subject,
     timestampSubject: signature.timestampSubject,
     timestampThumbprint: signature.timestampThumbprint ?? null,
+    ...preserved,
     signedAt: new Date().toISOString(),
   };
-  mkdirSync(runnerTemp, { recursive: true });
   appendFileSync(path.join(runnerTemp, 'widgetboard-authenticode.jsonl'), `${JSON.stringify(record)}\n`, 'utf8');
   return record;
 }

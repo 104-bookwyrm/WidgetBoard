@@ -63,6 +63,9 @@ function expectedCallbackFiles(root, installer) {
 function validateCallbackEvidence({ root, installer, evidence }) {
   const records = readJsonl(evidence);
   if (!records.length) fail('Complete successful Authenticode callback evidence is required');
+  const evidenceFile = path.resolve(evidence);
+  const runnerTemp = realpathSync(path.dirname(evidenceFile));
+  const preservedUninstallerPath = path.join(runnerTemp, 'widgetboard-authenticode-evidence', 'nsis-uninstaller.exe');
   const expected = expectedCallbackFiles(root, installer);
   const expectedByIdentity = new Map(expected.map((entry) => [normalizePath(entry.path), entry]));
   for (const entry of expected) {
@@ -79,7 +82,7 @@ function validateCallbackEvidence({ root, installer, evidence }) {
     seenIdentities.add(identity);
     const staticCallback = expectedByIdentity.get(identity);
     let role = staticCallback?.role;
-    if (!role && path.basename(record.path).toLowerCase() === 'uninstall.exe') role = 'nsis-uninstaller';
+    if (!role && /^nst.*\.tmp$/i.test(path.basename(record.path))) role = 'nsis-uninstaller';
     if (!role) fail(`Unexpected Authenticode callback identity: ${record.identity}`);
     if (record.callbackRole !== role) fail(`Authenticode callback role mismatch for ${record.identity}`);
     if (seenRoles.has(role)) fail(`Duplicate Authenticode callback role: ${role}`);
@@ -88,11 +91,18 @@ function validateCallbackEvidence({ root, installer, evidence }) {
       fail(`Callback evidence is missing required SHA-256 digests: ${record.identity}`);
     }
     if (!record.subject || !record.timestampSubject || !record.timestampThumbprint) fail(`Callback evidence is missing certificate evidence: ${record.identity}`);
-    if (sha256(record.path) !== record.sha256.toLowerCase()) fail(`Callback SHA-256 does not bind to current bytes: ${record.identity}`);
-    if (!containedPath(path.join(root, 'src-tauri', 'target'), record.path) && role !== 'nsis-uninstaller') {
-      fail(`Callback path is outside the Tauri release target: ${record.path}`);
+    if (role === 'nsis-uninstaller') {
+      if (!/^nst.*\.tmp$/i.test(path.basename(record.path))) fail('NSIS uninstaller callback must identify an nst*.tmp input');
+      if (normalizePath(record.preservedPath ?? '') !== normalizePath(preservedUninstallerPath)) fail('Preserved NSIS uninstaller must use the fixed runner evidence path');
+      if (!containedPath(runnerTemp, record.preservedPath)) fail('Preserved NSIS uninstaller escapes RUNNER_TEMP');
+      if (!existsSync(record.preservedPath) || normalizePath(realpathSync(record.preservedPath)) !== normalizePath(preservedUninstallerPath)) fail('Preserved NSIS uninstaller bytes are missing or redirected');
+      if (!/^[0-9a-f]{64}$/i.test(record.preservedSha256 ?? '')) fail('Preserved NSIS uninstaller digest is required');
+      const preservedDigest = sha256(record.preservedPath);
+      if (preservedDigest !== record.sha256.toLowerCase() || preservedDigest !== record.preservedSha256.toLowerCase()) fail('Preserved NSIS uninstaller bytes do not match callback evidence');
+    } else {
+      if (!existsSync(record.path) || sha256(record.path) !== record.sha256.toLowerCase()) fail(`Callback SHA-256 does not bind to current bytes: ${record.identity}`);
+      if (!containedPath(path.join(root, 'src-tauri', 'target'), record.path)) fail(`Callback path is outside the Tauri release target: ${record.path}`);
     }
-    if (role === 'nsis-uninstaller' && !/\.exe$/i.test(record.path)) fail('NSIS uninstaller callback must name a PE executable');
   }
   const requiredRoles = [...expected.map((entry) => entry.role), 'nsis-uninstaller'];
   for (const role of requiredRoles) {
@@ -169,6 +179,7 @@ export function assembleRelease({ root, context, installer, signature, evidence 
     manifestUrl: immutableUrl,
     tools: { node: process.version, tauriCli },
     expectedCallbackRoles: [...expectedCallbackFiles(releaseRoot, sourceInstaller).map((entry) => entry.role), 'nsis-uninstaller'],
+    signerEvidenceDirectory: realpathSync(path.dirname(path.resolve(evidence))),
     signerEvidence: evidenceRecords,
   };
   const metadataPath = path.join(outputDir, 'release-metadata.json');

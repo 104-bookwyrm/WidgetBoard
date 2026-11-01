@@ -3,8 +3,12 @@ param(
   [Parameter(Mandatory = $true)][string]$ExpectedSubject
 )
 $ErrorActionPreference = 'Stop'
+function ConvertTo-NormalizedPathIdentity([string]$Value) {
+  return [System.IO.Path]::GetFullPath($Value).Replace('\', '/').ToLowerInvariant()
+}
 $release = (Resolve-Path -LiteralPath $ReleaseDirectory).Path
-$repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) '.'))
+$scriptRepositoryRoot = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) '.'))
+$repositoryRoot = $scriptRepositoryRoot
 $metadataPath = Join-Path $release 'release-metadata.json'
 $manifestPath = Join-Path $release 'latest-installer.json'
 $checksumsPath = Join-Path $release 'SHA256SUMS.txt'
@@ -54,13 +58,13 @@ foreach ($name in $expectedTargets) {
 $installerHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($installerHash -ne [string]$metadata.installerSha256) { throw 'Installer SHA-256 does not match release metadata' }
 $sourceInstaller = Join-Path $repositoryRoot "src-tauri\target\release\bundle\nsis\WidgetBoard_$($metadata.version)_x64-setup.exe"
-if ([System.IO.Path]::GetFullPath([string]$metadata.installerSourcePath) -cne [System.IO.Path]::GetFullPath($sourceInstaller)) { throw 'Metadata source installer path is not canonical' }
+if ((ConvertTo-NormalizedPathIdentity ([string]$metadata.installerSourcePath)) -cne (ConvertTo-NormalizedPathIdentity $sourceInstaller)) { throw 'Metadata source installer path is not canonical' }
 if (-not (Test-Path -LiteralPath $sourceInstaller -PathType Leaf)) { throw 'The Tauri source installer required for callback verification is missing' }
 $sourceHash = (Get-FileHash -LiteralPath $sourceInstaller -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($sourceHash -ne $installerHash) { throw 'Final installer bytes differ from the Tauri source installer' }
 $tauriConfig = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src-tauri\tauri.conf.json') -Raw -Encoding UTF8 | ConvertFrom-Json
-$verifierManifest = Join-Path $repositoryRoot 'tools\release\minisign-verifier\Cargo.toml'
-$verifierTarget = Join-Path $repositoryRoot 'src-tauri\target\release-tools-minisign'
+$verifierManifest = Join-Path $PSScriptRoot 'minisign-verifier\Cargo.toml'
+$verifierTarget = Join-Path $scriptRepositoryRoot 'src-tauri\target\release-tools-minisign'
 & cargo run --quiet --locked --manifest-path $verifierManifest --target-dir $verifierTarget -- $tauriConfig.plugins.updater.pubkey $signaturePath $installer
 if ($LASTEXITCODE -ne 0) { throw 'Tauri updater signature verification failed for the final installer' }
 $expectedRoles = @(
@@ -85,6 +89,9 @@ $expectedCallbacks['nsis-plugin:system.dll'] = Join-Path $pluginRoot 'System.dll
 $expectedCallbacks['nsis-plugin:nsdialogs.dll'] = Join-Path $pluginRoot 'nsDialogs.dll'
 $expectedCallbacks['nsis-plugin:additional/nsis_tauri_utils.dll'] = Join-Path $pluginRoot 'additional\nsis_tauri_utils.dll'
 $expectedCallbacks['final-installer'] = $sourceInstaller
+$evidenceDirectory = [System.IO.Path]::GetFullPath([string]$metadata.signerEvidenceDirectory)
+if (-not $metadata.signerEvidenceDirectory -or -not [System.IO.Path]::IsPathRooted($evidenceDirectory)) { throw 'Signer evidence directory must be an absolute path' }
+$preservedUninstaller = Join-Path (Join-Path $evidenceDirectory 'widgetboard-authenticode-evidence') 'nsis-uninstaller.exe'
 $evidence = @($metadata.signerEvidence)
 if ($evidence.Count -ne $expectedRoles.Count) { throw 'Release metadata has missing or extra Authenticode callback evidence' }
 $seenRoles = @{}
@@ -95,21 +102,30 @@ foreach ($entry in $evidence) {
   if ($seenRoles.ContainsKey($role)) { throw "Duplicate callback role: $role" }
   if ([string]$entry.status -cne 'success' -or [string]$entry.authenticodeStatus -cne 'Valid') { throw "Unsuccessful callback evidence: $role" }
   if ([string]$entry.path -notmatch '^[A-Za-z]:\\') { throw "Callback path must be absolute: $role" }
-  $identity = [System.IO.Path]::GetFullPath([string]$entry.path).Replace('\', '/').ToLowerInvariant()
+  $identity = ConvertTo-NormalizedPathIdentity ([string]$entry.path)
   if ([string]$entry.identity -cne $identity) { throw "Callback identity is not the normalized full path: $role" }
   if ($seenIdentities.ContainsKey($identity)) { throw "Duplicate callback identity: $identity" }
   if ([string]$entry.sha256Before -notmatch '^[0-9a-fA-F]{64}$' -or [string]$entry.sha256 -notmatch '^[0-9a-fA-F]{64}$') { throw "Callback evidence lacks required SHA-256 digests: $role" }
   if (-not [string]$entry.subject -or -not [string]$entry.timestampSubject -or -not [string]$entry.timestampThumbprint) { throw "Callback evidence lacks publisher or timestamp data: $role" }
-  if ($role -ne 'nsis-uninstaller') {
-    if ([System.IO.Path]::GetFullPath([string]$entry.path) -cne [System.IO.Path]::GetFullPath([string]$expectedCallbacks[$role])) { throw "Callback path mismatch: $role" }
-  } elseif ([System.IO.Path]::GetFileName([string]$entry.path) -cne 'uninstall.exe') {
-    throw 'NSIS uninstaller callback must identify uninstall.exe'
+  if ($role -eq 'nsis-uninstaller') {
+    if ([System.IO.Path]::GetFileName([string]$entry.path) -notmatch '^nst.*\.tmp$') { throw 'NSIS uninstaller callback must identify an nst*.tmp input' }
+    if ((ConvertTo-NormalizedPathIdentity ([string]$entry.preservedPath)) -cne (ConvertTo-NormalizedPathIdentity $preservedUninstaller)) { throw 'Preserved NSIS uninstaller path is not canonical' }
+    if ([string]$entry.preservedSha256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Preserved NSIS uninstaller SHA-256 is required' }
+    if (-not (Test-Path -LiteralPath $preservedUninstaller -PathType Leaf)) { throw 'Preserved NSIS uninstaller bytes are missing' }
+    $callbackHash = (Get-FileHash -LiteralPath $preservedUninstaller -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($callbackHash -ne [string]$entry.sha256 -or $callbackHash -ne [string]$entry.preservedSha256) { throw 'Preserved NSIS uninstaller SHA-256 mismatch' }
+    $uninstallerSignature = Get-AuthenticodeSignature -LiteralPath $preservedUninstaller
+    if ([string]$uninstallerSignature.Status -ne 'Valid') { throw 'Preserved NSIS uninstaller Authenticode Status must be Valid' }
+    if ([string]$uninstallerSignature.SignerCertificate.Subject -cne $ExpectedSubject) { throw 'Preserved NSIS uninstaller subject mismatch' }
+    if (-not $uninstallerSignature.TimeStamperCertificate -or -not $uninstallerSignature.TimeStamperCertificate.Subject) { throw 'Preserved NSIS uninstaller has no timestamp certificate' }
+  } else {
+    if ((ConvertTo-NormalizedPathIdentity ([string]$entry.path)) -cne (ConvertTo-NormalizedPathIdentity ([string]$expectedCallbacks[$role]))) { throw "Callback path mismatch: $role" }
+    if (-not (Test-Path -LiteralPath ([string]$entry.path) -PathType Leaf)) { throw "Callback source file is missing: $role" }
+    $callbackHash = (Get-FileHash -LiteralPath ([string]$entry.path) -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($callbackHash -ne [string]$entry.sha256) { throw "Callback SHA-256 does not match current bytes: $role" }
   }
-  if (-not (Test-Path -LiteralPath ([string]$entry.path) -PathType Leaf)) { throw "Callback source file is missing: $role" }
-  $callbackHash = (Get-FileHash -LiteralPath ([string]$entry.path) -Algorithm SHA256).Hash.ToLowerInvariant()
-  if ($callbackHash -ne [string]$entry.sha256) { throw "Callback SHA-256 does not match current bytes: $role" }
   if ($role -eq 'final-installer') {
-    if ([System.IO.Path]::GetFullPath([string]$entry.path) -cne [System.IO.Path]::GetFullPath([string]$metadata.installerSourcePath)) { throw 'Final installer evidence path does not match the full normalized source path' }
+    if ((ConvertTo-NormalizedPathIdentity ([string]$entry.path)) -cne (ConvertTo-NormalizedPathIdentity ([string]$metadata.installerSourcePath))) { throw 'Final installer evidence path does not match the full normalized source path' }
     if ($callbackHash -ne $installerHash) { throw 'Final installer callback digest differs from assembled installer' }
   }
   $seenRoles[$role] = $true
