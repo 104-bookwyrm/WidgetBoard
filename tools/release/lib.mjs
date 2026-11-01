@@ -7,6 +7,14 @@ function fail(message) {
   throw new Error(message);
 }
 
+function isBuildOutput(statusLine) {
+  const changedPath = statusLine.slice(3).replace(/^"(.*)"$/, '$1').replaceAll('\\', '/');
+  return BUILD_OUTPUTS.some((output) => {
+    const prefix = output.replace(/^\.\//, '');
+    return changedPath === prefix.slice(0, -1) || changedPath.startsWith(prefix);
+  });
+}
+
 function packageVersion(toml, label) {
   const match = toml.match(/^\s*version\s*=\s*"([^"]+)"\s*$/m);
   if (!match) fail(`Could not read ${label} version`);
@@ -32,7 +40,7 @@ export function readProjectVersions(root) {
 }
 
 export function validateRelease({ root, tag, sha, notesPath, git }) {
-  if (!git || typeof git.tagTarget !== 'function' || typeof git.isAncestor !== 'function' || typeof git.status !== 'function') {
+  if (!git || typeof git.head !== 'function' || typeof git.tagTarget !== 'function' || typeof git.isAncestor !== 'function' || typeof git.status !== 'function') {
     fail('An injected Git interface is required');
   }
   const match = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(tag ?? '');
@@ -42,9 +50,10 @@ export function validateRelease({ root, tag, sha, notesPath, git }) {
   for (const [name, actual] of Object.entries(versions)) {
     if (actual !== version) fail(`${name === 'cargoLock' ? 'Cargo.lock' : name} version ${actual} does not match tag ${tag}`);
   }
+  if (git.head() !== sha) fail(`Checked-out commit does not match requested SHA ${sha}`);
   if (git.tagTarget(tag) !== sha) fail(`Release tag target does not match commit ${sha}`);
   if (!git.isAncestor(sha, 'origin/main')) fail(`Commit ${sha} is outside origin/main`);
-  const changes = git.status(BUILD_OUTPUTS);
+  const changes = git.status().filter((entry) => !isBuildOutput(entry));
   if (changes.length) fail(`Working tree must be clean; found: ${changes.join(', ')}`);
   const notes = readFileSync(path.resolve(root, notesPath), 'utf8');
   if (!notes.trim()) fail('Release notes must not be empty');

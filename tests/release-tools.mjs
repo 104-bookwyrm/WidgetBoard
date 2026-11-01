@@ -18,7 +18,7 @@ function fixture() {
   writeFileSync(path.join(root, 'src-tauri', 'Cargo.toml'), '[package]\nname = "widgetboard"\nversion = "1.2.3"\n');
   writeFileSync(path.join(root, 'src-tauri', 'Cargo.lock'), '[[package]]\nname = "widgetboard"\nversion = "1.2.3"\n');
   writeFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), JSON.stringify({ version: '1.2.3' }));
-  writeFileSync(path.join(root, '.gitignore'), 'dist/\nsrc-tauri/target/\nsrc-tauri/gen/\n');
+  writeFileSync(path.join(root, '.gitignore'), 'dist/\nsrc-tauri/target/\nsrc-tauri/gen/\nignored-source.txt\n');
   writeFileSync(path.join(root, 'RELEASE_NOTES.md'), 'WidgetBoard 1.2.3\n');
   writeFileSync(path.join(root, 'empty.md'), ' \r\n\t');
   gitRun('add', '.');
@@ -27,12 +27,13 @@ function fixture() {
   gitRun('tag', 'v1.2.3', sha);
   gitRun('update-ref', 'refs/remotes/origin/main', sha);
   const git = {
+    head: () => gitRun('rev-parse', 'HEAD'),
     tagTarget: (tag) => gitRun('rev-parse', `${tag}^{commit}`),
     isAncestor: (commit, ref) => {
       try { gitRun('merge-base', '--is-ancestor', commit, ref); return true; }
       catch { return false; }
     },
-    status: () => gitRun('status', '--porcelain', '--untracked-files=all').split(/\r?\n/).filter(Boolean),
+    status: () => gitRun('status', '--porcelain', '--untracked-files=all', '--ignored=matching').split(/\r?\n/).filter(Boolean),
   };
   return { root, sha, git, gitRun };
 }
@@ -72,7 +73,14 @@ test('rejects Cargo.lock package mismatch', () => withFixture(({ root, sha, git 
 }));
 
 test('rejects tag target mismatch', () => withFixture(({ root, sha, git }) => {
-  assert.throws(() => validateRelease({ root, tag: 'v1.2.3', sha: `${sha.slice(0, -1)}0`, notesPath: 'RELEASE_NOTES.md', git }), /tag target/i);
+  git.tagTarget = () => 'different-commit';
+  assert.throws(() => validateRelease({ root, tag: 'v1.2.3', sha, notesPath: 'RELEASE_NOTES.md', git }), /tag target/i);
+}));
+
+test('rejects a clean checkout at another commit with unchanged versions', () => withFixture(({ root, sha, git, gitRun }) => {
+  writeFileSync(path.join(root, 'later.txt'), 'same versions');
+  gitRun('add', 'later.txt'); gitRun('commit', '-m', 'later source commit');
+  assert.throws(() => validateRelease({ root, tag: 'v1.2.3', sha, notesPath: 'RELEASE_NOTES.md', git }), /checked-out.*SHA/i);
 }));
 
 test('rejects commit outside origin/main', () => withFixture(({ root, sha, git, gitRun }) => {
@@ -93,4 +101,13 @@ test('rejects tracked and untracked source changes', () => withFixture(({ root, 
   writeFileSync(path.join(root, 'src-tauri', 'Cargo.toml'), '[package]\nname = "widgetboard"\nversion = "1.2.3"\n');
   writeFileSync(path.join(root, 'untracked-source.txt'), 'source');
   assert.throws(() => validateRelease({ root, tag: 'v1.2.3', sha, notesPath: 'RELEASE_NOTES.md', git }), /clean/i);
+}));
+
+test('rejects ignored source changes while allowing declared build outputs', () => withFixture(({ root, sha, git }) => {
+  writeFileSync(path.join(root, 'ignored-source.txt'), 'source');
+  mkdirSync(path.join(root, 'dist'), { recursive: true });
+  writeFileSync(path.join(root, 'dist', 'release.bin'), 'build output');
+  assert.throws(() => validateRelease({ root, tag: 'v1.2.3', sha, notesPath: 'RELEASE_NOTES.md', git }), /clean/i);
+  rmSync(path.join(root, 'ignored-source.txt'));
+  assert.doesNotThrow(() => validateRelease({ root, tag: 'v1.2.3', sha, notesPath: 'RELEASE_NOTES.md', git }));
 }));

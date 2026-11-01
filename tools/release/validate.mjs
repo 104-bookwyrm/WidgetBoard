@@ -20,12 +20,13 @@ function options(args) {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const gitRun = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const git = {
+  head: () => gitRun(['rev-parse', 'HEAD']),
   tagTarget: (tag) => gitRun(['rev-parse', `${tag}^{commit}`]),
   isAncestor: (sha, ref) => {
     try { gitRun(['merge-base', '--is-ancestor', sha, ref]); return true; }
     catch { return false; }
   },
-  status: (buildOutputs) => gitRun(['status', '--porcelain', '--untracked-files=all', '--', '.', ...buildOutputs.map((item) => `:(exclude)${item}`)])
+  status: () => gitRun(['status', '--porcelain', '--untracked-files=all', '--ignored=matching', '--', '.'])
     .split(/\r?\n/).filter(Boolean),
 };
 
