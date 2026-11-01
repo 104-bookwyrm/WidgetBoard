@@ -15,8 +15,8 @@ tauri-plugin-single-instance = "2"
 base64 = "0.22"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
-# self-update: release signatures + hashes (pure Rust, small)
-ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+# self-update through the signed Tauri installer feed
+tauri-plugin-updater = "=2.11.0"
 sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]

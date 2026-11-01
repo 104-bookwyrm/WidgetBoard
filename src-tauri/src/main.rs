@@ -26,6 +26,7 @@ mod updater;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tauri_plugin_updater::UpdaterExt;
 use tauri::{
     ipc::{InvokeBody, Request},
     menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -147,7 +148,7 @@ struct AppState {
     kbd: AtomicBool,           // keyboard mode (global shortcut): boards take the keyboard and mouse
     dwell_ms: AtomicUsize,     // hover this long before a widget takes clicks
     zoom: Mutex<f64>,          // whole-UI zoom
-    // self-update (portable exe): see updater.rs
+    // installer updater state
     update_busy: AtomicBool,
     just_updated: Mutex<Option<String>>, // shown once as a toast after an update installed
     demo_origin: Mutex<String>, // latest window that requested the reusable tutorial demo
@@ -1786,9 +1787,8 @@ fn refresh_tray(app: &AppHandle) {
         }
     });
 }
-/// Look at the manifest only; announce a newer version. `manual` = the user asked, so a skipped version is
-/// shown again and "up to date" and errors are reported too.
-fn run_update_check(app: &AppHandle, manual: bool) {
+/// Check the signed installer feed and announce a newer version.
+async fn run_update_check(app: &AppHandle, manual: bool) {
     let st = app.state::<AppState>();
     if st.update_busy.swap(true, Ordering::SeqCst) {
         return;
@@ -1796,9 +1796,28 @@ fn run_update_check(app: &AppHandle, manual: bool) {
     let _ = app.emit("update-status", update_info(&st));
     let dir = st.dir.join("updates");
     let (_, url) = update_config(&st.dir);
-    let res = if url.is_empty() { Err("not_configured".to_string()) } else { updater::check(&url) };
+    let res = if url.is_empty() {
+        Err("not_configured".to_string())
+    } else {
+        match app.updater().map_err(|e| e.to_string()) {
+            Ok(updater) => match updater.check().await {
+                Ok(Some(update)) => Ok(Some(updater::Offer {
+                    version: update.version,
+                    notes: update.body.unwrap_or_default(),
+                })),
+                Ok(None) => Ok(None),
+                Err(e) => Err(e.to_string()),
+            },
+            Err(e) => Err(e),
+        }
+    };
     if !url.is_empty() {
-        updater::record(&dir, now_secs(), &res);
+        updater::record_offer(
+            &dir,
+            now_secs(),
+            res.as_ref().ok().cloned().flatten(),
+            res.as_ref().err().map(String::as_str),
+        );
     }
     if manual && matches!(res, Ok(Some(_))) {
         updater::skip(&dir, None);
@@ -2126,70 +2145,27 @@ fn spawn_updater(app: AppHandle) {
                 !url.is_empty() && updater::is_due(&check, updater::last_check(&st.dir.join("updates")), now_secs())
             };
             if due {
-                run_update_check(&app, false);
+                tauri::async_runtime::block_on(run_update_check(&app, false));
             }
             std::thread::sleep(Duration::from_secs(3600));
         }
     });
 }
-/// Start a fresh copy of this exe, then exit; the new process waits for us (single-instance).
+/// Start a fresh copy after backup restore.
 fn relaunch(app: &AppHandle) {
     if let Ok(exe) = std::env::current_exe() {
-        if std::process::Command::new(exe).args(["--wait-pid", &std::process::id().to_string()]).spawn().is_ok() {
+        if std::process::Command::new(exe).spawn().is_ok() {
             app.exit(0);
         }
     }
 }
-/// Relaunch this exe after we exit; the new process waits for us (single-instance) and installs the update.
-fn restart_for_update(app: &AppHandle) {
-    let h = app.clone();
-    std::thread::spawn(move || {
-        match flush::boards(&h) {
-            Ok(()) => relaunch(&h),
-            Err(e) => { let _ = h.emit("update-failed", e); }
-        }
-    });
-}
-/// `--wait-pid N`: we were started by an app that is about to quit — wait for it (max 15 s).
-fn wait_for_parent() {
-    let args: Vec<String> = std::env::args().collect();
-    let Some(pid) = args.iter().position(|a| a == "--wait-pid").and_then(|i| args.get(i + 1)).and_then(|p| p.parse::<u32>().ok()) else {
-        return;
-    };
-    #[cfg(windows)]
-    unsafe {
-        use windows::Win32::Foundation::CloseHandle;
-        use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
-        if let Ok(h) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
-            WaitForSingleObject(h, 15_000);
-            let _ = CloseHandle(h);
-        }
-    }
-    #[cfg(not(windows))]
-    let _ = pid;
-}
-/// Startup: install a verified pending update (then relaunch the new exe and quit); tidy up after the last one.
-/// Returns the version just installed, once, for a "updated to vX" toast.
-fn install_pending_update(dir: &Path) -> Option<String> {
-    let updates = dir.join("updates");
-    let exe = std::env::current_exe().ok()?;
-    updater::cleanup_old(&exe);
-    let done = fs::read_to_string(updates.join("installed.txt")).ok();
-    let _ = fs::remove_file(updates.join("installed.txt"));
-    match updater::apply_pending(&updates, &exe, updater::PUBLIC_KEY) {
-        Ok(Some(v)) => {
-            let _ = fs::write(updates.join("installed.txt"), &v);
-            if std::process::Command::new(&exe).args(["--wait-pid", &std::process::id().to_string()]).spawn().is_ok() {
-                std::process::exit(0);
-            }
-            None
-        }
-        Ok(None) => done.map(|v| v.trim().to_string()).filter(|v| v == updater::CURRENT),
-        Err(e) => {
-            updater::record(&updates, now_secs(), &Err(format!("install: {e}")));
-            None
-        }
-    }
+fn record_closed(state: &AppState) -> Result<(), String> {
+    let data = state.dir.join("data");
+    fs::create_dir_all(&data).map_err(|e| e.to_string())?;
+    write_atomic(
+        &data.join("closed.json"),
+        &json!({ "at": now_ms() }).to_string().into_bytes(),
+    )
 }
 
 #[tauri::command]
@@ -2198,43 +2174,55 @@ fn update_status(state: State<AppState>) -> Value {
 }
 #[tauri::command]
 fn update_check(app: AppHandle) {
-    std::thread::spawn(move || run_update_check(&app, true));
+    tauri::async_runtime::spawn(async move { run_update_check(&app, true).await; });
 }
-/// The user picked Install: back up, download + verify, then restart into the swap (install_pending_update).
-/// Backup comes first so a verified download never sits waiting without one.
 #[tauri::command]
-fn update_install(app: AppHandle) {
-    std::thread::spawn(move || {
-        let st = app.state::<AppState>();
-        if st.update_busy.swap(true, Ordering::SeqCst) {
-            return;
+async fn update_install(app: AppHandle) {
+    let st = app.state::<AppState>();
+    if st.update_busy.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let _ = app.emit("update-status", update_info(&st));
+    let result: Result<(), String> = async {
+        let update = app
+            .updater()
+            .map_err(|e| e.to_string())?
+            .check()
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "update_no_longer_available".to_string())?;
+        let flush_app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || flush::boards(&flush_app))
+            .await
+            .map_err(|e| e.to_string())??;
+        let backup_dir = st.dir.clone();
+        let backup_root = backups_root(&app, &backup_dir);
+        tauri::async_runtime::spawn_blocking(move || backup_to(&backup_dir, &backup_root, "pre-update"))
+            .await
+            .map_err(|e| e.to_string())??;
+        let bytes = update.download(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+        let flush_app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || flush::boards(&flush_app))
+            .await
+            .map_err(|e| e.to_string())??;
+        updater::mark_installing(&st.dir, &update.version)?;
+        if let Err(e) = record_closed(&st) {
+            let _ = fs::remove_file(st.dir.join("updates/installing.json"));
+            return Err(e);
         }
-        let dir = st.dir.join("updates");
-        // no backup, download or restart when the exe can't be replaced
-        if !std::env::current_exe().map(|e| updater::can_replace(&e)).unwrap_or(false) {
-            st.update_busy.store(false, Ordering::SeqCst);
-            updater::record(&dir, now_secs(), &Err("not_writable".into()));
-            let _ = app.emit("update-failed", "not_writable");
-            let _ = app.emit("update-status", update_info(&st));
-            return;
-        }
-        let _ = app.emit("update-status", update_info(&st));
-        let (_, url) = update_config(&st.dir);
-        let res = flush::boards(&app)
-            .and_then(|_| backup_to(&st.dir, &backups_root(&app, &st.dir), "pre-update"))
-            .and_then(|_| updater::check_and_download(&dir, &url, updater::PUBLIC_KEY));
-        st.update_busy.store(false, Ordering::SeqCst);
-        match res {
-            Ok(Some(_)) => restart_for_update(&app),
-            Ok(None) => updater::record(&dir, now_secs(), &Ok(None)), // withdrawn or already current
-            Err(e) => {
-                updater::record(&dir, now_secs(), &Err(format!("install: {e}")));
-                let _ = app.emit("update-failed", e);
-            }
-        }
-        let _ = app.emit("update-status", update_info(&st));
-        refresh_tray(&app);
-    });
+        update.install(bytes).map_err(|e| {
+            let _ = fs::remove_file(st.dir.join("updates/installing.json"));
+            e.to_string()
+        })
+    }
+    .await;
+    st.update_busy.store(false, Ordering::SeqCst);
+    if let Err(e) = result {
+        updater::record_error(&st.dir.join("updates"), &format!("install: {e}"));
+        let _ = app.emit("update-failed", e);
+    }
+    let _ = app.emit("update-status", update_info(&st));
+    refresh_tray(&app);
 }
 /// "Skip this version".
 #[tauri::command]
@@ -2287,7 +2275,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let sep = || PredefinedMenuItem::separator(app);
     // a found (not skipped) update sits at the very bottom until it is installed or skipped
     if let Some(a) = updater::available(&st.dir.join("updates")) {
-        let text = t("tray.update_available").replace("{v}", a["version"].as_str().unwrap_or(""));
+        let text = t("tray.update_available").replace("{v}", &a.version);
         menu.append(&sep()?)?;
         menu.append(&MenuItem::with_id(app, "update-available", text, true, None::<&str>)?)?;
     }
@@ -2362,21 +2350,29 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn main() {
-    wait_for_parent(); // relaunched for an update: let the old copy exit first
     tauri::Builder::default()
         // a second launch just shows the running app instead of starting a rival copy
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             raise_boards(app);
             let _ = app.emit("toast", "toast.already_running");
         }))
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
-            let just_updated = install_pending_update(&dir); // may relaunch the new exe and exit
             for sub in ["assets", "data", "diary", "updates"] {
                 fs::create_dir_all(dir.join(sub))?;
             }
+            updater::discard_legacy_pending(&dir.join("updates"));
+            let just_updated = match updater::take_install_outcome(&dir) {
+                updater::InstallOutcome::None => None,
+                updater::InstallOutcome::Completed(version) => Some(version),
+                updater::InstallOutcome::Incomplete(_) => {
+                    updater::record_error(&dir.join("updates"), "install_incomplete");
+                    None
+                }
+            };
             for (file, default) in [("theme.css", DEFAULT_THEME), ("config.json", DEFAULT_CONFIG)] {
                 if !dir.join(file).exists() {
                     fs::write(dir.join(file), default)?;
@@ -2501,13 +2497,10 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while running WidgetBoard")
         .run(|app, event| {
-            // Quit from the tray, an update restart, and Windows shutting down (WM_ENDSESSION) all end here; a crash
-            // does not, so the boards can tell the two apart.
+            // Quit from the tray and Windows shutdown (WM_ENDSESSION) end here; a crash does not.
             if let tauri::RunEvent::Exit = event {
                 if let Some(st) = app.try_state::<AppState>() {
-                    let data = st.dir.join("data");
-                    let _ = fs::create_dir_all(&data);
-                    let _ = write_atomic(&data.join("closed.json"), json!({ "at": now_ms() }).to_string().as_bytes());
+                    let _ = record_closed(&st);
                 }
             }
         });

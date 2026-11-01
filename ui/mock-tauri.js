@@ -450,6 +450,7 @@ export function createMockTauri({ memory = false } = {}) {
         return update();
       case "update_install":
         window.__installed = true;
+        window.__installedCommand = cmd;
         native(cmd, args);
         return;
       case "list_backups":
