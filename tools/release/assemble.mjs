@@ -190,3 +190,46 @@ export function assembleRelease({ root, context, installer, signature, evidence 
   writeFileSync(checksumsPath, sums, 'utf8');
   return { directory: outputDir, installer: outputInstaller, signature: outputSignature, manifest: manifestPath, metadata: metadataPath, checksums: checksumsPath };
 }
+
+const CLI_OPTIONS = new Set(['tag', 'sha', 'notes', 'installer', 'signature', 'evidence']);
+
+export function parseAssemblyArguments(argv, root = process.cwd()) {
+  const values = {};
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (!argument.startsWith('--')) fail(`Unknown assembly argument: ${argument}`);
+    const name = argument.slice(2);
+    if (!CLI_OPTIONS.has(name)) fail(`Unknown assembly argument: ${argument}`);
+    if (Object.hasOwn(values, name)) fail(`Duplicate assembly argument: ${argument}`);
+    const value = argv[index + 1];
+    if (!value || value.startsWith('--')) fail(`Missing value for assembly argument: ${argument}`);
+    values[name] = value;
+    index += 1;
+  }
+  for (const name of CLI_OPTIONS) {
+    if (!Object.hasOwn(values, name)) fail(`Required assembly argument is missing: --${name}`);
+  }
+  const match = values.tag.match(/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+  if (!match) fail('Release tag must be an exact canonical vX.Y.Z tag');
+  return {
+    root: path.resolve(root),
+    context: { tag: values.tag, version: values.tag.slice(1), sha: values.sha, notesPath: values.notes },
+    installer: values.installer,
+    signature: values.signature,
+    evidence: values.evidence,
+  };
+}
+
+export function runAssemblyCli(argv = process.argv.slice(2), { root = process.cwd(), stdout = process.stdout, stderr = process.stderr } = {}) {
+  try {
+    const result = assembleRelease(parseAssemblyArguments(argv, root));
+    stdout.write(`${JSON.stringify(result)}\n`);
+    return 0;
+  } catch (error) {
+    stderr.write(`Release assembly failed: ${error.message}\n`);
+    return 1;
+  }
+}
+
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (invokedPath && invokedPath === fileURLToPath(import.meta.url)) process.exitCode = runAssemblyCli();

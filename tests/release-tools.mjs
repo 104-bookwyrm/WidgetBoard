@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -303,6 +303,45 @@ test('assembler requires one installer and matching sig', () => {
     assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: path.join(f.root, 'wrong.sig'), evidence: f.evidence }), /signature|\.sig/i);
     writeFileSync(f.signature, '  \n');
     assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /signature.*empty/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('assembly CLI creates a release and prints its output paths', () => {
+  const f = assemblyFixture();
+  try {
+    const cli = path.join(process.cwd(), 'tools', 'release', 'assemble.mjs');
+    const result = spawnSync(process.execPath, [cli,
+      '--tag', f.context.tag,
+      '--sha', f.context.sha,
+      '--notes', f.context.notesPath,
+      '--installer', path.relative(f.root, f.installer),
+      '--signature', path.relative(f.root, f.signature),
+      '--evidence', path.relative(f.root, f.evidence),
+    ], { cwd: f.root, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    const summary = JSON.parse(result.stdout.trim());
+    assert.equal(summary.directory, path.join(f.root, 'dist', 'release'));
+    assert.equal(summary.installer, path.join(summary.directory, 'WidgetBoard-1.2.3-setup-x86_64.exe'));
+    assert.equal(summary.signature, `${summary.installer}.sig`);
+    assert.equal(readFileSync(summary.installer).equals(f.bytes), true);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('assembly CLI rejects malformed arguments', () => {
+  const f = assemblyFixture();
+  try {
+    const cli = path.join(process.cwd(), 'tools', 'release', 'assemble.mjs');
+    const required = ['--tag', f.context.tag, '--sha', f.context.sha, '--notes', f.context.notesPath, '--installer', path.relative(f.root, f.installer), '--signature', path.relative(f.root, f.signature), '--evidence', path.relative(f.root, f.evidence)];
+    for (const args of [
+      required.slice(0, -2),
+      [...required, '--tag', f.context.tag],
+      [...required, '--unexpected', 'value'],
+      required.map((value, index) => index === 1 ? 'v1.2.3-rc.1' : value),
+    ]) {
+      const result = spawnSync(process.execPath, [cli, ...args], { cwd: f.root, encoding: 'utf8' });
+      assert.notEqual(result.status, 0, `unexpectedly accepted arguments: ${args.join(' ')}`);
+      assert.match(result.stderr, /argument|tag|version|unknown|required|duplicate/i);
+    }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
