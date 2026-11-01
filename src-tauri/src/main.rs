@@ -912,6 +912,10 @@ fn normalized_autostart_target(raw: &str) -> PathBuf {
     PathBuf::from(target)
 }
 
+fn autostart_target_from_run_value(raw: &str) -> String {
+    normalized_autostart_target(raw).to_string_lossy().into_owned()
+}
+
 /// Missing entries remain missing. Windows path comparisons are case-insensitive.
 fn should_repair_autostart(existing: Option<&str>, current: &Path) -> bool {
     let Some(existing) = existing else { return false };
@@ -941,7 +945,7 @@ fn autostart_target() -> Option<String> {
             .open_subkey(RUN_KEY)
             .and_then(|k| k.get_value::<String, _>(run_name()))
             .ok()
-            .map(|v| v.trim().trim_matches('"').to_string());
+            .map(|v| autostart_target_from_run_value(&v));
     }
     #[allow(unreachable_code)]
     None
@@ -2565,6 +2569,16 @@ mod tests {
     }
 
     #[test]
+    fn autostart_quoted_run_target_with_arguments_normalizes_to_executable() {
+        assert_eq!(
+            autostart_target_from_run_value(
+                r#""C:\Users\Yoon\AppData\Local\Programs\WidgetBoard\WidgetBoard.exe" --hidden"#
+            ),
+            r"C:\Users\Yoon\AppData\Local\Programs\WidgetBoard\WidgetBoard.exe"
+        );
+    }
+
+    #[test]
     fn autostart_path_comparison_ignores_case() {
         let current = PathBuf::from(r"C:\Users\Yoon\AppData\Local\Programs\WidgetBoard\WidgetBoard.exe");
         assert!(!should_repair_autostart(
@@ -2584,6 +2598,33 @@ mod tests {
             Some(r#""C:\Users\Yoon\AppData\Local\Programs\Widget Board\WidgetBoard.exe""#),
             &current
         ));
+    }
+
+    #[test]
+    fn uninstall_hook_defers_registry_mutations_until_after_the_cancel_point() {
+        let hooks = include_str!("../windows/hooks.nsh");
+        let pre = hooks
+            .split("!macro NSIS_HOOK_PREUNINSTALL")
+            .nth(1)
+            .unwrap()
+            .split("!macroend")
+            .next()
+            .unwrap();
+        let post = hooks
+            .split("!macro NSIS_HOOK_POSTUNINSTALL")
+            .nth(1)
+            .unwrap()
+            .split("!macroend")
+            .next()
+            .unwrap();
+        assert!(!pre.contains("DeleteRegValue"));
+        assert!(!pre.contains("WriteReg"));
+        assert!(pre.contains("ReadRegStr"));
+        assert!(post.contains("WriteRegStr"), "foreign Run value is restored after stock cleanup");
+        assert!(post.contains("StartupApproved\\Run"), "owned StartupApproved value is cleaned after cancellation is no longer possible");
+        assert!(post.contains("${If} $UpdateMode <> 1"), "updates preserve both autostart values");
+        assert!(post.contains("${If} $WidgetBoardRunOwned = 1"));
+        assert!(post.contains("${ElseIf} $WidgetBoardSavedRunValue != \"\""));
     }
 
     #[test]
