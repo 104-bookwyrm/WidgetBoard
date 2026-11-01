@@ -4,10 +4,20 @@ WidgetBoard publishes one per-user x86-64 NSIS installer. The release workflow i
 
 ## Prepare and tag
 
-1. Start from a clean checkout. Fetch the current source and tags with `git fetch origin main --tags`.
-2. Confirm the release commit is on `origin/main`. Confirm `package.json` and `src-tauri/tauri.conf.json` versions agree. Confirm Cargo package and lockfile versions agree. All must match the exact canonical tag `vX.Y.Z`.
-3. Update `RELEASE_NOTES.md`. The validator rejects empty notes, source changes, mismatched versions, and a commit outside `origin/main`.
-4. Commit the release inputs to `main`, then create and push an annotated version tag:
+1. Update the WidgetBoard package version in `src-tauri/Cargo.toml`, its matching package entry in `src-tauri/Cargo.lock`, and the version in `src-tauri/tauri.conf.json`. All three must match the exact canonical tag `vX.Y.Z`.
+2. Update `RELEASE_NOTES.md`. The validator rejects empty notes, source changes, mismatched versions, and a commit outside `origin/main`.
+3. Commit the release inputs and push or merge them to remote `main` first. Then fetch the published branch and verify the exact release commit is its ancestor:
+
+   ```powershell
+   git push origin main
+   git fetch origin main --tags
+   git merge-base --is-ancestor <full-commit-sha> origin/main
+   if ($LASTEXITCODE -ne 0) { throw 'Release commit is not an ancestor of origin/main' }
+   ```
+
+   If a merge creates a new commit, use that resulting `origin/main` commit as the release commit. For a squash merge, tag the squash commit rather than the original pre-merge commit.
+
+4. Create and push an annotated version tag only after that ancestry check:
 
    ```powershell
    git tag -a vX.Y.Z <full-commit-sha> -m "WidgetBoard vX.Y.Z"
@@ -51,6 +61,8 @@ An empty draft can be reused. If an upload stops after some assets exist, a fres
 ## Certificate expiry and updater-key compromise
 
 Before the code-signing certificate expires, arrange renewal with the provider. Update the runner adapter or expected subject if the renewed certificate changes them. Build and verify a new release with a valid timestamp. Record the observed publisher and timestamp.
+
+If Authenticode credentials or the signing certificate may be compromised, stop releases and disable adapter access. Contact the signing provider to revoke or replace the certificate and credentials. Rotate runner credentials and adapter configuration. Update `WIDGETBOARD_AUTHENTICODE_SUBJECT` if the replacement certificate has a different subject. Require a fresh signed acceptance run that verifies every callback, publisher subject, certificate chain, and timestamp before releasing again.
 
 If the Tauri updater private key may be compromised, stop releases and updater publication. Treat the key as unable to be revoked for existing clients. Generate a new updater key pair, update the application public key, and publish a newly Authenticode-signed release through a channel users can verify. Do not resume updates until the new trust root and signed installer have passed the release checks.
 

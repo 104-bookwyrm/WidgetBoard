@@ -79,7 +79,7 @@ The existing custom update key remains valid only for the old portable releases.
 - Install below `%LOCALAPPDATA%`.
 - Create normal Start menu and uninstall entries.
 - Preserve `%APPDATA%` data on upgrade.
-- Preserve user data on uninstall unless the user removes it outside the installer.
+- Tauri's generated `Delete app data` checkbox is unchecked by default. Leave it unchecked to retain user data. Checking the box authorizes data deletion.
 
 ### Release changes
 
@@ -167,7 +167,7 @@ release-metadata.json
 2. Run the new NSIS installer once.
 3. Launch the installed copy.
 4. Confirm that existing widgets and settings appear.
-5. Replace an old autostart registry target with the installed path.
+5. Confirm startup repoints an existing old portable autostart entry to the installed path while preserving its Task Manager disabled state.
 6. Delete the old executable after confirmation.
 
 No automated portable-to-installer bridge is built.
@@ -176,37 +176,30 @@ The old portable feed ends when the installer release becomes latest. An old por
 
 ## Verification
 
-Automated Windows checks cover:
+Current automated workflow gates cover:
 
 - exact tag and version agreement
 - complete browser test suite
 - Rust tests with `--locked`
-- NSIS artifact creation
-- per-user silent installation
-- installed application launch
-- upgrade over a prior installed version
-- data preservation through upgrade
-- uninstall of program files
-- retention of user data
-- Authenticode publisher and timestamp
-- Tauri updater signature
-- SHA-256 checksum
-- final artifact inventory
+- unsigned NSIS artifact creation in ordinary CI
+- Authenticode callback, publisher, and timestamp verification in a protected release run
+- Tauri updater signature verification
+- SHA-256 checksums and final artifact inventory
+- GitHub provenance for the final installer digest
 
-The release operator checklist covers:
+The signed release workflow has not been run with a production signing provider. Its signing and publication checks remain unverified.
 
-- Windows 10 standard-user installation
-- Windows 11 standard-user installation
-- no administrator prompt
-- Start menu entry
-- Add/Remove Programs entry
-- publisher name in Windows dialogs
+The following require manual clean-machine acceptance on Windows 10 and Windows 11:
+
+- standard-user installation without an administrator prompt
+- Start menu and uninstall entries
+- launch and update relaunch
+- upgrade and data preservation
+- uninstall behavior and data-retention checkbox
+- portable autostart migration and disabled-state preservation
 - SmartScreen observation
-- update progress and relaunch
-- old portable data reuse
-- old portable autostart replacement
 
-SmartScreen reputation is recorded as an observation. It is not a deterministic CI gate.
+No Windows 10 or Windows 11 installation, upgrade, relaunch, uninstall, migration, or SmartScreen acceptance has been recorded. SmartScreen reputation is an observation, not a deterministic CI gate.
 
 ## Non-goals
 
