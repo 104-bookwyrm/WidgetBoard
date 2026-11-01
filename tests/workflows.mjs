@@ -14,6 +14,12 @@ function namedStep(workflow, name) {
   return workflow.slice(start, next === -1 ? undefined : next);
 }
 
+function assertActionsPinned(workflow) {
+  const usesLines = workflow.split(/\r?\n/).filter((line) => /^\s*(?:-\s+)?uses:\s*/.test(line));
+  assert.ok(usesLines.length > 0);
+  for (const line of usesLines) assert.match(line, /@[0-9a-f]{40} # v\d+\.\d+\.\d+/i, `Unpinned third-party action: ${line}`);
+}
+
 test('CI triggers on pushes and pull requests with read-only permissions', () => {
   assert.match(ci, /^on:\r?\n  push:\r?\n  pull_request:\r?\n/m);
   assert.match(ci, /^permissions:\r?\n  contents: read\r?\n/m);
@@ -60,10 +66,13 @@ test('only the protected release job has write permissions', () => {
 });
 
 test('all third-party actions are pinned to full SHAs with version comments', () => {
-  const usesLines = [...ci, ...release].join('').split(/\r?\n/).filter((line) => line.trimStart().startsWith('uses:'));
-  assert.ok(usesLines.length > 0);
-  for (const line of usesLines) assert.match(line, /@[0-9a-f]{40} # v\d+\.\d+\.\d+/i, `Unpinned third-party action: ${line}`);
+  assertActionsPinned(`${ci}\n${release}`);
   assert.doesNotMatch(`${ci}\n${release}`, /dtolnay\/rust-toolchain|@master\b/);
+});
+
+test('action pin check rejects unpinned shorthand and list-item uses forms', () => {
+  assert.throws(() => assertActionsPinned('steps:\n  uses: owner/action@v1'), /Unpinned third-party action/);
+  assert.throws(() => assertActionsPinned('steps:\n  - uses: owner/action@v1'), /Unpinned third-party action/);
 });
 
 test('signing secrets are scoped to the signed build and checked before Tauri runs', () => {
