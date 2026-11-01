@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { parseGitStatus, validateRelease } from '../tools/release/lib.mjs';
 import { signArtifact } from '../tools/release/authenticode.mjs';
 import { assembleRelease } from '../tools/release/assemble.mjs';
@@ -193,19 +193,68 @@ test('signer requires valid Authenticode status, expected publisher, and timesta
 
 function assemblyFixture() {
   const root = mkdtempSync(path.join(os.tmpdir(), 'widgetboard-assembly-test-'));
-  const installerDir = path.join(root, 'bundle');
-  mkdirSync(installerDir);
-  const installer = path.join(installerDir, 'WidgetBoard_1.2.3_x64-setup.exe');
+  const keys = getTestSigningKeys();
+  const installer = path.join(root, 'src-tauri', 'target', 'release', 'bundle', 'nsis', 'WidgetBoard_1.2.3_x64-setup.exe');
+  mkdirSync(path.dirname(installer), { recursive: true });
   const signature = `${installer}.sig`;
   const bytes = Buffer.from('signed NSIS installer bytes');
   writeFileSync(installer, bytes);
-  writeFileSync(signature, 'tauri-update-signature\n');
+  writeFileSync(signature, keys.signature);
   writeFileSync(path.join(root, 'RELEASE_NOTES.md'), '수정 사항\n한국어 업데이트 안내\n');
   writeFileSync(path.join(root, 'package.json'), JSON.stringify({ devDependencies: { '@tauri-apps/cli': '2.11.4' } }));
+  mkdirSync(path.join(root, 'src-tauri'), { recursive: true });
+  writeFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), JSON.stringify({ version: '1.2.3', plugins: { updater: { pubkey: keys.pubkey } } }));
+  const pluginDir = path.join(root, 'src-tauri', 'target', 'release', 'nsis', 'x64', 'Plugins', 'x86-unicode');
+  mkdirSync(pluginDir, { recursive: true });
+  const callbackPaths = [
+    path.join(root, 'src-tauri', 'target', 'release', 'widgetboard.exe'),
+    ...['NSISdl.dll', 'StartMenu.dll', 'System.dll', 'nsDialogs.dll', 'additional/nsis_tauri_utils.dll'].map((name) => path.join(pluginDir, name)),
+    path.join(root, 'src-tauri', 'target', 'release', 'nsis', 'x64', 'uninstall.exe'),
+    installer,
+  ];
+  for (const [index, file] of callbackPaths.entries()) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    if (file !== installer) writeFileSync(file, Buffer.from(`callback PE ${index}`));
+  }
   const evidence = path.join(root, 'authenticode.jsonl');
-  writeFileSync(evidence, `${JSON.stringify({ status: 'success', authenticodeStatus: 'Valid', path: installer, subject: 'CN=WidgetBoard', timestampSubject: 'CN=Timestamp' })}\n`);
+  const roles = ['application', 'nsis-plugin:nsisdl.dll', 'nsis-plugin:startmenu.dll', 'nsis-plugin:system.dll', 'nsis-plugin:nsdialogs.dll', 'nsis-plugin:additional/nsis_tauri_utils.dll', 'nsis-uninstaller', 'final-installer'];
+  const records = callbackPaths.map((file, index) => {
+    const digest = crypto.createHash('sha256').update(readFileSync(file)).digest('hex');
+    return { status: 'success', authenticodeStatus: 'Valid', path: file, identity: normalizeIdentity(file), callbackRole: roles[index], sha256Before: 'b'.repeat(64), sha256: digest, subject: 'CN=WidgetBoard', timestampSubject: 'CN=Timestamp', timestampThumbprint: 'T'.repeat(40) };
+  });
+  writeFileSync(evidence, records.map((record) => JSON.stringify(record)).join('\n') + '\n');
   return { root, installer, signature, bytes, evidence, context: { tag: 'v1.2.3', version: '1.2.3', sha: 'a'.repeat(40), notesPath: 'RELEASE_NOTES.md' } };
 }
+
+let testSigningKeys;
+let testSigningRoot;
+const testSigningPassword = 'widgetboard fixture signing password';
+const tauriCli = path.join(process.cwd(), 'node_modules', '@tauri-apps', 'cli', 'tauri.js');
+
+function generateTestKey(name) {
+  const privateKey = path.join(testSigningRoot, `${name}.key`);
+  execFileSync(process.execPath, [tauriCli, 'signer', 'generate', '--ci', '--password', testSigningPassword, '--write-keys', privateKey], { cwd: process.cwd(), stdio: 'ignore' });
+  return { privateKey, pubkey: readFileSync(`${privateKey}.pub`, 'utf8').trim() };
+}
+
+function getTestSigningKeys() {
+  if (testSigningKeys) return testSigningKeys;
+  testSigningRoot = mkdtempSync(path.join(os.tmpdir(), 'widgetboard-tauri-test-keys-'));
+  const key = generateTestKey('valid');
+  const payload = path.join(testSigningRoot, 'WidgetBoard_1.2.3_x64-setup.exe');
+  writeFileSync(payload, Buffer.from('signed NSIS installer bytes'));
+  execFileSync(process.execPath, [tauriCli, 'signer', 'sign', '--private-key-path', key.privateKey, '--password', testSigningPassword, payload], { cwd: process.cwd(), stdio: 'ignore' });
+  testSigningKeys = { ...key, signature: readFileSync(`${payload}.sig`, 'utf8') };
+  return testSigningKeys;
+}
+
+function normalizeIdentity(file) {
+  return path.resolve(file).replaceAll('\\', '/').toLowerCase();
+}
+
+after(() => {
+  if (testSigningRoot) rmSync(testSigningRoot, { recursive: true, force: true });
+});
 
 test('assembler requires one installer and matching sig', () => {
   const f = assemblyFixture();
@@ -214,6 +263,74 @@ test('assembler requires one installer and matching sig', () => {
     assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: path.join(f.root, 'wrong.sig'), evidence: f.evidence }), /signature|\.sig/i);
     writeFileSync(f.signature, '  \n');
     assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /signature.*empty/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('updater signature verifies with the configured key for exact final installer bytes', async () => {
+  const f = assemblyFixture();
+  try {
+    const tools = await import('../tools/release/assemble.mjs');
+    assert.equal(typeof tools.verifyUpdaterSignature, 'function');
+    assert.equal(tools.verifyUpdaterSignature({ root: f.root, signature: f.signature, installer: f.installer }), true);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('updater signature verification rejects a different key', async () => {
+  const f = assemblyFixture();
+  try {
+    const tools = await import('../tools/release/assemble.mjs');
+    const wrong = generateTestKey('wrong');
+    const configPath = path.join(f.root, 'src-tauri', 'tauri.conf.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf8'));
+    config.plugins.updater.pubkey = wrong.pubkey;
+    writeFileSync(configPath, JSON.stringify(config));
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /signature|key|verify/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('updater signature verification rejects different installer bytes', async () => {
+  const f = assemblyFixture();
+  try {
+    const tools = await import('../tools/release/assemble.mjs');
+    const changed = path.join(path.dirname(f.installer), 'different-installer.exe');
+    writeFileSync(changed, Buffer.from('different final installer bytes'));
+    assert.throws(() => tools.verifyUpdaterSignature({ root: f.root, signature: f.signature, installer: changed }), /signature|verify/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('assembler rejects missing duplicate or unbound signing callbacks', () => {
+  const f = assemblyFixture();
+  try {
+    const records = readFileSync(f.evidence, 'utf8').trim().split(/\r?\n/).map(JSON.parse);
+    writeFileSync(f.evidence, records.slice(0, -1).map(JSON.stringify).join('\n') + '\n');
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /missing|complete|callback/i);
+    writeFileSync(f.evidence, [...records, records[0]].map(JSON.stringify).join('\n') + '\n');
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /duplicate|identity/i);
+    const missingDigest = records.map((entry) => entry.path === f.installer ? (({ sha256Before, ...rest }) => rest)(entry) : entry);
+    writeFileSync(f.evidence, missingDigest.map(JSON.stringify).join('\n') + '\n');
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /digest/i);
+    const wrongInstaller = records.map((entry) => entry.path === f.installer ? { ...entry, sha256: 'f'.repeat(64) } : entry);
+    writeFileSync(f.evidence, wrongInstaller.map(JSON.stringify).join('\n') + '\n');
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /digest|hash|bytes/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('assembler rejects an unsafe release identity or source path', () => {
+  const f = assemblyFixture();
+  try {
+    assert.throws(() => assembleRelease({ root: f.root, context: { ...f.context, sha: 'bad' }, installer: f.installer, signature: f.signature, evidence: f.evidence }), /commit|sha/i);
+    assert.throws(() => assembleRelease({ root: f.root, context: { ...f.context, tag: 'v1.2.4' }, installer: f.installer, signature: f.signature, evidence: f.evidence }), /tag|version/i);
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: path.join(f.root, 'outside.exe'), signature: path.join(f.root, 'outside.exe.sig'), evidence: f.evidence }), /canonical|installer|path/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('assembler refuses stale release staging output', () => {
+  const f = assemblyFixture();
+  try {
+    const staging = path.join(f.root, 'dist', 'release');
+    mkdirSync(staging, { recursive: true });
+    writeFileSync(path.join(staging, 'old-artifact.txt'), 'stale');
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence }), /empty|stale|nonempty/i);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -233,7 +350,7 @@ test('manifest embeds sig file content', () => {
   try {
     const out = assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence });
     const manifest = JSON.parse(readFileSync(out.manifest, 'utf8'));
-    assert.equal(manifest.platforms['windows-x86_64-nsis'].signature, 'tauri-update-signature\n');
+    assert.deepEqual(Buffer.from(manifest.platforms['windows-x86_64-nsis'].signature), readFileSync(out.signature));
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -254,17 +371,20 @@ test('checksums cover the final installer and metadata', () => {
     assert.match(sums, /release-metadata\.json/);
     const expected = crypto.createHash('sha256').update(readFileSync(out.installer)).digest('hex');
     assert.match(sums, new RegExp(expected));
+    const checksumNames = sums.trim().split(/\r?\n/).map((line) => line.slice(66));
+    assert.equal(new Set(checksumNames).size, 4);
+    assert.equal(checksumNames.length, 4);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
 test('assembler rejects a filename or version mismatch', () => {
   const f = assemblyFixture();
   try {
-    assert.throws(() => assembleRelease({ root: f.root, context: { ...f.context, version: '2.0.0' }, installer: f.installer, signature: f.signature, evidence: f.evidence }), /filename|version/i);
+    assert.throws(() => assembleRelease({ root: f.root, context: { ...f.context, version: '2.0.0' }, installer: f.installer, signature: f.signature, evidence: f.evidence }), /canonical|filename|version/i);
     const wrongInstaller = path.join(path.dirname(f.installer), 'WidgetBoard_1.2.4_x64-setup.exe');
     writeFileSync(wrongInstaller, f.bytes);
     writeFileSync(`${wrongInstaller}.sig`, 'sig');
-    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: wrongInstaller, signature: `${wrongInstaller}.sig`, evidence: f.evidence }), /filename|version/i);
+    assert.throws(() => assembleRelease({ root: f.root, context: f.context, installer: wrongInstaller, signature: `${wrongInstaller}.sig`, evidence: f.evidence }), /canonical|filename|version/i);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
@@ -275,4 +395,29 @@ test('release signing config stays out of the base Tauri config', () => {
   assert.equal(base.bundle.windows.signCommand, undefined);
   assert.equal(release.bundle.createUpdaterArtifacts, true);
   assert.equal(release.bundle.windows.signCommand, 'node ../tools/release/authenticode.mjs %1');
+});
+
+test('PowerShell verifier rejects checksum inventory extras before Authenticode checks', { skip: process.platform !== 'win32' }, () => {
+  const f = assemblyFixture();
+  try {
+    const out = assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence });
+    writeFileSync(out.checksums, `${readFileSync(out.checksums, 'utf8')}0000000000000000000000000000000000000000000000000000000000000000  unexpected.bin\n`);
+    const script = path.join(process.cwd(), 'tools', 'release', 'verify.ps1');
+    assert.throws(() => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-ReleaseDirectory', out.directory, '-ExpectedSubject', 'CN=WidgetBoard'], { cwd: process.cwd(), encoding: 'utf8' }), /four|checksum|target/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('PowerShell verifier rejects manifest signature bytes that differ from .sig', { skip: process.platform !== 'win32' }, () => {
+  const f = assemblyFixture();
+  try {
+    const out = assembleRelease({ root: f.root, context: f.context, installer: f.installer, signature: f.signature, evidence: f.evidence });
+    const manifest = JSON.parse(readFileSync(out.manifest, 'utf8'));
+    manifest.platforms['windows-x86_64-nsis'].signature += 'tampered';
+    writeFileSync(out.manifest, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+    const updatedManifestHash = crypto.createHash('sha256').update(readFileSync(out.manifest)).digest('hex');
+    const sums = readFileSync(out.checksums, 'utf8').replace(/^[0-9a-f]{64}(  latest-installer\.json)$/m, `${updatedManifestHash}$1`);
+    writeFileSync(out.checksums, sums, 'utf8');
+    const script = path.join(process.cwd(), 'tools', 'release', 'verify.ps1');
+    assert.throws(() => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, '-ReleaseDirectory', out.directory, '-ExpectedSubject', 'CN=WidgetBoard'], { cwd: process.cwd(), encoding: 'utf8' }), /manifest signature bytes/i);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
 });

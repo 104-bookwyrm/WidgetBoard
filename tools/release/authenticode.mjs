@@ -6,6 +6,21 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+const normalizeIdentity = (file) => path.resolve(file).replaceAll('\\', '/').toLowerCase();
+const nsisPlugins = new Set(['nsisdl.dll', 'startmenu.dll', 'system.dll', 'nsdialogs.dll', 'nsis_tauri_utils.dll']);
+
+function callbackRole(file) {
+  const normalized = normalizeIdentity(file);
+  const basename = path.basename(file).toLowerCase();
+  if (basename === 'widgetboard.exe' && normalized.includes('/src-tauri/target/release/')) return 'application';
+  if (basename === 'uninstall.exe') return 'nsis-uninstaller';
+  if (nsisPlugins.has(basename) && normalized.includes('/nsis/x64/plugins/x86-unicode/')) {
+    const relative = normalized.split('/nsis/x64/plugins/x86-unicode/').at(-1);
+    return `nsis-plugin:${relative}`;
+  }
+  if (/^widgetboard_.+_x64-setup\.exe$/i.test(path.basename(file))) return 'final-installer';
+  return 'unclassified';
+}
 
 function requireSetting(env, key) {
   const value = env[key]?.trim();
@@ -31,6 +46,8 @@ export async function signArtifact({ file, env = process.env, runAdapter, inspec
   const record = {
     status: 'success',
     path: absoluteFile,
+    identity: normalizeIdentity(absoluteFile),
+    callbackRole: callbackRole(absoluteFile),
     sha256Before: before,
     sha256: after,
     authenticodeStatus: signature.status,
