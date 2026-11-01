@@ -1,0 +1,140 @@
+name: Trusted Windows release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    outputs:
+      tag: ${{ steps.contract.outputs.tag }}
+      version: ${{ steps.contract.outputs.version }}
+      sha: ${{ steps.contract.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Validate tag and source contract
+        id: contract
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          $contextJson = node tools/release/validate.mjs --tag $env:RELEASE_TAG --sha $env:RELEASE_SHA --notes RELEASE_NOTES.md
+          if ($LASTEXITCODE -ne 0) { throw 'Release source contract validation failed' }
+          $context = $contextJson | ConvertFrom-Json
+          "tag=$($context.tag)" >> $env:GITHUB_OUTPUT
+          "version=$($context.version)" >> $env:GITHUB_OUTPUT
+          "sha=$($context.sha)" >> $env:GITHUB_OUTPUT
+
+  release:
+    needs: validate
+    runs-on: windows-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_TAG: ${{ needs.validate.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+      RELEASE_SHA: ${{ needs.validate.outputs.sha }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      WIDGETBOARD_AUTHENTICODE_ADAPTER: ${{ vars.WIDGETBOARD_AUTHENTICODE_ADAPTER }}
+      WIDGETBOARD_AUTHENTICODE_SUBJECT: ${{ vars.WIDGETBOARD_AUTHENTICODE_SUBJECT }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check protected signing inputs
+        run: |
+          foreach ($name in @('TAURI_SIGNING_PRIVATE_KEY', 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD', 'WIDGETBOARD_AUTHENTICODE_ADAPTER', 'WIDGETBOARD_AUTHENTICODE_SUBJECT')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "Required release environment input is absent: $name" }
+          }
+          if (-not (Test-Path -LiteralPath $env:WIDGETBOARD_AUTHENTICODE_ADAPTER -PathType Leaf)) { throw 'Configured Authenticode adapter file is absent' }
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+          targets: x86_64-pc-windows-msvc
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+      - name: Install JavaScript dependencies
+        run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+      - name: Run JavaScript tests
+        run: npm test
+      - name: Run locked Rust tests
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Build signed NSIS release
+        run: npx tauri build --bundles nsis --config src-tauri/tauri.release.conf.json
+      - name: Verify source installer Authenticode signature
+        env:
+          EXPECTED_SUBJECT: ${{ vars.WIDGETBOARD_AUTHENTICODE_SUBJECT }}
+        run: |
+          $installer = "src-tauri/target/release/bundle/nsis/WidgetBoard_${env:RELEASE_VERSION}_x64-setup.exe"
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw 'Signed Tauri NSIS installer is absent' }
+          if (-not (Test-Path -LiteralPath "$installer.sig" -PathType Leaf)) { throw 'Tauri updater signature is absent' }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          if ([string]$signature.Status -cne 'Valid') { throw "Source installer Authenticode status is not Valid: $($signature.Status)" }
+          if ([string]$signature.SignerCertificate.Subject -cne $env:EXPECTED_SUBJECT) { throw 'Source installer Authenticode subject mismatch' }
+          if (-not $signature.TimeStamperCertificate -or -not $signature.TimeStamperCertificate.Subject) { throw 'Source installer timestamp certificate is absent' }
+      - name: Assemble release assets
+        run: |
+          $installer = "src-tauri/target/release/bundle/nsis/WidgetBoard_${env:RELEASE_VERSION}_x64-setup.exe"
+          node tools/release/assemble.mjs --tag $env:RELEASE_TAG --sha $env:RELEASE_SHA --notes RELEASE_NOTES.md --installer $installer --signature "$installer.sig" --evidence "$env:RUNNER_TEMP/widgetboard-authenticode.jsonl"
+          if ($LASTEXITCODE -ne 0) { throw 'Release asset assembly failed' }
+      - name: Verify assembled release assets
+        run: ./tools/release/verify.ps1 -ReleaseDirectory dist/release -ExpectedSubject $env:WIDGETBOARD_AUTHENTICODE_SUBJECT
+      - name: Attest final installer digest
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/release/WidgetBoard-${{ needs.validate.outputs.version }}-setup-x86_64.exe
+      - name: Create draft release
+        run: gh release create $env:RELEASE_TAG --verify-tag --draft --title "WidgetBoard $env:RELEASE_VERSION" --notes-file RELEASE_NOTES.md
+      - name: Upload release assets
+        run: |
+          $expected = @(
+            "WidgetBoard-$($env:RELEASE_VERSION)-setup-x86_64.exe",
+            "WidgetBoard-$($env:RELEASE_VERSION)-setup-x86_64.exe.sig",
+            'latest-installer.json',
+            'release-metadata.json',
+            'SHA256SUMS.txt'
+          ) | Sort-Object
+          $assets = @(Get-ChildItem -LiteralPath dist/release -File | Sort-Object Name)
+          $actual = @($assets | ForEach-Object { $_.Name })
+          if (Compare-Object $expected $actual) { throw 'Release directory has a missing or unexpected asset' }
+          $assetPaths = @($assets | ForEach-Object { $_.FullName })
+          gh release upload $env:RELEASE_TAG @assetPaths
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release asset upload failed' }
+      - name: Verify downloaded draft assets
+        run: |
+          $download = Join-Path $env:RUNNER_TEMP 'release-draft-download'
+          New-Item -ItemType Directory -Path $download | Out-Null
+          gh release download $env:RELEASE_TAG --dir $download
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download draft release assets' }
+          ./tools/release/verify.ps1 -ReleaseDirectory $download -ExpectedSubject $env:WIDGETBOARD_AUTHENTICODE_SUBJECT
+      - name: Publish release
+        run: gh release edit $env:RELEASE_TAG --draft=false
+      - name: Verify published assets
+        run: |
+          $download = Join-Path $env:RUNNER_TEMP 'release-published-download'
+          New-Item -ItemType Directory -Path $download | Out-Null
+          gh release download $env:RELEASE_TAG --dir $download
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download published release assets' }
+          ./tools/release/verify.ps1 -ReleaseDirectory $download -ExpectedSubject $env:WIDGETBOARD_AUTHENTICODE_SUBJECT
