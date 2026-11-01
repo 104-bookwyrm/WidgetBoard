@@ -7,6 +7,10 @@ function fail(message) {
   throw new Error(message);
 }
 
+export function parseGitStatus(output) {
+  return output.split(/\r?\n/).filter(Boolean);
+}
+
 function isBuildOutput(statusLine) {
   const changedPath = statusLine.slice(3).replace(/^"(.*)"$/, '$1').replaceAll('\\', '/');
   return BUILD_OUTPUTS.some((output) => {

@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { validateRelease } from '../tools/release/lib.mjs';
+import { parseGitStatus, validateRelease } from '../tools/release/lib.mjs';
 
 function fixture() {
   const fixtureRoot = path.join(process.cwd(), 'test-artifacts', 'release-fixtures');
@@ -15,9 +15,11 @@ function fixture() {
   gitRun('config', 'user.name', 'Release Test');
   mkdirSync(path.join(root, 'src-tauri'), { recursive: true });
   mkdirSync(path.join(root, 'tools', 'release'), { recursive: true });
+  mkdirSync(path.join(root, 'xdist'), { recursive: true });
   writeFileSync(path.join(root, 'src-tauri', 'Cargo.toml'), '[package]\nname = "widgetboard"\nversion = "1.2.3"\n');
   writeFileSync(path.join(root, 'src-tauri', 'Cargo.lock'), '[[package]]\nname = "widgetboard"\nversion = "1.2.3"\n');
   writeFileSync(path.join(root, 'src-tauri', 'tauri.conf.json'), JSON.stringify({ version: '1.2.3' }));
+  writeFileSync(path.join(root, 'xdist', 'source.js'), 'const source = true;\n');
   writeFileSync(path.join(root, '.gitignore'), 'dist/\nsrc-tauri/target/\nsrc-tauri/gen/\nignored-source.txt\n');
   writeFileSync(path.join(root, 'RELEASE_NOTES.md'), 'WidgetBoard 1.2.3\n');
   writeFileSync(path.join(root, 'empty.md'), ' \r\n\t');
@@ -33,7 +35,7 @@ function fixture() {
       try { gitRun('merge-base', '--is-ancestor', commit, ref); return true; }
       catch { return false; }
     },
-    status: () => gitRun('status', '--porcelain', '--untracked-files=all', '--ignored=matching').split(/\r?\n/).filter(Boolean),
+    status: () => parseGitStatus(execFileSync('git', ['status', '--porcelain', '--untracked-files=all', '--ignored=matching'], { cwd: root, encoding: 'utf8' })),
   };
   return { root, sha, git, gitRun };
 }
@@ -110,4 +112,9 @@ test('rejects ignored source changes while allowing declared build outputs', () 
   assert.throws(() => validateRelease({ root, tag: 'v1.2.3', sha, notesPath: 'RELEASE_NOTES.md', git }), /clean/i);
   rmSync(path.join(root, 'ignored-source.txt'));
   assert.doesNotThrow(() => validateRelease({ root, tag: 'v1.2.3', sha, notesPath: 'RELEASE_NOTES.md', git }));
+}));
+
+test('rejects a tracked source change whose path starts with xdist', () => withFixture(({ root, sha, git }) => {
+  writeFileSync(path.join(root, 'xdist', 'source.js'), 'const source = false;\n');
+  assert.throws(() => validateRelease({ root, tag: 'v1.2.3', sha, notesPath: 'RELEASE_NOTES.md', git }), /clean/i);
 }));

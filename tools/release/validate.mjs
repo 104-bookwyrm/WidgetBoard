@@ -2,7 +2,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { validateRelease } from './lib.mjs';
+import { parseGitStatus, validateRelease } from './lib.mjs';
 
 function options(args) {
   const result = {};
@@ -19,6 +19,7 @@ function options(args) {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const gitRun = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+const gitRunRaw = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
 const git = {
   head: () => gitRun(['rev-parse', 'HEAD']),
   tagTarget: (tag) => gitRun(['rev-parse', `${tag}^{commit}`]),
@@ -26,8 +27,7 @@ const git = {
     try { gitRun(['merge-base', '--is-ancestor', sha, ref]); return true; }
     catch { return false; }
   },
-  status: () => gitRun(['status', '--porcelain', '--untracked-files=all', '--ignored=matching', '--', '.'])
-    .split(/\r?\n/).filter(Boolean),
+  status: () => parseGitStatus(gitRunRaw(['status', '--porcelain', '--untracked-files=all', '--ignored=matching', '--', '.'])),
 };
 
 try {
