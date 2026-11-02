@@ -2188,9 +2188,54 @@ fn spawn_updater(app: AppHandle) {
 /// Start a fresh copy after backup restore.
 fn relaunch(app: &AppHandle) {
     if let Ok(exe) = std::env::current_exe() {
-        if std::process::Command::new(exe).spawn().is_ok() {
+        if std::process::Command::new(exe).args(restore_relaunch_args()).spawn().is_ok() {
             app.exit(0);
         }
+    }
+}
+
+fn restore_relaunch_args() -> [String; 2] {
+    ["--wait-restore-parent".into(), std::process::id().to_string()]
+}
+
+fn restore_parent_pid(args: &[String]) -> Option<u32> {
+    args.iter()
+        .position(|arg| arg == "--wait-restore-parent")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|pid| pid.parse::<u32>().ok())
+        .filter(|pid| *pid != 0)
+}
+
+/// The backup restore child must release Tauri's single-instance mutex until its parent exits.
+/// A missing process means the parent already finished. Other open errors and timeouts abort startup.
+fn wait_for_restore_parent() -> Result<(), String> {
+    let args: Vec<String> = std::env::args().collect();
+    let Some(pid) = restore_parent_pid(&args) else { return Ok(()) };
+
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::Foundation::{CloseHandle, GetLastError};
+        use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
+
+        let handle = match OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
+            Ok(handle) => handle,
+            Err(_error) if GetLastError().0 == 87 => return Ok(()), // ERROR_INVALID_PARAMETER: parent exited
+            Err(error) => return Err(format!("cannot wait for restore parent {pid}: {error}")),
+        };
+        let status = WaitForSingleObject(handle, 15_000);
+        let _ = CloseHandle(handle);
+        match status.0 {
+            0 => Ok(()), // WAIT_OBJECT_0
+            0x102 => Err(format!("restore parent {pid} did not exit within 15 seconds")), // WAIT_TIMEOUT
+            u32::MAX => Err(format!("failed while waiting for restore parent {pid}: Win32 error {}", GetLastError().0)), // WAIT_FAILED
+            other => Err(format!("unexpected wait status {other:#x} for restore parent {pid}")),
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = pid;
+        Ok(())
     }
 }
 fn record_closed(state: &AppState) -> Result<(), String> {
@@ -2384,6 +2429,10 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn main() {
+    if let Err(error) = wait_for_restore_parent() {
+        eprintln!("{error}");
+        std::process::exit(1);
+    }
     tauri::Builder::default()
         // a second launch just shows the running app instead of starting a rival copy
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -2543,6 +2592,24 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn restore_relaunch_arguments_include_the_current_parent_pid() {
+        let args = restore_relaunch_args();
+        assert_eq!(args.as_slice(), &["--wait-restore-parent", &std::process::id().to_string()]);
+    }
+
+    #[test]
+    fn only_restore_relaunch_arguments_request_parent_coordination() {
+        let restore_args = vec!["widgetboard".to_string(), "--wait-restore-parent".to_string(), "42".to_string()];
+        assert_eq!(restore_parent_pid(&restore_args), Some(42));
+
+        let ordinary_args = vec!["widgetboard".to_string()];
+        assert_eq!(restore_parent_pid(&ordinary_args), None);
+
+        let retired_updater_args = vec!["widgetboard".to_string(), "--wait-pid".to_string(), "42".to_string()];
+        assert_eq!(restore_parent_pid(&retired_updater_args), None);
+    }
 
     #[test]
     fn autostart_missing_run_entry_stays_absent() {
