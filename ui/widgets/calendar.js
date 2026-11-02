@@ -116,9 +116,9 @@ export default {
     .cal-head { display: flex; align-items: center; gap: var(--space-2); flex: none; min-width: 0; }
     .cal-head button { padding: 0 7px; font-size: var(--fs-small); flex: none; }
     .cal-title { flex: 1; min-width: 0; text-align: center; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .cal-filter { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; flex: none;
-      mask-image: linear-gradient(to right, #000 88%, transparent); }
-    .cal-filter .chip { max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
+    .cal-filter { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; flex: none; }
+    .cal-filter.more { mask-image: linear-gradient(to right, #000 88%, transparent); }
+    .cal-filter .chip { max-width: 9em; overflow: hidden; text-overflow: ellipsis; flex: none; }
     .cal-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 
     /* search row: matches light up, the rest dims */
@@ -310,7 +310,7 @@ export default {
 
     const all = () => events.concat(subList);
     const allTags = () =>
-      [...new Set(all().flatMap((e) => e.tags || []))].sort();
+      [...new Set(all().flatMap((e) => e.tags || []))].sort((a, b) => a.localeCompare(b, lang, { numeric: true }));
     // checklist daily routines live in the checklist only (not in every day square)
     const routine = (ev) => ev.todo && ev.repeat === "daily";
     function shown(ev) {

@@ -30,8 +30,8 @@ export default {
     .dd-top { display: flex; gap: var(--space-2); align-items: center; flex: none; min-width: 0; }
     .dd-view { flex: none; padding: 0 7px; font-size: var(--fs-small); }
     .dd-top .dd-filter { flex: 1; min-width: 0; }
-    .dd-filter { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; flex: none;
-      mask-image: linear-gradient(to right, #000 88%, transparent); }
+    .dd-filter { display: flex; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; flex: none; }
+    .dd-filter.more { mask-image: linear-gradient(to right, #000 88%, transparent); }
     .dd-row.dd-auto { cursor: default; touch-action: auto; }
     .dd-row.dd-auto .dd-av { background: color-mix(in srgb, var(--c3) 14%, transparent); color: var(--text-muted); }
     .dd-sep { border-top: var(--line-width) var(--line-style) var(--line-color); margin: 4px 4px; opacity: .6; }
@@ -96,7 +96,7 @@ export default {
         ...i,
         id: i.id || uid(),
         name: String(i.name ?? ""),
-        tag: String(i.tag ?? ""),
+        tags: Array.isArray(i.tags) ? i.tags.map(String).filter(Boolean) : i.tag ? [String(i.tag)] : [],
         date: validDate(i.date) ? i.date : ymd(),
         // milestone: celebrate every `mstep` days/months (0 = off). countFrom 'one' = Korean inclusive count.
         mstep: Number.isFinite(+i.mstep) && +i.mstep > 0 ? Math.floor(+i.mstep) : 0,
@@ -120,12 +120,12 @@ export default {
     const normStep = (n) =>
       Number.isFinite(+n) && +n > 0 ? Math.floor(+n) : 0;
     const normCF = (c) => (c === "zero" ? "zero" : "one");
-    // event -> the item shape the rest of the widget works with (name↔title, tag↔tags[0])
+    // event -> the item shape the rest of the widget works with (name↔title)
     const toItem = (e) => ({
       id: e.id,
       name: String(e.title ?? ""),
       date: validDate(e.date) ? e.date : ymd(),
-      tag: String((e.tags || [])[0] ?? ""),
+      tags: Array.isArray(e.tags) ? e.tags.map(String).filter(Boolean) : [],
       icon: e.dday.icon ?? null,
       mode: normMode(e.dday.mode),
       mstep: normStep(e.dday.mstep),
@@ -140,7 +140,7 @@ export default {
       id: it.id,
       date: it.date,
       title: String(it.name ?? ""),
-      tags: it.tag ? [it.tag] : [],
+      tags: [...(it.tags || [])],
       repeat: it.yearly && it.mode !== "since" ? "yearly" : null,
       done: prev?.done ?? false,
       dday: {
@@ -242,7 +242,9 @@ export default {
       return diff > 0 ? `D-${diff}` : diff === 0 ? "D-Day" : `D+${-diff}`;
     }
     const tagsOf = () =>
-      [...new Set([...items.map((i) => i.tag), ...upcoming(false).flatMap((r) => r.e.tags || [])].filter(Boolean))].sort();
+      [...new Set([...items.flatMap((i) => i.tags), ...upcoming(false).flatMap((r) => r.e.tags || [])].filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, api.lang, { numeric: true }),
+      );
 
     // Upcoming shared entries (calendar entries, to-dos, quotas; not d-days) by next occurrence within a year. Dailies are
     // not countdowns; a ticked occurrence leaves the list until the next one. `filtered`: status and tag chips.
@@ -268,7 +270,7 @@ export default {
         const diff = diffOf(it);
         if (f.status === "upcoming" && diff < 0) return false;
         if (f.status === "past" && diff >= 0) return false;
-        if (f.tags.length && !f.tags.includes(it.tag)) return false;
+        if (f.tags.length && !it.tags.some((g) => f.tags.includes(g))) return false;
         return true;
       });
     }
@@ -332,7 +334,7 @@ export default {
                 ? [
                     sinceCount(it),
                     t("dday.next", { m: ms.label }),
-                    it.tag ? "#" + it.tag : "",
+                    ...it.tags.map((g) => "#" + g),
                   ]
                     .filter(Boolean)
                     .join(" · ")
@@ -340,7 +342,7 @@ export default {
                     dateOf(it).replaceAll("-", "."),
                     it.yearly && it.mode !== "since" ? t("dday.yearly") : "",
                     leapFallback(it.date, dateOf(it)) ? t("dday.leap_note") : "",
-                    it.tag ? "#" + it.tag : "",
+                    ...it.tags.map((g) => "#" + g),
                   ]
                     .filter(Boolean)
                     .join(" · ");
@@ -501,7 +503,7 @@ export default {
             name: "",
             date: today(),
             icon: null,
-            tag: "",
+            tags: [],
             mode: "until",
             yearly: false,
             mstep: 0,
@@ -520,7 +522,7 @@ export default {
           </div>
         </div>
         <div class="dd-icons" hidden></div>
-        <input data-f="tag" list="dd-tags-${esc(it.id)}" placeholder="${t("dday.tag")}" value="${esc(it.tag)}">
+        <input data-f="tag" list="dd-tags-${esc(it.id)}" placeholder="${t("dday.tag")}" value="${esc(it.tags.map((g) => "#" + g).join(" "))}">
         <datalist id="dd-tags-${esc(it.id)}">${tagOpts}</datalist>
         <select data-f="mode">
           <option value="until">${t("dday.mode_until")}</option>
@@ -615,7 +617,8 @@ export default {
       const ok = () => {
         it.name = f("name").value.trim().slice(0, 100);
         it.date = f("date").value;
-        it.tag = f("tag").value.trim().replace(/^#/, "");
+        // "#a #b", "a, b" and "a b" all give two tags; same 40-char cap as the calendar's tags
+        it.tags = [...new Set(f("tag").value.split(/[\s,#]+/).filter(Boolean).map((g) => g.slice(0, 40)))];
         it.mode = f("mode").value;
         it.yearly = it.mode !== "since" && f("yearly").checked;
         it.mstep =
