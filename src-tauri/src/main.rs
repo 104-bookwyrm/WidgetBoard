@@ -6,6 +6,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    ffi::OsString,
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -2188,31 +2189,61 @@ fn spawn_updater(app: AppHandle) {
 /// Start a fresh copy after backup restore.
 fn relaunch(app: &AppHandle) {
     if let Ok(exe) = std::env::current_exe() {
-        if std::process::Command::new(exe).args(restore_relaunch_args()).spawn().is_ok() {
+        if restore_relaunch_command(exe, std::process::id()).spawn().is_ok() {
             app.exit(0);
         }
     }
 }
 
-fn restore_relaunch_args() -> [String; 2] {
-    ["--wait-restore-parent".into(), std::process::id().to_string()]
+const RESTORE_PARENT_ENV: &str = "WIDGETBOARD_RESTORE_PARENT_PID";
+
+struct RestoreRelaunchSpec {
+    env_key: OsString,
+    env_value: OsString,
+    args: Vec<OsString>,
 }
 
-fn restore_parent_pid(args: &[String]) -> Option<u32> {
-    args.iter()
-        .position(|arg| arg == "--wait-restore-parent")
-        .and_then(|i| args.get(i + 1))
-        .and_then(|pid| pid.parse::<u32>().ok())
-        .filter(|pid| *pid != 0)
+fn restore_relaunch_spec(parent_pid: u32) -> RestoreRelaunchSpec {
+    RestoreRelaunchSpec {
+        env_key: RESTORE_PARENT_ENV.into(),
+        env_value: parent_pid.to_string().into(),
+        args: Vec::new(),
+    }
 }
 
-/// The backup restore child must release Tauri's single-instance mutex until its parent exits.
+fn restore_relaunch_command(exe: PathBuf, parent_pid: u32) -> std::process::Command {
+    let spec = restore_relaunch_spec(parent_pid);
+    let mut command = std::process::Command::new(exe);
+    command.env(&spec.env_key, &spec.env_value).args(spec.args);
+    command
+}
+
+fn consume_restore_parent_env(
+    read: impl FnOnce() -> Option<OsString>,
+    remove: impl FnOnce(),
+) -> Result<Option<u32>, String> {
+    let value = read();
+    remove();
+    let Some(value) = value else { return Ok(None) };
+    let value = value.into_string().map_err(|_| "restore parent PID must be valid Unicode".to_string())?;
+    let pid = value.parse::<u32>().map_err(|_| "restore parent PID must be a positive integer".to_string())?;
+    if pid == 0 {
+        return Err("restore parent PID must be greater than zero".into());
+    }
+    Ok(Some(pid))
+}
+
+fn take_restore_parent_pid() -> Result<Option<u32>, String> {
+    consume_restore_parent_env(
+        || std::env::var_os(RESTORE_PARENT_ENV),
+        || std::env::remove_var(RESTORE_PARENT_ENV),
+    )
+}
+
+/// Waits for a restore parent before the single-instance plugin is initialized.
 /// A missing process means the parent already finished. Other open errors and timeouts abort startup.
-fn wait_for_restore_parent() -> Result<(), String> {
-    let args: Vec<String> = std::env::args().collect();
-    let Some(pid) = restore_parent_pid(&args) else { return Ok(()) };
-
-    #[cfg(windows)]
+#[cfg(windows)]
+fn wait_for_process_exit(pid: u32, timeout: Duration) -> Result<(), String> {
     unsafe {
         use windows::Win32::Foundation::{CloseHandle, GetLastError};
         use windows::Win32::System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE};
@@ -2222,16 +2253,24 @@ fn wait_for_restore_parent() -> Result<(), String> {
             Err(_error) if GetLastError().0 == 87 => return Ok(()), // ERROR_INVALID_PARAMETER: parent exited
             Err(error) => return Err(format!("cannot wait for restore parent {pid}: {error}")),
         };
-        let status = WaitForSingleObject(handle, 15_000);
+        let timeout_ms = timeout.as_millis().min(u32::MAX as u128) as u32;
+        let status = WaitForSingleObject(handle, timeout_ms);
+        let wait_error = if status.0 == u32::MAX { Some(GetLastError().0) } else { None };
         let _ = CloseHandle(handle);
         match status.0 {
             0 => Ok(()), // WAIT_OBJECT_0
-            0x102 => Err(format!("restore parent {pid} did not exit within 15 seconds")), // WAIT_TIMEOUT
-            u32::MAX => Err(format!("failed while waiting for restore parent {pid}: Win32 error {}", GetLastError().0)), // WAIT_FAILED
+            0x102 => Err(format!("restore parent {pid} did not exit within {timeout_ms} ms")), // WAIT_TIMEOUT
+            u32::MAX => Err(format!("failed while waiting for restore parent {pid}: Win32 error {}", wait_error.unwrap_or_default())), // WAIT_FAILED
             other => Err(format!("unexpected wait status {other:#x} for restore parent {pid}")),
         }
     }
+}
 
+/// The parent process must exit before the replacement reaches Tauri's single-instance plugin.
+fn wait_for_restore_parent() -> Result<(), String> {
+    let Some(pid) = take_restore_parent_pid()? else { return Ok(()) };
+    #[cfg(windows)]
+    return wait_for_process_exit(pid, Duration::from_secs(15));
     #[cfg(not(windows))]
     {
         let _ = pid;
@@ -2592,23 +2631,71 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
 
     #[test]
-    fn restore_relaunch_arguments_include_the_current_parent_pid() {
-        let args = restore_relaunch_args();
-        assert_eq!(args.as_slice(), &["--wait-restore-parent", &std::process::id().to_string()]);
+    fn restore_relaunch_command_sets_parent_env_without_restore_arguments() {
+        let spec = restore_relaunch_spec(std::process::id());
+        assert_eq!(spec.env_key, OsString::from("WIDGETBOARD_RESTORE_PARENT_PID"));
+        assert_eq!(spec.env_value, OsString::from(std::process::id().to_string()));
+        assert!(spec.args.is_empty(), "restore coordination is not passed in CLI arguments");
+
+        let command = restore_relaunch_command(PathBuf::from("widgetboard.exe"), std::process::id());
+        assert!(command.get_envs().any(|(key, value)| {
+            key == RESTORE_PARENT_ENV && value == Some(OsString::from(std::process::id().to_string()).as_os_str())
+        }));
     }
 
     #[test]
-    fn only_restore_relaunch_arguments_request_parent_coordination() {
-        let restore_args = vec!["widgetboard".to_string(), "--wait-restore-parent".to_string(), "42".to_string()];
-        assert_eq!(restore_parent_pid(&restore_args), Some(42));
+    fn restore_parent_env_is_removed_before_its_value_is_used() {
+        let env = RefCell::new(Some(OsString::from("42")));
+        let pid = consume_restore_parent_env(
+            || env.borrow().clone(),
+            || { env.borrow_mut().take(); },
+        ).unwrap();
 
-        let ordinary_args = vec!["widgetboard".to_string()];
-        assert_eq!(restore_parent_pid(&ordinary_args), None);
+        assert_eq!(pid, Some(42));
+        assert!(env.borrow().is_none(), "later child processes must not inherit the restore marker");
+    }
 
-        let retired_updater_args = vec!["widgetboard".to_string(), "--wait-pid".to_string(), "42".to_string()];
-        assert_eq!(restore_parent_pid(&retired_updater_args), None);
+    #[test]
+    fn malformed_or_zero_restore_parent_env_is_rejected() {
+        for value in ["bad-pid", "0"] {
+            let env = RefCell::new(Some(OsString::from(value)));
+            assert!(consume_restore_parent_env(
+                || env.borrow().clone(),
+                || { env.borrow_mut().take(); },
+            ).is_err(), "{value} must be rejected");
+            assert!(env.borrow().is_none(), "invalid marker is still consumed");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_parent_wait_succeeds_after_disposable_process_exits() {
+        let mut child = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", "Start-Sleep -Seconds 2"])
+            .spawn()
+            .unwrap();
+
+        let result = wait_for_process_exit(child.id(), Duration::from_secs(5));
+        let child_status = child.wait().unwrap();
+        assert!(result.is_ok(), "wait should observe child exit: {result:?}");
+        assert!(child_status.success());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_parent_wait_times_out_and_cleans_up_disposable_process() {
+        let mut child = std::process::Command::new("powershell.exe")
+            .args(["-NoProfile", "-Command", "Start-Sleep -Seconds 10"])
+            .spawn()
+            .unwrap();
+
+        let result = wait_for_process_exit(child.id(), Duration::from_millis(20));
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(result.unwrap_err().contains("did not exit within"));
     }
 
     #[test]
