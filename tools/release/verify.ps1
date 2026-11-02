@@ -103,7 +103,7 @@ foreach ($entry in $evidence) {
   if ([string]$entry.status -cne 'success' -or [string]$entry.authenticodeStatus -cne 'Valid') { throw "Unsuccessful callback evidence: $role" }
   if ([string]$entry.path -notmatch '^[A-Za-z]:\\') { throw "Callback path must be absolute: $role" }
   $identity = ConvertTo-NormalizedPathIdentity ([string]$entry.path)
-  if ([string]$entry.identity -cne $identity) { throw "Callback identity is not the normalized full path: $role" }
+  if ((ConvertTo-NormalizedPathIdentity ([string]$entry.identity)) -cne $identity) { throw "Callback identity is not the normalized full path: $role" }
   if ($seenIdentities.ContainsKey($identity)) { throw "Duplicate callback identity: $identity" }
   if ([string]$entry.sha256Before -notmatch '^[0-9a-fA-F]{64}$' -or [string]$entry.sha256 -notmatch '^[0-9a-fA-F]{64}$') { throw "Callback evidence lacks required SHA-256 digests: $role" }
   if (-not [string]$entry.subject -or -not [string]$entry.timestampSubject -or -not [string]$entry.timestampThumbprint) { throw "Callback evidence lacks publisher or timestamp data: $role" }
