@@ -2,7 +2,86 @@
 
 Updated 2026-11-02 KST.
 
-## Current state
+## Post-merge disposition
+
+This section is the current continuation point. The later sections preserve the state and evidence recorded before the merge.
+
+Pull request 1 was merged into `main` at commit `60cefdb964b1457fbe940f2cdc84a4db3a2e1bf9`. The provider-independent release work is therefore present on `origin/main`. Do not rebuild that tranche.
+
+This tracked handoff is the canonical continuation file. The local `plan.md` used in the original checkout is not tracked on `origin/main`.
+
+The source chat for the implementation is `Identify top WidgetBoard developments`. Its decisions and implementation evidence are preserved in this file.
+
+Windows Authenticode signing is deferred. The earlier session chose SignPath Foundation as the prospective provider. No SignPath application was submitted. No SignPath adapter was built or installed. No provider account or signing operation was attempted. The protected GitHub release environment and dedicated release runner were also not configured during these sessions.
+
+This pause changes the operating priority. It does not remove the merged release work. The generic signer boundary remains available for SignPath or another provider later.
+
+### Work already completed
+
+- The application now targets one per-user NSIS installation channel.
+- The official Tauri updater replaced the portable executable-swap updater.
+- The release path validates its source contract and final artifact set.
+- The Authenticode integration remains provider-independent through `sign <absolute PE path>`.
+- Ordinary CI can produce an unsigned diagnostic installer.
+- The protected release workflow refuses to publish without its updater and Authenticode inputs.
+- Release operations and repository policy documents are tracked.
+- Clean-Windows acceptance instructions are tracked.
+- PR 1 merged after the implementation and its recorded Windows CI work.
+
+### Tauri updater key state
+
+The updater key pair already exists on this Windows PC:
+
+```text
+C:\Users\Home\.widgetboard\tauri-updater.key
+C:\Users\Home\.widgetboard\tauri-updater.key.pub
+```
+
+The user created the passphrase in the earlier session. Its value was never pasted into chat or committed. A live check on 2026-11-02 confirmed that both files exist. The public key matches the updater public key on `origin/main`. This supersedes the unverified-key statement in the original remaining-work section below.
+
+Do not generate a replacement key when this work resumes. First verify these paths and compare the public key with `src-tauri/tauri.conf.json`. The private key and passphrase belong in the protected release environment only when a signed release is being prepared.
+
+### Why SignPath was paused
+
+SignPath Foundation is aimed at open-source projects with verifiable public reputation. Its current application asks for project links and maintainer details. It also asks for build information and reputation evidence. Its conditions require a public code-signing policy. They require named release roles and MFA. They also require a privacy statement or policy. Every release needs manual approval.
+
+WidgetBoard has three known users. Its public reputation evidence is weak. The application may be rejected at SignPath's discretion. The administrative work is therefore premature for the present audience.
+
+Authenticode also does not guarantee an immediate end to SmartScreen warnings. Microsoft states that new signed applications can still show warnings while publisher and file reputation develop. Microsoft Store MSIX packages receive Microsoft signing and avoid SmartScreen download warnings.
+
+Sources checked on 2026-11-02:
+
+- <https://signpath.org/terms.html>
+- <https://signpath.org/apply.html>
+- <https://docs.signpath.io/projects>
+- <https://docs.signpath.io/signing-code>
+- <https://learn.microsoft.com/windows/apps/package-and-deploy/smartscreen-reputation>
+- <https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options>
+
+### Decisions that remain open
+
+No unsigned public release was approved in the follow-up session. No Microsoft Store work was approved. The installer-only design on `main` remains the current repository design.
+
+Choose one distribution path before changing release infrastructure:
+
+1. Resume SignPath after WidgetBoard has public use and reputation evidence.
+2. Buy a supported signing service or certificate for direct downloads.
+3. Design a Microsoft Store MSIX channel as a separate tranche.
+4. Approve unsigned beta distribution to known testers. This requires an explicit policy change because the production workflow rejects unsigned publication.
+
+Do not register a self-hosted runner until the provider path is chosen. A provider's native GitHub integration may change the runner design. Research that integration before installing runner software on this PC.
+
+### Resume checklist
+
+1. Start from current `origin/main`. Preserve the owner's dirty `master` checkout.
+2. Read this handoff and the approved design before planning new work.
+3. Confirm the updater key files still exist. Compare the public key only.
+4. Decide which distribution path above now fits the audience.
+5. Treat the merged installer and updater implementation as completed work.
+6. Run the production signing path only after provider setup is complete.
+7. Complete `CLEAN_WINDOWS_CHECKLIST.md` before calling the installed release ready.
+
+## Pre-merge source state
 
 - Pull request: <https://github.com/104-bookwyrm/WidgetBoard/pull/1>
 - Remote branch: `codex/trusted-windows-release`
@@ -60,7 +139,7 @@ The last CI fix normalizes both recorded and recomputed Windows path identities.
 
 Re-run current gates before relying on these results. CI status and the repository can change after this handoff.
 
-## Remaining work
+## Original remaining work before merge
 
 ### Merge preparation
 
@@ -92,7 +171,7 @@ Re-run current gates before relying on these results. CI status and the reposito
 
 The production Authenticode path has not run. The signed Tauri updater path has not run. No clean-machine install, update, uninstall, migration, or SmartScreen result has been recorded.
 
-## Start of the next session
+## Original continuation instructions before merge
 
 ```powershell
 Set-Location C:\Users\Home\.codex\worktrees\trusted-windows-release\WidgetBoard
