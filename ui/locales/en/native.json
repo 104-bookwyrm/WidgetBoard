@@ -30,5 +30,6 @@
   "lib.title": "Widget menu",
   "widget.pomodoro": "Pomodoro",
   "demo.title": "WidgetBoard demo",
-  "tray.export_layout": "Export layout"
+  "tray.export_layout": "Export layout",
+  "widget.timesum": "Time summary"
 }

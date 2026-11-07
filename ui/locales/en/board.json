@@ -57,6 +57,7 @@
   "wc.title": "Welcome to WidgetBoard",
   "wc.body": "Pick a layout to start with. You can add widgets later from the tray menu.",
   "wc.blank": "Start with an empty board",
+  "wc.autostart": "Start with Windows",
   "lay.partial": "The screen is too small for some widgets; they were left out",
   "lay.applied": "Applied “{name}”",
   "upd.latest": "You have the latest version",

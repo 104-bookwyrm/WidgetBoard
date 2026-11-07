@@ -11,7 +11,7 @@ import REGISTRY from "./widgets/index.js";
 // APPEND ONLY. A row's index is its pixel address and its place in the theme code.
 export const BLOCKS = [
   "board", "calendar", "memo", "checklist", "dday", "diary", "clock", "alarm",
-  "timer", "stopwatch", "pomodoro", "image", "showcase", "nowplaying",
+  "timer", "stopwatch", "pomodoro", "image", "showcase", "nowplaying", "timesum",
 ];
 export const BASIC = 3; // board, calendar, memo
 export const CAP = 16; // squares per row (fixed forever)

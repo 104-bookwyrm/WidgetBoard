@@ -38,5 +38,8 @@
   "ck.add.month": "Add a monthly task… (Enter)",
   "sum.ck": "{done} of {n} tasks done today",
   "sum.ck_empty": "No tasks today",
-  "hint.checklist": "Click a box to finish · F2 to edit"
+  "hint.checklist": "Click a box to finish · F2 to edit",
+  "ck.menu_focus": "Focus on this",
+  "ck.menu_show_time": "Time per to-do",
+  "ck.time_logged": "Logged {t}"
 }

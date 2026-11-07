@@ -3,7 +3,8 @@
 import { createMockTauri } from "./mock-tauri.js";
 import { loadLang, t, applyStatic } from "./i18n.js";
 import { sanitize, copyText } from "./theme.js";
-import { syncScheme, esc, assetUrl, fold, appWindow } from "./util.js";
+import { syncScheme, esc, assetUrl, fold, appWindow, setWeekStart } from "./util.js";
+import { records } from "./records.js";
 import CONTENT_KEYS from "./widgets/content-keys.json" with { type: "json" };
 import GROUPS from "./widgets/groups.json" with { type: "json" };
 import CATALOGUE from "./help/catalogue.json" with { type: "json" };
@@ -37,7 +38,7 @@ let events = null; // calendar events, loaded on the first search
 let selected = null; // id of the item whose card shows (its type's items fill the middle)
 let assetsDir = "";
 let lang = "ko";
-let tab = "items"; // "items" | "browse" | "layouts"
+let tab = "items"; // "items" | "browse" | "layouts" | "records"
 let version = "";
 let browsing = GROUPS[0].widgets[0]; // the widget type shown in Browse
 let renaming = null; // id being renamed
@@ -227,13 +228,17 @@ $(".lay-save").addEventListener("click", async () => {
 // the board undoes it: positions go back, what was typed since stays
 $(".lay-undo").addEventListener("click", () => toBoard("undo-layout"));
 
+let recs = null; // the 기록 tab (records.js), mounted at startup
+let config = {};
 function showTab(name) {
-  tab = ["layouts", "browse"].includes(name) ? name : "items";
+  tab = ["layouts", "browse", "records"].includes(name) ? name : "items";
   for (const b of document.querySelectorAll(".lib-tabs [data-tab]")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   $(".lib-items").hidden = tab !== "items";
   $(".lib-browse").hidden = tab !== "browse";
   $(".lib-layouts").hidden = tab !== "layouts";
+  $(".lib-records").hidden = tab !== "records";
   if (tab === "layouts") renderLayouts();
+  if (tab === "records") recs?.reload();
   if (tab === "browse") renderBrowse();
 }
 
@@ -512,6 +517,9 @@ function applyTheme(css) {
   version = data.version || "";
   assetsDir = data.assetsDir || "";
   lang = data.app.lang;
+  config = data.config ?? {};
+  setWeekStart(config.ui?.weekStart);
+  recs = records($(".lib-records"), { invoke, lang: () => lang, timeFormat: () => config.ui?.timeFormat, flash });
   applyTheme(data.theme);
   setPreviewInit(data.theme, data.config);
   await loadLang(data.app.lang, "library");
@@ -520,12 +528,13 @@ function applyTheme(css) {
   await listen("content-changed", load);
   await listen("content-erased", load);
   await listen("store-changed", (p) => {
+    if (tab === "records" && (p?.key === "time" || p?.key === "events") && p?.src !== "library") recs.reload();
     if (query && (p?.key === "diary" || p?.key === "events")) loadSearchData().then(render);
     else if (p?.key === "diary" || p?.key === "events") diary = events = null; // stale; reload on the next search
   });
   // which page the tray / menu asked for: items, search (cursor in the box) or layouts
   const openPage = (page) => {
-    showTab(["layouts", "browse"].includes(page) ? page : "items");
+    showTab(["layouts", "browse", "records"].includes(page) ? page : "items");
     if (page === "search") $(".lib-search").focus();
   };
   await listen("library-page", openPage);
@@ -542,6 +551,12 @@ function applyTheme(css) {
     render();
     if (tab === "layouts") renderLayouts();
     if (tab === "browse") renderBrowse();
+    if (tab === "records") recs.render();
+  });
+  await listen("config-changed", (cfg) => {
+    config = cfg ?? {};
+    setWeekStart(config.ui?.weekStart);
+    if (tab === "records") recs.render();
   });
   addEventListener("focus", load); // widgets closed or opened on the board since
   document.addEventListener("keydown", (e) => {

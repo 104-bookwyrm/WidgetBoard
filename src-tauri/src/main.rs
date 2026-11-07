@@ -148,6 +148,7 @@ struct AppState {
     kbd: AtomicBool,           // keyboard mode (global shortcut): boards take the keyboard and mouse
     dwell_ms: AtomicUsize,     // hover this long before a widget takes clicks
     zoom: Mutex<f64>,          // whole-UI zoom
+    pin_rects: Mutex<serde_json::Map<String, Value>>, // pinned widget id -> [x, y, w, h] (save_pins)
     // self-update (portable exe): see updater.rs
     update_busy: AtomicBool,
     just_updated: Mutex<Option<String>>, // shown once as a toast after an update installed
@@ -1231,7 +1232,7 @@ async fn open_demo(app: AppHandle, origin: String, focus: Option<String>) -> Res
 /// The Library: every content item, on the board or not, plus Recently deleted.
 /// `page`: "items" (default), "search" (cursor in the search box), "browse" or "layouts" (those tabs).
 fn open_library_window(app: &AppHandle, page: &str) -> tauri::Result<()> {
-    let page = if ["search", "layouts", "browse"].contains(&page) { page } else { "items" };
+    let page = if ["search", "layouts", "browse", "records"].contains(&page) { page } else { "items" };
     if let Some(w) = app.get_webview_window("library") {
         let _ = w.unminimize();
         let _ = app.emit_to("library", "library-page", page);
@@ -1379,6 +1380,8 @@ fn replace_widgets(app: AppHandle, state: State<AppState>, widgets: Vec<Value>) 
     for w in pins(&app) {
         let _ = w.destroy(); // the caller flushed every window first; the widgets follow the new layout
     }
+    state.pin_rects.lock().unwrap().clear();
+    save_pins(&state);
     let _ = app.emit("layout-replaced", ());
     Ok(())
 }
@@ -1487,11 +1490,55 @@ async fn pin_widget(app: AppHandle, window: WebviewWindow, id: String, rect: Rec
     if let Some(w) = app.get_webview_window(&label) {
         return w.set_focus().map_err(|e| e.to_string());
     }
-    let z = *app.state::<AppState>().zoom.lock().unwrap();
+    let st = app.state::<AppState>();
+    let z = *st.zoom.lock().unwrap();
     let origin = window.inner_position().map_err(|e| e.to_string())?;
     let scale = window.scale_factor().map_err(|e| e.to_string())?;
     let (x, y, w, h) = pin_rect((origin.x, origin.y), rect, z, scale);
-    let pin = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(format!("index.html?pin={id}").into()))
+    st.pin_rects.lock().unwrap().insert(id.clone(), json!([x, y, w, h])); // before the window: its moves update it
+    open_pin(&app, &id, (x, y, w, h), true)?;
+    save_pins(&st);
+    Ok(())
+}
+
+/// Pinned widgets come back after a restart: data/pins.json is { id: [x, y, w, h] } in physical px. The rects
+/// follow the windows in memory and are written when a pin opens or is released, and at exit.
+fn save_pins(st: &AppState) {
+    let pins = Value::Object(st.pin_rects.lock().unwrap().clone());
+    let _ = write_atomic(&st.dir.join("data").join("pins.json"), pins.to_string().as_bytes());
+}
+
+/// At startup, after the boards exist: reopen last session's pins. One whose widget is gone, or whose spot is on
+/// no monitor now, stays on its board.
+fn restore_pins(app: &AppHandle) {
+    let st = app.state::<AppState>();
+    let saved: serde_json::Map<String, Value> = read_json(&st.dir.join("data").join("pins.json")).unwrap_or_default();
+    let monitors = app.available_monitors().unwrap_or_default();
+    for (id, r) in saved {
+        let n: Vec<i64> = r.as_array().map(|a| a.iter().filter_map(Value::as_i64).collect()).unwrap_or_default();
+        let [x, y, w, h] = n[..] else { continue };
+        let (x, y, w, h) = (x as i32, y as i32, w.max(1) as u32, h.max(1) as u32);
+        let on_screen = monitors.iter().any(|m| {
+            let (p, s) = (m.position(), m.size());
+            x < p.x + s.width as i32 && x + w as i32 > p.x && y < p.y + s.height as i32 && y + h as i32 > p.y
+        });
+        let known = st.widgets.lock().unwrap().iter().any(|w| widget_id(w) == Some(&id));
+        let valid = id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+        if on_screen && known && valid {
+            st.pin_rects.lock().unwrap().insert(id.clone(), r);
+            if open_pin(app, &id, (x, y, w, h), false).is_err() {
+                st.pin_rects.lock().unwrap().remove(&id);
+            }
+        }
+    }
+    save_pins(&st); // drops the ones that did not come back
+}
+
+/// The pin window itself, at a physical rect. `focus`: a pin the user just made takes focus; restored ones don't.
+fn open_pin(app: &AppHandle, id: &str, (x, y, w, h): (i32, i32, u32, u32), focus: bool) -> Result<(), String> {
+    let label = format!("pin-{id}");
+    let z = *app.state::<AppState>().zoom.lock().unwrap();
+    let pin = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(format!("index.html?pin={id}").into()))
         .scroll_bar_style(ScrollBarStyle::FluentOverlay) // all windows alike (Tauri: one style per data dir)
         .title("WidgetBoard")
         .transparent(true)
@@ -1509,7 +1556,22 @@ async fn pin_widget(app: AppHandle, window: WebviewWindow, id: String, rect: Rec
     let _ = pin.set_size(tauri::PhysicalSize::new(w.max(1), h.max(1)));
     let _ = pin.set_zoom(z);
     let handle = app.clone();
+    let id = id.to_string();
     pin.on_window_event(move |e| match e {
+        // remember where it is now; a minimized window (Win+D) reports -32000 and is skipped
+        tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+            let Some(win) = handle.get_webview_window(&label) else { return };
+            if win.is_minimized().unwrap_or(true) {
+                return;
+            }
+            if let (Ok(p), Ok(s)) = (win.outer_position(), win.inner_size()) {
+                let st = handle.state::<AppState>();
+                let mut rects = st.pin_rects.lock().unwrap();
+                if rects.contains_key(&id) && p.x > -32000 {
+                    rects.insert(id.clone(), json!([p.x, p.y, s.width, s.height]));
+                }
+            }
+        }
         // Alt+F4 and the like: the page saves first, then calls unpin_widget
         tauri::WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
@@ -1523,14 +1585,18 @@ async fn pin_widget(app: AppHandle, window: WebviewWindow, id: String, rect: Rec
         _ => {}
     });
     let _ = pin.show();
-    let _ = pin.set_focus();
+    if focus {
+        let _ = pin.set_focus();
+    }
     Ok(())
 }
 
 /// A pin window lets go once its saves are flushed; its board shows the widget again (`widget-unpinned`).
 #[tauri::command]
-fn unpin_widget(window: WebviewWindow) {
-    if window.label().starts_with("pin-") {
+fn unpin_widget(window: WebviewWindow, state: State<AppState>) {
+    if let Some(id) = window.label().strip_prefix("pin-") {
+        state.pin_rects.lock().unwrap().remove(id);
+        save_pins(&state);
         let _ = window.destroy();
     }
 }
@@ -1585,6 +1651,34 @@ fn spawn_hit_test(app: AppHandle) {
 }
 
 /// Hot-reload theme.css and config.json when they change on disk (Notepad, an AI, ...).
+/// Away from the keyboard: no mouse or key input for a minute or more. When input comes back every window hears
+/// `user-back` { from, to } (ms); a counting widget asks keep / take out when the gap reaches Settings' away time.
+/// Sleep counts as idle too (GetTickCount runs on through it); a widget already asking about that gap ignores this.
+fn spawn_idle_watch(app: AppHandle) {
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        use windows::Win32::System::SystemInformation::GetTickCount;
+        use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+        let mut since: Option<u64> = None; // when input stopped
+        loop {
+            std::thread::sleep(Duration::from_secs(5));
+            let mut li = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+            if !unsafe { GetLastInputInfo(&mut li) }.as_bool() {
+                continue;
+            }
+            let idle = unsafe { GetTickCount() }.wrapping_sub(li.dwTime) as u64;
+            let now = now_ms();
+            if idle >= 60_000 {
+                since.get_or_insert(now.saturating_sub(idle));
+            } else if let Some(from) = since.take() {
+                let _ = app.emit("user-back", json!({ "from": from, "to": now.saturating_sub(idle) }));
+            }
+        }
+    });
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
 fn spawn_file_watch(app: AppHandle, dir: PathBuf) {
     std::thread::spawn(move || {
         let mtime = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).ok();
@@ -2423,6 +2517,7 @@ fn main() {
                 kbd: AtomicBool::new(false),
                 dwell_ms: AtomicUsize::new(0),
                 zoom: Mutex::new(1.0),
+                pin_rects: Mutex::new(serde_json::Map::new()),
                 update_busy: AtomicBool::new(false),
                 just_updated: Mutex::new(just_updated),
                 demo_origin: Mutex::new(String::new()),
@@ -2431,11 +2526,13 @@ fn main() {
 
             let handle = app.handle().clone();
             create_boards(&handle)?;
+            restore_pins(&handle); // before any board asks load_state which widgets are pinned
             build_tray(&handle)?;
             spawn_hit_test(handle.clone());
             spawn_monitor_watch(handle.clone());
             spawn_updater(handle.clone());
             spawn_auto_backup(handle.clone());
+            spawn_idle_watch(handle.clone());
             spawn_file_watch(handle, app.state::<AppState>().dir.clone());
             Ok(())
         })
@@ -2516,6 +2613,7 @@ fn main() {
                     let data = st.dir.join("data");
                     let _ = fs::create_dir_all(&data);
                     let _ = write_atomic(&data.join("closed.json"), json!({ "at": now_ms() }).to_string().as_bytes());
+                    save_pins(&st); // where the pins were moved to this session
                 }
             }
         });

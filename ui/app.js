@@ -1007,6 +1007,8 @@ function mount(w) {
     wheelScrollX,
     /** Frameless: no background/outline, so transparent images sit directly on the desktop. */
     setFrameless: (on) => el.classList.toggle("frameless", !!on),
+    /** Send an app event to every window (a timer telling summary widgets what it counts). */
+    emit: (event, payload) => T.event.emit(event, payload).catch(() => {}),
     /** Listen to an app event (e.g. 'media'); removed automatically when the widget closes. */
     on: (event, cb) => {
       let off = null,
@@ -1032,6 +1034,22 @@ function mount(w) {
         : session.closed >= start
           ? { at: session.closed }
           : { at: session.launched, crash: true },
+    /**
+     * Focus on a to-do: the first pomodoro on any board (else a stopwatch, else a timer) takes `focus`
+     * ({ task, title, tags }) as what it works on and starts. Its window hears the broadcast (timelog.js focusMenu).
+     */
+    focus: async (focus) => {
+      const all = await invoke("get_all_widgets").catch(() => []);
+      // ponytail: the first in layout order; a "which timer" pick if people keep several
+      // the mode sits in the settings or the Library content, depending on how the widget was made
+      const modeOf = (x) =>
+        (HOSTS[x.type] ?? x.type) === "timer" &&
+        (x.settings?.mode ?? contents.get(x.id)?.data?.mode ?? REGISTRY[x.type]?.defaults?.mode);
+      const pick = (m) => all.find((x) => !x.hidden && modeOf(x) === m);
+      const to = (pick("pomodoro") ?? pick("stopwatch") ?? pick("timer"))?.id;
+      if (!to) return toast(t("focus.no_timer"));
+      T.event.emit("focus-task", { to, focus });
+    },
     /** A gap between two ticks this long (ms) means the PC slept: counting widgets ask whether to keep it. 0 = never. */
     awayMs: () => Math.max(0, Number(ui().awayMinutes) || 0) * 60000,
     get size() {
@@ -1549,8 +1567,8 @@ const displayName = (d) =>
 
 // Right-click menu on a widget. Lean while viewing; arrangement tools appear in edit mode.
 let lastMenu;
-async function openMenu(w, el, at) {
-  const own = mounted.get(w.id)?.inst.menu?.() ?? [];
+async function openMenu(w, el, at, target) {
+  const own = mounted.get(w.id)?.inst.menu?.(target) ?? []; // target: the element right-clicked (a checklist row)
   // a widget that holds the picked type as a mode (timer → stopwatch) switches in place; anything else is replaced
   const pickType = (k) => (mounted.get(w.id)?.inst.showType?.(k) ? applyName(w) : changeType(w, k));
   const ownBlock = own.length ? [...own, { item: "Separator" }] : [];
@@ -1684,7 +1702,7 @@ function wireFrame(el, w, def, inst) {
   el.addEventListener("contextmenu", (e) => {
     if (e.target.closest("input, textarea, [contenteditable]")) return;
     e.preventDefault();
-    openMenu(w, el, { x: e.clientX, y: e.clientY });
+    openMenu(w, el, { x: e.clientX, y: e.clientY }, e.target);
   });
   // keyboard: Menu key / Shift+F10 opens the widget menu from anywhere inside it
   el.addEventListener("keydown", (e) => {
@@ -2869,9 +2887,14 @@ $("#welcome").onclick = (e) => {
     invoke("open_demo", { origin: win.label, focus: null }).catch((err) => { reportError(err); welcomePresets(); });
     return;
   }
+  // picking a start is the yes to the "start with Windows" box (ticked by default); Esc leaves it off
+  const startup = () => {
+    if (!$("#wc-autostart").hidden && $("#wc-autostart input").checked)
+      invoke("set_autostart", { on: true }).catch(reportError);
+  };
   const b = e.target.closest("[data-preset]");
-  if (b) return hideWelcome(true), applyPreset(b.dataset.preset).catch(reportError);
-  if (e.target.closest("#wc-blank")) hideWelcome();
+  if (b) return startup(), hideWelcome(true), applyPreset(b.dataset.preset).catch(reportError);
+  if (e.target.closest("#wc-blank")) startup(), hideWelcome();
 };
 
 addEventListener("dragover", (e) => e.preventDefault());
@@ -3163,6 +3186,7 @@ addEventListener("unhandledrejection", (e) => reportError(e.reason));
     const welcomed = await invoke("store_get", { key: "welcomed" }).catch(() => null);
     if (welcomed) toast(t("toast.empty"));
     else {
+      $("#wc-autostart").hidden = !!st.autostart; // already starts with Windows: nothing to offer
       $("#welcome").hidden = false;
       syncHits();
       $("#welcome button").focus();

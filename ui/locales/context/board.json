@@ -1,4 +1,5 @@
 {
+  "wc.autostart": "First-run welcome card, checkbox label under the layout choices, ticked by default. Picking a layout or the empty board turns on starting with Windows. Same wording as the Settings option set.general.autostart. A label, no full stop.",
   "menu.pin": "Widget right-click menu item. The widget leaves the board and floats in its own window above every other app until released. Same idea as Windows' \"Always on top\". 2 to 4 words, no full stop.",
   "menu.unpin": "Right-click menu item of a widget that is kept on top (menu.pin). The window closes and the widget returns to its spot on the board. 2 to 3 words, no full stop.",
   "menu.more":"Tooltip and screen-reader name of the ⋯ button at the right end of a widget title bar. It opens the same menu as right-clicking the widget. 1 to 2 words.",

@@ -50,5 +50,9 @@
   "sw.cat_menu": "Category",
   "sw.reset_total_menu": "Restart the total",
   "sw.laps_menu": "Laps ({n})",
-  "pomo.settings_menu": "Pomodoro settings…"
+  "pomo.settings_menu": "Pomodoro settings…",
+  "focus.menu": "Working on",
+  "focus.menu_on": "Working on: {what}",
+  "focus.nothing": "Nothing in particular",
+  "focus.no_timer": "There is no pomodoro or stopwatch. Add one first."
 }

@@ -1,0 +1,17 @@
+{
+  "ts.period": "Period",
+  "ts.today": "Today",
+  "ts.week": "This week",
+  "ts.all": "All",
+  "ts.tag": "Tag",
+  "ts.any_tag": "Any tag",
+  "ts.goal": "Goal",
+  "ts.no_goal": "No goal",
+  "ts.hours": "{n} h",
+  "ts.minutes": "{n} min",
+  "ts.hm": "{h} h {m} min",
+  "ts.line": "Today's timeline",
+  "ts.of_goal": "{p}% of {goal}",
+  "ts.goal_done": "Goal reached 🎉",
+  "hint.timesum": "Right-click: period, tag, goal"
+}
