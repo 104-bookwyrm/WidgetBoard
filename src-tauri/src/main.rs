@@ -17,6 +17,7 @@ use std::{
 
 mod backup_policy;
 mod capture;
+mod cli;
 mod content;
 mod flush;
 mod layer;
@@ -2362,12 +2363,19 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 }
 
 fn main() {
+    let context = tauri::generate_context!();
+    if let Some(code) = cli::run(&context.config().identifier) {
+        std::process::exit(code);
+    }
     wait_for_parent(); // relaunched for an update: let the old copy exit first
     tauri::Builder::default()
         // a second launch just shows the running app instead of starting a rival copy
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if args.get(1).map(String::as_str) == Some(cli::APPLY) {
+                return cli::apply_forwarded(app, &args[1..]);
+            }
             raise_boards(app);
             let _ = app.emit("toast", "toast.already_running");
         }))
@@ -2498,7 +2506,7 @@ fn main() {
             emit_primary,
             fetch_ics
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running WidgetBoard")
         .run(|app, event| {
             // Quit from the tray, an update restart, and Windows shutting down (WM_ENDSESSION) all end here; a crash
