@@ -1,7 +1,7 @@
 {
   "_name": "한국어",
   "tray.add_widget": "위젯 추가",
-  "tray.edit_layout": "레이아웃 편집",
+  "tray.edit_layout": "편집 모드",
   "tray.show_hide": "모든 위젯 숨기기/보이기",
   "tray.quit": "위젯보드 종료",
   "widget.timer": "타이머",
@@ -30,6 +30,6 @@
   "lib.title": "위젯 메뉴",
   "widget.pomodoro": "포모도로",
   "demo.title": "위젯보드 체험",
-  "tray.export_layout": "레이아웃 내보내기",
+  "tray.export_layout": "보드 캡처 저장",
   "widget.timesum": "시간 기록"
 }

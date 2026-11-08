@@ -65,8 +65,8 @@ To start it with Windows, tick Settings → 일반 → _컴퓨터 시작 시 자
 
 - right-click → **위젯 추가 / Add widget ›** grouped as 일정 · Planning (Checklist, Calendar, D-day), 기록 · Notes
   (Memo, Diary), 시간 · Time (Clock, Alarm, Timer, Stopwatch, Pomodoro), 이미지 · Images (Image, Showcase) and
-  Now Playing; **레이아웃 편집 / Edit layout**; **모든 위젯 숨기기/보이기 / Show/hide all widgets**;
-  **레이아웃 내보내기 / Export layout**; **위젯 메뉴… / Widget menu…**; **설정… / Settings…**; quit.
+  Now Playing; **편집 모드 / Edit layout**; **모든 위젯 숨기기/보이기 / Show/hide all widgets**;
+  **보드 캡처 저장 / Export layout**; **위젯 메뉴… / Widget menu…**; **설정… / Settings…**; quit.
   When an update is waiting, _업데이트 있음_ appears at the bottom.
 - left-click → bring all widgets in front of other windows
 
@@ -80,8 +80,8 @@ To start it with Windows, tick Settings → 일반 → _컴퓨터 시작 시 자
   **완료** ends it.
 - Empty space is click-through: the desktop (or the windows behind) keep working.
 
-**Free placement** (Settings → 일반 → 배치 방식 → 자유 배치) is for arranging widgets like furniture or around your
-wallpaper art. The grid and push-aside stay the default (칸에 맞춤).
+**Free placement** (설정 > 일반 > 위젯 배치 방식 > 자유 배치) is for arranging widgets like furniture or around your
+wallpaper art. The grid and push-aside stay the default (격자 맞춤).
 
 - Widgets go anywhere, right up to the screen edges, at any size (down to each widget's minimum), and may overlap.
 - While you drag, a widget sticks to the screen edges and margins, the screen centre, other widgets' edges and centres,
@@ -139,17 +139,17 @@ Also switches on by itself when Windows' _Accessibility → Visual effects → A
 **Fonts** - Settings → 모양 sets one font and text size for everything; right-click → _Appearance…_ overrides them for a
 single widget (installed fonts are suggested, any name can be typed; _초기화_ removes every override).
 
-**Layouts (레이아웃)** - tray → _위젯 메뉴…_ → **레이아웃** tab.
+**Layouts (위젯 프리셋)** - tray → _위젯 메뉴…_ → **위젯 프리셋** tab.
 
 - **업무용 / Work desk**: big writable calendar, to-dos, memo, timer, D-days, Now Playing.
 - **공부용 / Study**: focus timer, stopwatch (study-time total), to-dos, diary (study log), D-days (exams), month calendar.
 - Presets fill **this monitor** from the top-right corner (desktop icons live top-left). A widget of the same type is
   reused with its contents; widgets the preset doesn't include leave the board, and their memos and photos stay in the
   Widget menu. If the screen is too small, what doesn't fit is left out (you're told).
-- **현재 레이아웃 저장 / Save current** stores every monitor's arrangement under a name (up to 20). Applying one
+- **현재 배치를 프리셋으로 저장 / Save current** stores every monitor's arrangement under a name (up to 20). Applying one
   restores positions, sizes, monitors, colours and frames, but never rolls back what's _inside_ a widget (a memo keeps
   today's text).
-- Every change can be undone: the toast after switching, or _레이아웃 되돌리기_ on the same tab.
+- Every change can be undone: the toast after switching, or _이전 프리셋으로_ on the same tab.
 
 ## Settings
 
@@ -184,7 +184,7 @@ or not it is on the board.
   _최근 삭제된 항목_, where _복원_ brings it back and _영구 삭제_ erases it for good (asked first; images only it used
   are deleted too).
 - **검색 · Search** finds text in memos, the diary and the calendar.
-- **레이아웃 · Layouts** holds the presets, your saved layouts and undo (see [Layouts](#everyday-use)).
+- **위젯 프리셋 · Layouts** holds the presets, your saved layouts and undo (see [Layouts](#everyday-use)).
 - **둘러보기 · Browse** shows every widget type with a short how-to; _보드에 추가_ adds one.
 - **Hide** - right-click a widget → _숨기기_. A hidden widget keeps its content, its place and anything it is doing (a
   hidden timer still rings). It isn't drawn; in edit mode it shows as a faint dashed ghost so you know what's holding
@@ -420,7 +420,7 @@ Player app, VLC - using Windows' own media controls (the same source as the volu
 
 ### 이미지 · Image (2×2 / 1×1)
 
-Your pictures in two layouts. Right-click → _레이아웃_ switches between **슬라이드쇼 (slideshow)** and **갤러리 (grid)**.
+Your pictures in two layouts. Right-click → _미리보기 방식_ switches between **슬라이드쇼 (slideshow)** and **갤러리 (grid)**.
 
 #### Slideshow
 
@@ -528,7 +528,7 @@ _빈 템플릿_ (Settings → 모양 → 스킨 → _템플릿 폴더 열기_). 
 
 ### Layout export
 
-Tray → **레이아웃 내보내기** saves three pictures per monitor to `Pictures\WidgetBoard`, at the screen's real
+Tray → **보드 캡처 저장** saves three pictures per monitor to `Pictures\WidgetBoard`, at the screen's real
 resolution: _화면_ (a screenshot with the widgets in front), _윤곽_ (a transparent layer with each widget's outline,
 name, size and position) and _합본_ (both together). Use them to paint wallpaper or skins that fit your layout exactly.
 
