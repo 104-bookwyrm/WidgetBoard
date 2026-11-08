@@ -26,5 +26,5 @@
   "dday.hidden_by_filter": "저장했어요. 현재 필터 때문에 목록에 보이지 않아요",
   "sum.dday_empty": "디데이가 없어요",
   "hint.dday": "클릭: 수정, 드래그: 순서 변경",
-  "dday.menu_cal": "달력 일정 표시"
+  "dday.menu_cal": "캘린더 일정 보이기"
 }

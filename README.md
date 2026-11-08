@@ -277,7 +277,7 @@ Your to-dos, in three tabs. A bar shows each tab's progress; hover a tab or the 
 - Right-click: hide/show completed, clear completed, calendar entries on/off. Every checklist widget shows the same
   tasks; each remembers which tab it is on. (D-day countdowns stay out of this list - they live in the D-day widget.)
 
-### 달력 · Calendar (4×5 / 3×3)
+### 캘린더 · Calendar (4×5 / 3×3)
 
 A month calendar for to-dos and appointments, in two views (switch with ▦ / ☰ or right-click):
 
@@ -297,7 +297,7 @@ A month calendar for to-dos and appointments, in two views (switch with ▦ / �
   date, or yearly by the **lunar** calendar (for 음력 birthdays). Repeating entries show ↻.
 - **Lunar dates** (right-click → _음력 날짜 표시_) show under the day numbers.
 - **Colours**: give a day or a tag one of six colours (색 1-6). Themes can repaint the six.
-- **Subscriptions** (Settings → 위젯 → _구독한 달력_): paste another calendar's iCal link (in Google Calendar: the
+- **Subscriptions** (Settings → 위젯 → _캘린더 구독_): paste another calendar's iCal link (in Google Calendar: the
   calendar's settings → _캘린더 통합_ → _iCal 형식의 비공개 주소_). Its entries show read-only, tagged with the
   subscription's name, and refresh every 3 hours.
 - **Reminders & links** (⚙ on an entry): set a time, a timezone, a link (URL) and a lead time, and tick _remind me_.
@@ -320,7 +320,7 @@ Countdowns, listed like a Discord member list: round icon, name, date and tag, a
 - **Icons**: click the circle to pick any image you've uploaded before (several D-days can share one; it's stored once),
   upload a new one, or use none (the first letter of the name is shown).
 - **Everything coming up**: below your D-days, every upcoming calendar entry and checklist to-do counts down
-  (D-x), soonest first. Past ones, daily routines and ticked entries stay out. Right-click → _달력 일정 표시 / Show
+  (D-x), soonest first. Past ones, daily routines and ticked entries stay out. Right-click → _캘린더 일정 보이기 / Show
   calendar entries_ turns this off.
 - **매년 반복** (every year): a birthday or anniversary counts down to its next occurrence. A Showcase's birthday is
   listed here on its own; change its name and date in the Showcase.
