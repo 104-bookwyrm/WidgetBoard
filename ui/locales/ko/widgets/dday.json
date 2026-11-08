@@ -14,7 +14,7 @@
   "dday.unit_months": "개월",
   "dday.count_from_zero": "0일부터 세기",
   "dday.yearly": "매년 반복",
-  "dday.from_showcase": "이름과 날짜는 쇼케이스에서 변경합니다.",
+  "dday.from_showcase": "이름과 날짜는 쇼케이스에서 바꿔요",
   "dday.leap_note": "평년에는 2월 28일",
   "dday.ms_day": "{n}일",
   "dday.ms_month": "{n}개월",
@@ -22,9 +22,9 @@
   "dday.status.all": "전체",
   "dday.status.upcoming": "예정",
   "dday.status.past": "지남",
-  "dday.need_name": "이름과 날짜를 입력하세요.",
-  "dday.hidden_by_filter": "저장했습니다. 현재 필터 때문에 목록에 보이지 않습니다.",
-  "sum.dday_empty": "디데이가 없습니다.",
+  "dday.need_name": "이름과 날짜를 입력하세요",
+  "dday.hidden_by_filter": "저장했어요. 현재 필터 때문에 목록에 보이지 않아요",
+  "sum.dday_empty": "디데이가 없어요",
   "hint.dday": "클릭: 수정, 드래그: 순서 변경",
   "dday.menu_cal": "달력 일정 표시"
 }

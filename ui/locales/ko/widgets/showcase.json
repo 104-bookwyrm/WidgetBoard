@@ -16,8 +16,8 @@
   "sc.empty": "빈 쇼케이스",
   "sc.export": "데이터 내보내기",
   "sc.import": "데이터 가져오기",
-  "sc.exported": "클립보드에 복사했습니다.",
-  "sc.export_failed": "복사하지 못했습니다.",
-  "sc.imported": "가져왔습니다.",
-  "sc.import_failed": "가져오지 못했습니다. 클립보드의 JSON을 확인하세요."
+  "sc.exported": "클립보드에 복사했어요",
+  "sc.export_failed": "복사하지 못했어요",
+  "sc.imported": "가져왔어요",
+  "sc.import_failed": "가져오지 못했어요. 클립보드의 JSON을 확인해 주세요"
 }

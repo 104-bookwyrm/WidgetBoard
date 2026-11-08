@@ -37,7 +37,7 @@
   "ck.add.week": "이번 주 할 일 추가",
   "ck.add.month": "이번 달 할 일 추가",
   "sum.ck": "오늘 할 일 {n}개 중 {done}개 완료",
-  "sum.ck_empty": "오늘 할 일이 없습니다.",
+  "sum.ck_empty": "오늘 할 일이 없어요",
   "hint.checklist": "클릭: 완료, F2: 수정",
   "ck.menu_focus": "이 할 일에 집중",
   "ck.menu_show_time": "할 일별 시간",
