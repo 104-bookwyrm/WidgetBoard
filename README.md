@@ -57,15 +57,15 @@ installer, nothing running in the background except the app itself.
 
 Run `WidgetBoard.exe`. It needs the WebView2 runtime, which Windows 10/11 already have. The exe is unsigned, so
 SmartScreen may ask once: _More info → Run anyway_. Starting it a second time just shows the running copy.
-To start it with Windows, tick Settings → 일반 → _컴퓨터 시작 시 자동 실행_.
+To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자동 실행_.
 
 ## Everyday use
 
 **Tray icon** (bottom-right, maybe under `^`)
 
-- right-click → **위젯 추가 / Add widget ›** grouped as 일정 · Planning (Checklist, Calendar, D-day), 기록 · Notes
+- right-click → **위젯 추가 / Add widget ›** grouped as 플래너 · Planning (Checklist, Calendar, D-day), 노트 · Notes
   (Memo, Diary), 시간 · Time (Clock, Alarm, Timer, Stopwatch, Pomodoro), 이미지 · Images (Image, Showcase) and
-  Now Playing; **편집 모드 / Edit layout**; **모든 위젯 숨기기/보이기 / Show/hide all widgets**;
+  Now Playing; **편집 모드 / Edit layout**; **위젯 전체 보이기/숨기기 / Show/hide all widgets**;
   **보드 캡처 저장 / Export layout**; **위젯 보관함… / Widget menu…**; **설정… / Settings…**; quit.
   When an update is waiting, _업데이트 있음_ appears at the bottom.
 - left-click → bring all widgets in front of other windows
@@ -88,11 +88,11 @@ wallpaper art. The grid and push-aside stay the default (격자 맞춤).
   and the spacing already used between neighbours; dashed guides show what it's sticking to. Hold **Alt** to place it
   exactly.
 - Widgets stack in layers, as in a drawing program: moving or clicking a widget leaves the order alone. Change it with
-  right-click → **앞으로 / 뒤로 / 맨 앞으로 / 맨 뒤로**, or Ctrl+] / Ctrl+[ (with Shift: to the front / back) on a
+  right-click → **한 층 앞으로 / 한 층 뒤로 / 맨 앞으로 / 맨 뒤로**, or Ctrl+] / Ctrl+[ (with Shift: to the front / back) on a
   selected widget.
 - **레이어 (Layers)** (right-click, or the button in the edit bar) lists every widget front first: drag a row to
   reorder, the eye hides or shows, the lock fixes its position, and clicking a name selects the widget so the arrow
-  keys move it, even when it is covered. Right-click → **아래 위젯 선택** selects a widget under the pointer.
+  keys move it, even when it is covered. Right-click → **겹친 위젯 선택** selects a widget under the pointer.
 - A widget with one of its own panels open (a pomodoro's settings, a calendar entry) sits on top while it is open.
 - Keyboard: arrows move 10 px (Alt: 1 px), Shift+arrows resize.
 - Each mode keeps its own arrangement: switching back to 칸에 맞춤 shows the grid layout again (widgets added while
@@ -103,22 +103,22 @@ without bringing it forward, so it never jumps over the program you're working i
 front until you switch to another program; Edit layout and keyboard mode keep them on top while they're on. To keep
 one widget above everything, pin it (below).
 
-**Transparent pictures** - without _액자 없이_, a widget always has its tinted surface, so transparent parts of a
+**Transparent pictures** - without _프레임 없음_, a widget always has its tinted surface, so transparent parts of a
 picture show that surface (not the desktop). This applies to the image widget, background images (_배경 이미지_,
 which also get a light tint for readability) and D-day icons (transparent parts show the accent colour inside the
 circle). Clicks are caught by the whole widget rectangle, including transparent areas.
 
 **Right-click a widget** (or its ⋯ button at the right of the top strip) opens its own options, **꾸미기 / Appearance…**,
-**위젯 캡처 / Capture widget**, **이 위젯만 보기 / Focus**, **항상 위에 표시 / Keep on top**, **숨기기 / Hide**,
+**이미지로 저장 / Capture widget**, **이 위젯만 보기 / Focus**, **항상 위에 / Keep on top**, **숨기기 / Hide**,
 **삭제 / Close**, and shortcuts to the **위젯 보관함 / Widget menu** and its **메모·일정 검색 / Search**. **Read summary**
 appears when its accessibility setting is enabled. Inside a text box you get the
 normal copy/paste menu; right-click the widget's header or edge to open the widget menu.
 
-**Keep on top (항상 위에 표시)** moves the widget into its own small window that floats above every other program,
+**Keep on top (항상 위에)** moves the widget into its own small window that floats above every other program,
 and keeps its spot on the board free for it. Move and resize it like any window. **보드로 돌려놓기 / Back to board**
 in its right-click menu (or Alt+F4) puts it back. Quitting the app returns every pinned widget to its board.
 
-**Capture widget (위젯 캡처)** copies a picture of the widget, as it looks on screen, to the clipboard and also saves
+**Capture widget (이미지로 저장)** copies a picture of the widget, as it looks on screen, to the clipboard and also saves
 it to `Pictures\WidgetBoard`.
 
 **In Edit layout**, that menu also offers background image set/remove, **Move to display** and
@@ -167,7 +167,7 @@ contrast, font and motion settings.
 | 튜토리얼 · Tutorial     | what's new in each version, and the tutorial to replay                                                                                                                                                                                               |
 | 가이드 · Guide          | how each widget works                                                                                                                                                                                                                                 |
 | 백업 · 데이터 · Backup  | back up now, automatic backups, restore, open the backups folder, open the data folder, open `config.json`                                                                                                                                           |
-| 정보 · 업데이트 · About | version, update schedule and status, check now, install and restart, _오류 신고_ (report a problem through an anonymous form), font licences                                                                                                           |
+| 업데이트 · 정보 · About | version, update schedule and status, check now, install and restart, _오류 신고_ (report a problem through an anonymous form), font licences                                                                                                           |
 
 **Lock layout** stops accidental drags and resizes; widgets then move only in edit mode.
 
@@ -267,7 +267,7 @@ Your to-dos, in three tabs. A bar shows each tab's progress; hover a tab or the 
   month's last day; they untick on the 1st.
 - 📅 (on by default) lists **calendar entries and D-days** in every tab, on the day they fall. Ticking one here ticks it
   in the calendar, and the other way round. An entry that repeats as often as the tab's period or more (daily in a
-  week, weekly in a month) stays out of that tab. Right-click → _숨길 태그 / Hide tags_ keeps tagged entries out of
+  week, weekly in a month) stays out of that tab. Right-click → _태그 숨기기 / Hide tags_ keeps tagged entries out of
   this checklist only.
 - To-dos are calendar entries too: they show on their day in the calendar and count down in the D-day list.
   Daily routines stay in the checklist.
@@ -281,7 +281,7 @@ Your to-dos, in three tabs. A bar shows each tab's progress; hover a tab or the 
 
 A month calendar for to-dos and appointments, in two views (switch with ▦ / ☰ or right-click):
 
-- **작은 달력 · Small** - just the month. A **dot** marks days that have entries (hollow dot = all done); empty days
+- **월간 보기 · Small** - just the month. A **dot** marks days that have entries (hollow dot = all done); empty days
   have none.
 - **큰 칸 · Big squares** - every day is a square showing its entries. **Double-click** a square and type (Enter adds
   and keeps the box open for the next line, Esc closes); click an entry to edit it (erase the text to delete); tick its
@@ -335,7 +335,7 @@ One page per day, saved automatically as you type.
 
 - ‹ › flick to the previous / next day that has a page (› stops at today); **오늘** jumps back; click the date to pick
   any day. A sideways touchpad swipe also flicks pages. Arrow keys only move the text cursor.
-- Lined paper; background image via right-click → _배경 이미지 설정_. Character count at the bottom.
+- Lined paper; background image via right-click → _배경 이미지…_. Character count at the bottom.
 - Pages are plain text files (`diary/2026-09-26.md`) - easy to back up or read elsewhere.
 
 ### 타이머 · Timer (3×2 / 2×2)
@@ -356,13 +356,13 @@ Counts down and rings (sound + blinking) when done.
 #### Stopwatch mode
 
 Counts up in whole seconds. Every run is kept in one shared time record, under a category: **집중 (focus)** or
-**그외 (other)**; right-click → _분류_ switches it.
+**기타 (other)**; right-click → _분류_ switches it.
 
-- ▶ start / ❚❚ stop. While running, ⚑ records a lap (right-click → _랩 기록_ lists them); when stopped, ↺ clears
+- ▶ start / ❚❚ stop. While running, ⚑ records a lap (right-click → _랩_ lists them); when stopped, ↺ clears
   this run - the total is kept.
 - **총 시간 (total)** is all the time in the stopwatch's category, from every stopwatch and pomodoro; hover the time to
   see it. Two focus stopwatches show the same focus total.
-- Right-click → _총 시간 새로 세기_ counts the total from now on. Nothing is deleted from the record.
+- Right-click → _총 시간 초기화_ counts the total from now on. Nothing is deleted from the record.
 - Keeps counting through sleep. If the PC slept for a while (Settings → 위젯 → 자리 비움 확인, 30 min by
   default) it asks whether that time counts: **포함** keeps it, **빼기** takes it out.
 - Quitting the app (or Windows shutting down) stops it at that moment. If the app crashed while it ran, the next
@@ -396,7 +396,7 @@ Rings at a time you set, once or on chosen days.
 
 A sticky note that keeps whatever you write - no daily reset. Each memo widget is its own note, saved as you type.
 
-- Paper colour: hover and click a colour dot (bottom-right), or right-click → _메모 색_: 종이 1-6 (yellow, pink, green,
+- Paper colour: hover and click a colour dot (bottom-right), or right-click → _메모지 색_: 종이 1-6 (yellow, pink, green,
   blue, purple and orange unless a theme repaints them), or _테마_ (the normal widget look). The theme's opacity
   slider also applies to the paper. A memo wearing a [skin](#skins) shows the skin instead of the paper colour.
 - Font and size per memo: right-click → _꾸미기…_.
@@ -416,7 +416,7 @@ Player app, VLC - using Windows' own media controls (the same source as the volu
   (mp3, wav, ogg, flac, m4a…, up to 30 MB each) onto it or use right-click → _트랙 추가_; files are kept in the shared
   assets folder. The list has shuffle, loop (off / all / one) and volume. Your own files show in the player like any
   other app, so ⏮ ⏯ ⏭ and the progress bar work on them too.
-- Right-click → _액자 없이_ (frameless) for a narrow strip on the desktop.
+- Right-click → _프레임 없음_ (frameless) for a narrow strip on the desktop.
 
 ### 이미지 · Image (2×2 / 1×1)
 
@@ -428,9 +428,9 @@ One picture, or a slideshow of many.
 
 - Click or drop images onto it - several at once. Hover for controls: ‹ ❚❚ › (previous / pause / next), `3/12`,
   **＋** add more, **🗑** take the current one out of the list, _맞춤 / 채우기_ (fit / fill).
-- Right-click: _슬라이드쇼 전환 간격_ (5 s – 30 min, default 10 s), _무작위_ (shuffle), _모든 사진 제거_.
+- Right-click: _전환 간격_ (5 s – 30 min, default 10 s), _셔플_ (shuffle), _이미지 모두 삭제_.
 - Photos crossfade (a short fade with _Reduce motion_); the slideshow pauses while the widgets are hidden.
-- **Transparent images**: right-click → **액자 없이** (frameless). The widget's background and outline disappear and the
+- **Transparent images**: right-click → **프레임 없음** (frameless). The widget's background and outline disappear and the
   picture switches to _fit_, so a transparent PNG / WebP / GIF / SVG sits directly on the desktop like a sticker.
   A faint dashed outline shows the widget's edge only while you hover or edit the layout.
 
@@ -482,7 +482,7 @@ From easiest to most flexible:
 2. **AI themes** - describe a look in words and let any AI write the theme:
    _AI용 프롬프트 복사_ → paste into ChatGPT / Claude / Gemini and add keywords (`벚꽃, 파스텔, 둥글게`) →
    copy the whole answer → _테마 붙여넣기…_ → _테마 적용_. The app extracts the CSS, rejects answers that aren't themes,
-   warns about low contrast or unsupported rules, and _테마 되돌리기_ restores the previous theme (even after a restart).
+   warns about low contrast or unsupported rules, and _이전 테마로_ restores the previous theme (even after a restart).
    The prompt is also in `AI_THEME_PROMPT.md` to share with others.
 3. **theme.css by hand** (Settings → 테마 → _테마 파일 열기…_): saving applies it instantly. Copy the file to share
    a theme.
@@ -651,12 +651,12 @@ Backups go to `Documents\WidgetBoard\Backups\WidgetBoard-backup-YYYYMMDD-HHMM[-a
 
 ## Updates
 
-WidgetBoard looks for a new version **once a week** (Settings → 정보 · 업데이트: weekly · daily · off; or
+WidgetBoard looks for a new version **once a week** (Settings → 업데이트 · 정보: weekly · daily · off; or
 _지금 확인_). The first look is 3 minutes after start, never during startup.
 
 - A check reads only a small `latest.json`. Nothing is downloaded or installed until you choose to.
 - When there is a new version, a toast appears on the board and _업데이트 있음_ shows at the bottom of the tray menu.
-  Both open Settings → 정보 · 업데이트 with the release notes and three choices:
+  Both open Settings → 업데이트 · 정보 with the release notes and three choices:
   - _v… 설치 및 재시작_ backs up your data, downloads the new exe, checks it, and restarts into it.
   - _나중에_ closes the window. You're reminded at the next check.
   - _이 버전 건너뛰기_ stays quiet about that version. A newer one is shown again.
