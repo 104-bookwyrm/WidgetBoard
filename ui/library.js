@@ -386,17 +386,20 @@ function flash(msg) {
   flashTimer = setTimeout(() => (el.hidden = true), 2400);
 }
 
-/** Write one change to an item; a stale revision reloads the list instead. */
+/** Write one change to an item; a stale revision reloads the list instead. True when the write went through. */
 async function put(c, patch) {
   const item = { ...c, ...patch };
   delete item.rev;
+  let ok = true;
   try {
     await invoke("content_put", { item, rev: c.rev, src: "library" });
   } catch (e) {
+    ok = false;
     if (e && "conflict" in e) flash(t("lib.changed"));
     else flash(String(e?.error ?? e));
   }
   await load();
+  return ok;
 }
 
 $(".lib-search").addEventListener("input", async (e) => {
@@ -462,7 +465,8 @@ async function run(act, c) {
       break;
     }
     case "restore":
-      await put(c, { deletedAt: null });
+      // out of Recently deleted and straight back onto its board (close is the soft delete, so this is its undo)
+      if (await put(c, { deletedAt: null })) run("show", c);
       break;
     case "erase":
       confirming = c.id;

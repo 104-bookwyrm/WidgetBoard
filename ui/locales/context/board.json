@@ -1,4 +1,6 @@
 {
+  "toast.closed": "Toast after closing a widget that owns Library content (memo, image, showcase, timer, stopwatch, pomodoro, Now Playing). Closing is the soft delete: the content went to Recently deleted in the Widget window and can be restored from there. The toast carries an Undo button (toast.undo). Two short sentences.",
+  "toast.closed_view": "Toast after closing a widget that is a view of a shared store (calendar, checklist, D-day, diary) or a tool (clock, alarm, time summary). Nothing was deleted; only the widget left the board. Undo button (toast.undo) puts it back. One short sentence.",
   "wc.autostart": "First-run welcome card, checkbox label under the layout choices, ticked by default. Picking a layout or the empty board turns on starting with Windows. Same wording as the Settings option set.general.autostart. A label, no full stop.",
   "menu.pin": "Widget right-click menu item. The widget leaves the board and floats in its own window above every other app until released. Same idea as Windows' \"Always on top\". 2 to 4 words, no full stop.",
   "menu.unpin": "Right-click menu item of a widget that is kept on top (menu.pin). The window closes and the widget returns to its spot on the board. 2 to 3 words, no full stop.",

@@ -1389,11 +1389,16 @@ async function pinWidget(w, el) {
   }
 }
 
-/** Off the board. Library content stays, remembering where it was so reopening puts it back. */
+/**
+ * Off the board. Library content goes to Recently deleted (close is the soft delete), remembering where it was so
+ * restoring puts it back. A view of a shared store (calendar, checklist, diary...) just loses its placement.
+ */
+let lastClosePut = Promise.resolve();
 function closeContent(w) {
   if (w.type === "memo") archiveMemo(w, true);
   const [placement, data] = splitContent(w);
-  if (data) persistContent(w, data, { placement }).catch(() => {});
+  if (data)
+    lastClosePut = persistContent(w, data, { placement, deletedAt: Math.floor(Date.now() / 1000) }).catch(() => {});
   write("remove_widget", { id: w.id }).catch(() => {});
 }
 let lastClosed = null;
@@ -1401,9 +1406,9 @@ function removeWidget(w) {
   unmount(w); // first: the widget's destroy flushes its latest edit into w
   lastClosed = structuredClone(w);
   closeContent(w);
-  if (PIN) return releasePin(); // its window goes with it; the content stays in the Library
+  if (PIN) return releasePin(); // its window goes with it; the content waits in Recently deleted
 
-  toast(t("toast.closed", { name: widgetName(w) }), {
+  toast(t(isLibrary(w.type) ? "toast.closed" : "toast.closed_view", { name: widgetName(w) }), {
     label: t("toast.undo"),
     fn: restoreClosed,
   });
@@ -1420,6 +1425,11 @@ function restoreClosed() {
   mount(w);
   save(w);
   syncHits();
+  if (isLibrary(w.type)) {
+    // undo the soft delete once the close's write has landed, so the revision is current
+    const [placement, data] = splitContent(w);
+    lastClosePut.then(() => persistContent(w, data, { placement, deletedAt: null })).catch(() => {});
+  }
 }
 
 /** The widget a user sees: an old alias shows as its host; a timer is a stopwatch or pomodoro by its mode
