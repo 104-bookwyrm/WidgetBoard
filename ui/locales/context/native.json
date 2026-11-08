@@ -1,6 +1,9 @@
 {
   "widget.alarm": "Name of the Alarm widget (rings at a set clock time), shown in the add-widget menus, the tray and the Widget menu. One word.",
   "demo.title": "Title of the tutorial demo window, shown in its title bar and read aloud by screen readers as the window name. It must say that this is a demo or practice board, not the real one. 2 to 4 words.",
-  "tray.export_layout": "Tray menu item: saves a screenshot of each monitor's board, the widget outlines on a transparent layer, and both combined, to Pictures\\WidgetBoard. 2 to 3 words.",
-  "widget.timesum": "Name of the time summary widget (adds up the time logged by stopwatches, pomodoros and timers, with a goal), shown in the add-widget menus, the tray and the Widget menu. 1 to 2 words."
+  "tray.export_layout": "Tray menu item: saves a screenshot of each monitor's board, the widget outlines on a transparent layer, and both combined, to Pictures\\WidgetBoard. English says Export layout; Korean says 보드 캡처 저장 (save a board capture), since 레이아웃 is reserved for nothing in Korean and presets are 위젯 프리셋. 2 to 3 words.",
+  "widget.timesum": "Name of the time summary widget (adds up the time logged by stopwatches, pomodoros and timers, with a goal), shown in the add-widget menus, the tray and the Widget menu. 1 to 2 words.",
+  "tray.library": "Tray menu item that opens the Widget window. English keeps \"Widget menu\"; Korean names the window by what it holds, 위젯 보관함 (widget storage), so the Korean must not say menu. Ends with an ellipsis. 2 to 3 words.",
+  "tray.show_hide": "Tray menu item that hides every widget on every board, or shows them again. Korean: 위젯 전체 보이기/숨기기. 3 to 5 words.",
+  "tray.quit": "Tray menu item that exits the app. Korean is just 종료. 1 to 2 words."
 }

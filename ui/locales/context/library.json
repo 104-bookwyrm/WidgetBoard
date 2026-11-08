@@ -1,5 +1,5 @@
 {
-  "lib.browse_tab": "Widget window tab that shows every widget type live, one at a time. One word.",
+  "lib.browse_tab": "Widget window tab that shows every widget type live, one at a time, with an Add to board button. English: Browse. Korean names it by its purpose, 위젯 추가 (add a widget). One or two words.",
   "lib.gal_add": "Browse tab button that adds the widget being shown to the board.",
   "lib.gal_new": "Small badge on a widget added in this version. One short word.",
   "lib.gal_added": "Toast after Add to board. {name} is the widget name.",
@@ -25,7 +25,7 @@
   "gal.showcase.2": "Widget menu > Browse: short note 2 for Showcase, shown beside the live widget. One sentence. Quoted names must match the app's labels.",
   "gal.nowplaying.1": "Widget menu > Browse: short note 1 for Now Playing, shown beside the live widget. One sentence. Quoted names must match the app's labels.",
   "gal.nowplaying.2": "Widget menu > Browse: short note 2 for Now Playing, shown beside the live widget. One sentence. Quoted names must match the app's labels.",
-  "lib.off_board": "Widget window, My widgets: status line for an item that is kept but not shown on any board (the opposite of lib.on_board). A short phrase.",
+  "lib.off_board": "Widget window, My widgets: status line for an item that is kept but not shown on any board (the opposite of lib.on_board). Since closing became the soft delete, only items from older versions or a type change reach this state. Korean 숨긴 위젯. A short phrase.",
   "lib.results": "Widget window, My widgets: heading over the items that match the search box. A short phrase.",
   "lib.updated_at": "Widget window, My widgets: line on the selected item's card saying when its content last changed. {when} is a date and time already formatted.",
   "lib.deleted_at": "Widget window, My widgets: line on a recently deleted item's card saying when it was deleted. {when} is a date and time already formatted.",
@@ -50,5 +50,8 @@
   "rec.end": "Screen-reader name of the end time field of an entry being edited.",
   "rec.untitled": "Stands in for a to-do with no title. Short, in brackets.",
   "rec.save_failed": "Toast when an edit or delete could not be written. Says it failed and to try again.",
-  "rec.deleted": "Toast after a logged entry was deleted. One sentence."
+  "rec.deleted": "Toast after a logged entry was deleted. One sentence.",
+  "lib.restore": "Recently deleted: button that takes the item out of the bin and puts it straight back on its board (closing a widget is the soft delete, so this is its undo). Korean 복구; 복원 is kept for restoring a backup. One word.",
+  "lib.erase": "Recently deleted: button that removes the item for good (asks first). Korean 완전 삭제, as opposed to 삭제 (to the bin). 2 words.",
+  "lib.deleted": "Widget window group that holds soft-deleted items (closed widgets and items deleted in the window). Korean 최근 삭제. 2 words."
 }
