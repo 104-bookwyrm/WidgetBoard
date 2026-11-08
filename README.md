@@ -80,7 +80,7 @@ To start it with Windows, tick Settings → 일반 → _컴퓨터 시작 시 자
   **완료** ends it.
 - Empty space is click-through: the desktop (or the windows behind) keep working.
 
-**Free placement** (설정 > 일반 > 위젯 배치 방식 > 자유 배치) is for arranging widgets like furniture or around your
+**Free placement** (Settings → 일반 → 위젯 배치 방식 → 자유 배치) is for arranging widgets like furniture or around your
 wallpaper art. The grid and push-aside stay the default (격자 맞춤).
 
 - Widgets go anywhere, right up to the screen edges, at any size (down to each widget's minimum), and may overlap.
@@ -108,7 +108,7 @@ picture show that surface (not the desktop). This applies to the image widget, b
 which also get a light tint for readability) and D-day icons (transparent parts show the accent colour inside the
 circle). Clicks are caught by the whole widget rectangle, including transparent areas.
 
-**Right-click a widget** (or its ⋯ button at the right of the top strip) opens its own options, **모양 / Appearance…**,
+**Right-click a widget** (or its ⋯ button at the right of the top strip) opens its own options, **꾸미기 / Appearance…**,
 **위젯 캡처 / Capture widget**, **집중 모드 / Focus**, **항상 위에 표시 / Keep on top**, **숨기기 / Hide**,
 **삭제 / Close**, and shortcuts to the **위젯 보관함 / Widget menu** and its **메모·일정 검색 / Search**. **Read summary**
 appears when its accessibility setting is enabled. Inside a text box you get the
@@ -136,7 +136,7 @@ widgets show on the primary one until it returns. If the screen gets smaller, wi
 **Reduce motion** - widgets jump into place instead of sliding; no blinking, scaling or page-slide animations. Fades stay, kept short.
 Also switches on by itself when Windows' _Accessibility → Visual effects → Animation effects_ is off.
 
-**Fonts** - Settings → 모양 sets one font and text size for everything; right-click → _Appearance…_ overrides them for a
+**Fonts** - Settings → 테마 sets one font and text size for everything; right-click → _Appearance…_ overrides them for a
 single widget (installed fonts are suggested, any name can be typed; _초기화_ removes every override).
 
 **Layouts (위젯 프리셋)** - tray → _위젯 보관함…_ → **위젯 프리셋** tab.
@@ -161,7 +161,7 @@ contrast, font and motion settings.
 | page                    | what's there                                                                                                                                                                                                                                          |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 일반 · General          | language, start with Windows, layout mode (grid or free placement), lock layout, your timezone (for reminders; defaults to this computer's), time format (12-hour, 24-hour, 12-hour without AM/PM) and date format for every widget |
-| 모양 · Appearance       | theme folders (pick, save the current look, copy or paste a theme code, open the folder); skins for all widgets and per type; theme colours, font, text size, corner radius, outline, opacity, cell size; top strip, spacing, default frame; reset; AI theme copy/paste/undo; open `theme.css` |
+| 테마 · Appearance       | theme folders (pick, save the current look, copy or paste a theme code, open the folder); skins for all widgets and per type; theme colours, font, text size, corner radius, outline, opacity, cell size; top strip, spacing, default frame; reset; AI theme copy/paste/undo; open `theme.css` |
 | 위젯 · Widgets          | alarm sound, volume and repeats (timer, alarm, pomodoro); away check for stopwatches and pomodoros; timer quick-start presets; week start (one week for the calendar and checklist); holidays (country, your own days, days that aren't holidays); calendar subscriptions (iCal links); memo archive on/off |
 | 접근성 · Accessibility  | everything in [Accessibility](#accessibility), plus reduce motion                                                                                                                                                                                     |
 | 튜토리얼 · Tutorial     | what's new in each version, and the tutorial to replay                                                                                                                                                                                               |
@@ -191,7 +191,7 @@ or not it is on the board.
   that space. Right-click it in edit mode → _보이기_ brings it back.
 - **What closing does not delete** - checklist tasks, calendar entries and diary pages are shared by every widget of
   that type, so closing or erasing a widget leaves them alone.
-- **Memo archive** (opt-in, off by default) - 설정 > 위젯 > _메모 변경 기록_. When on, memo text is saved as it
+- **Memo archive** (opt-in, off by default) - Settings → 위젯 → _메모 변경 기록_. When on, memo text is saved as it
   changes: at most once a minute while you type, and at once when a memo is closed or mostly deleted. Unchanged text
   isn't saved twice. Each memo's versions are under _변경 기록_ in the Widget menu, newest first, each with a copy button.
   The archive survives erasing and restoring backups; turning it off keeps what is already saved. Typical use adds a
@@ -399,7 +399,7 @@ A sticky note that keeps whatever you write - no daily reset. Each memo widget i
 - Paper colour: hover and click a colour dot (bottom-right), or right-click → _메모 색_: 종이 1-6 (yellow, pink, green,
   blue, purple and orange unless a theme repaints them), or _테마_ (the normal widget look). The theme's opacity
   slider also applies to the paper. A memo wearing a [skin](#skins) shows the skin instead of the paper colour.
-- Font and size per memo: right-click → _모양…_.
+- Font and size per memo: right-click → _꾸미기…_.
 
 ### 지금 재생 중 · Now Playing (4×2 / 3×1)
 
@@ -468,14 +468,14 @@ Image widget in the matching mode. Nothing is lost.
 
 From easiest to most flexible:
 
-1. **Settings → 모양**: pick a **theme** card (see [Theme folders](#theme-folders)), or set 3 colours, font, text
+1. **Settings → 테마**: pick a **theme** card (see [Theme folders](#theme-folders)), or set 3 colours, font, text
    size, corner radius, outline width, opacity and cell size by hand, with live preview. Right-click any widget →
-   **모양 / Appearance…** for that widget only: font and size, its own surface / accent / text colours and opacity
+   **꾸미기 / Appearance…** for that widget only: font and size, its own surface / accent / text colours and opacity
    (unset = follow the theme; text on the accent picks black or white for contrast), a **frame**, a theme for this
    widget or for every widget of its type, and a [skin](#skins). Also per-widget background images, frameless images,
    memo paper colours.
    - **Frames** are SVG decorations drawn over the widget's edge in the frame colour (default: the accent):
-     corners, double line, stitched, beads, ornate, pixel, washi tape. Settings → _기본 테두리 장식_ sets one for every
+     corners, double line, stitched, beads, ornate, pixel, washi tape. Settings → _기본 장식 프레임_ sets one for every
      widget; a widget's own choice wins. **SVG 테두리 불러오기…** takes any SVG (≤ 100 KB): it's used as a 9-slice
      mask - the outer 30% on each side are the corners, the middle stretches - and only its shape matters, the colour
      comes from _장식 색_. Frames hide in high-contrast mode and on frameless images.
@@ -484,12 +484,12 @@ From easiest to most flexible:
    copy the whole answer → _테마 붙여넣기…_ → _테마 적용_. The app extracts the CSS, rejects answers that aren't themes,
    warns about low contrast or unsupported rules, and _테마 되돌리기_ restores the previous theme (even after a restart).
    The prompt is also in `AI_THEME_PROMPT.md` to share with others.
-3. **theme.css by hand** (Settings → 모양 → _테마 파일 열기…_): saving applies it instantly. Copy the file to share
+3. **theme.css by hand** (Settings → 테마 → _테마 파일 열기…_): saving applies it instantly. Copy the file to share
    a theme.
 
 ### Theme folders
 
-A theme is a folder in `themes\` inside the data folder (Settings → 모양 → _테마 폴더 열기_):
+A theme is a folder in `themes\` inside the data folder (Settings → 테마 → _테마 폴더 열기_):
 
 | file                | what                                                                                                       |
 | ------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -504,12 +504,12 @@ A theme is a folder in `themes\` inside the data folder (Settings → 모양 →
   don't matter, and a sheet that went through a chat app as a JPEG still works.
 - **Any picture works as a theme**: a sheet named anything, in PNG, JPG or WebP, inside a folder or dropped straight
   into `themes\`.
-- **Three levels**: the board's theme (Settings → 모양), a theme for every widget of one type and a theme for a single
-  widget (both in the widget's _모양…_). The most specific one wins, and squares left empty fall through to the next.
+- **Three levels**: the board's theme (Settings → 테마), a theme for every widget of one type and a theme for a single
+  widget (both in the widget's _꾸미기…_). The most specific one wins, and squares left empty fall through to the next.
   Themes are linked by name: repaint the sheet and every widget using it changes.
 - **Share** the sheet as a picture, or as a **theme code** (_테마 코드 복사_): one line starting with `WB1:` that fits
   in a chat message. _테마 코드 붙여넣기…_ finds the code anywhere in pasted text and makes a new theme from it.
-- _지금 모양을 테마로 저장…_ turns the current look into a new theme folder. First run adds _기본_ (the built-in
+- _지금 모습을 테마로 저장…_ turns the current look into a new theme folder. First run adds _기본_ (the built-in
   colours), _내 테마_ (a copy of your look, to edit) and _빈 템플릿_ (empty sheets and the skin template).
 - While a theme folder is active its colours win over the colour pickers below it in Settings.
 
@@ -517,9 +517,9 @@ A theme is a folder in `themes\` inside the data folder (Settings → 모양 →
 
 A skin is a picture that frames a widget, cut into a 3 × 3 grid (**nine-slice**): the corners keep their size and the
 edges and middle stretch with the widget. Put PNGs in a theme's `skins\` folder; start from `skin-template.png` in
-_빈 템플릿_ (Settings → 모양 → 스킨 → _템플릿 폴더 열기_). A transparent middle makes a frame-only skin.
+_빈 템플릿_ (Settings → 테마 → 스킨 → _템플릿 폴더 열기_). A transparent middle makes a frame-only skin.
 
-- **Which skin a widget wears**, first match wins: its own pick (_모양…_ → _스킨_), Settings → 모양 → 스킨 (one row
+- **Which skin a widget wears**, first match wins: its own pick (_꾸미기…_ → _스킨_), Settings → 테마 → 스킨 (one row
   per widget type, then _모든 위젯_), then its themes. Inside a theme: a `skin.<type or group> = name` line in
   `theme.txt`, a skin file named after the type or group (`memo.png` or `메모.png`, `time.png` or `시간.png`), then
   `skin = name`.
@@ -623,7 +623,7 @@ All in `%APPDATA%\app.widgetboard.desktop\`:
 | `layout.json`         | widgets on the board: id, type, name, hidden, monitor, x, y, w, h (grid cells), free (x, y, w, h px) and z (free placement), background, font, colours, frame, theme, skin |
 | `config.json`         | `app` (language, reduce motion), `ui` (appearance, layout & accessibility), timer presets, holidays, `calendar`, `themes`, `skins`, `backup`, `archive`, `update` |
 | `settings.json`       | legacy app settings (pre-0.12); read once and merged into `config.json`                                                                    |
-| `theme.css`           | the theme set in Settings → 모양 (theme folders are applied on top)                                                                        |
+| `theme.css`           | the theme set in Settings → 테마 (theme folders are applied on top)                                                                        |
 | `themes\<name>\`      | [theme folders](#theme-folders): colour sheet, `theme.txt`, `skins\`                                                                       |
 | `data/content.json`   | what every widget holds (memo text, photo lists, timers, showcase cards…), on the board or not; the Widget menu's list and its recently deleted items |
 | `data/time.json`      | the time record: one entry per stopwatch run or pomodoro focus stretch (category, start, end, time taken out) |
