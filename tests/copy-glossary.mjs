@@ -25,7 +25,7 @@ for (const file of walk(koDir)) {
     checked++;
     const text = rules.allow.reduce((s, phrase) => s.replaceAll(phrase, ""), raw);
     for (const p of patterns) {
-      if (p.skipFiles?.includes(short)) continue;
+      if (p.skipFiles?.includes(short) || p.allowKeys?.includes(key)) continue;
       if (p.re.test(text)) hits.push(`${short} ${key}: ${raw}  <- ${p.why}`);
     }
     for (const t of terms) {

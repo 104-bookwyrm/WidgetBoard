@@ -191,5 +191,6 @@
   "skins.follow_all": "Same as all widgets",
   "skins.none": "None",
   "skins.open_template": "Open template folder",
-  "skins.empty": "No skins yet. Put a PNG file in the skins folder inside a theme folder."
+  "skins.empty": "No skins yet. Put a PNG file in the skins folder inside a theme folder.",
+  "ai.policy": "WidgetBoard itself uses no generative-AI assets. Letting an AI write your theme is your choice, and the app respects it."
 }

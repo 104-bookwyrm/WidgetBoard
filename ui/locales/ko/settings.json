@@ -191,5 +191,6 @@
   "skins.follow_all": "모든 위젯과 같게",
   "skins.none": "없음",
   "skins.open_template": "템플릿 폴더 열기",
-  "skins.empty": "아직 스킨이 없어요. 테마 폴더 안 skins 폴더에 PNG 파일을 넣으세요"
+  "skins.empty": "아직 스킨이 없어요. 테마 폴더 안 skins 폴더에 PNG 파일을 넣으세요",
+  "ai.policy": "본 프로그램은 생성형 AI 에셋을 활용하지 않습니다. 다만 사용자의 자율을 존중해 AI를 활용한 커스터마이징을 허용합니다."
 }

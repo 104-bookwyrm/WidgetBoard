@@ -483,7 +483,8 @@ From easiest to most flexible:
    _AI용 프롬프트 복사_ → paste into ChatGPT / Claude / Gemini and add keywords (`벚꽃, 파스텔, 둥글게`) →
    copy the whole answer → _테마 붙여넣기…_ → _테마 적용_. The app extracts the CSS, rejects answers that aren't themes,
    warns about low contrast or unsupported rules, and _이전 테마로_ restores the previous theme (even after a restart).
-   The prompt is also in `AI_THEME_PROMPT.md` to share with others.
+   The prompt is also in `AI_THEME_PROMPT.md` to share with others. WidgetBoard itself uses no generative-AI
+   assets; letting an AI write your theme is your choice, and this is the app's only AI touchpoint.
 3. **theme.css by hand** (Settings → 테마 → _테마 파일 열기…_): saving applies it instantly. Copy the file to share
    a theme.
 

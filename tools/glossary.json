@@ -1,14 +1,14 @@
 {
-  "_about": "Korean copy rules for tests/copy-glossary.mjs. The readable version is ui/locales/ko/GLOSSARY.md. Each term bans a regex; `keys` limits a ban to keys with those prefixes (a word banned in one context can be the standard word in another), `allowKeys` exempts keys, and `allow` phrases are removed before matching.",
+  "_about": "Korean copy rules for tests/copy-glossary.mjs. The readable version is ui/locales/ko/GLOSSARY.md. Each term bans a regex; `keys` limits a ban to keys with those prefixes (a word banned in one context can be the standard word in another), `allowKeys` exempts keys (on patterns too: ai.policy is the one formal-register string), and `allow` phrases are removed before matching.",
   "skip": ["_name", "demo.sample.", "lay.sample.", "themes.seed.", "ck.stamp", "set.g."],
   "allow": ["Google 캘린더", "사진 폴더", "바느질 모양", "사용자 지정 휴일"],
   "patterns": [
-    { "re": "니다", "why": "해요체: ~해요/~했어요" },
+    { "re": "니다", "why": "해요체: ~해요/~했어요", "allowKeys": ["ai.policy"] },
     { "re": "니까\\?", "why": "확인 질문은 ~하시겠어요?" },
     { "re": "십시오", "why": "지시는 ~하세요, 오류 뒤 행동은 ~해 주세요" },
     { "re": "\\(으\\)로|을\\(를\\)|이\\(가\\)|은\\(는\\)", "why": "플레이스홀더 뒤 조사 금지" },
     { "re": "\\u2014", "why": "em-dash 금지" },
-    { "re": "\\.$", "why": "끝 마침표 없음", "skipFiles": ["help.json"] }
+    { "re": "\\.$", "why": "끝 마침표 없음", "skipFiles": ["help.json"], "allowKeys": ["ai.policy"] }
   ],
   "terms": [
     { "use": "편집 모드", "ban": "레이아웃 편집" },
