@@ -1,0 +1,17 @@
+{
+  "ts.period": "Time summary right-click submenu: which period is added up. One word.",
+  "ts.today": "Period choice: today. Also the start of the tooltip.",
+  "ts.week": "Period choice: this week.",
+  "ts.all": "Category choice: focus and other time together. One word.",
+  "ts.tag": "Submenu: count only time with this tag. One word.",
+  "ts.any_tag": "First tag choice: no tag filter. 2 to 3 words.",
+  "ts.goal": "Submenu: a time goal for the period, shown as a bar. One word.",
+  "ts.no_goal": "First goal choice: no goal and no bar. 2 words.",
+  "ts.hours": "A goal in whole hours, {n} is a number. Short.",
+  "ts.minutes": "A goal under an hour, {n} is minutes. Short.",
+  "ts.hm": "A goal in hours and minutes. Short.",
+  "ts.line": "Menu toggle (ticked when on): a thin strip under the number shows when today's time was logged. 2 to 3 words.",
+  "ts.of_goal": "Tooltip part: progress toward the goal, {p} percent of {goal} (like 3 h).",
+  "ts.goal_done": "Toast when the counted time reaches the goal while the widget is showing. Short and cheerful.",
+  "hint.timesum": "Title-bar hint of the time summary widget: what right-click sets. Short, in the 'Action: result' form."
+}

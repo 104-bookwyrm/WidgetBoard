@@ -1,0 +1,17 @@
+{
+  "ts.period": "기간",
+  "ts.today": "오늘",
+  "ts.week": "이번 주",
+  "ts.all": "모두",
+  "ts.tag": "태그",
+  "ts.any_tag": "모든 태그",
+  "ts.goal": "목표",
+  "ts.no_goal": "목표 없음",
+  "ts.hours": "{n}시간",
+  "ts.minutes": "{n}분",
+  "ts.hm": "{h}시간 {m}분",
+  "ts.line": "오늘 타임라인",
+  "ts.of_goal": "목표 {goal}의 {p}%",
+  "ts.goal_done": "목표를 달성했어요 🎉",
+  "hint.timesum": "우클릭: 기간, 태그, 목표"
+}

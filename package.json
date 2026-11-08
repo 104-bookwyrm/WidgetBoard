@@ -5,7 +5,7 @@
   "description": "Dev-only harness for WidgetBoard UI tests. The app itself has no build step.",
   "scripts": {
     "serve": "python -m http.server 8765 --directory ui",
-    "test": "npm run test:smoke && npm run test:recurrence && npm run test:ics && npm run test:persistence && npm run test:mock && npm run test:backups && npm run test:grid-placement-lab && npm run test:grid-placement-browser && npm run test:tutorial && npm run test:workflows && npm run test:release",
+    "test": "npm run test:smoke && npm run test:recurrence && npm run test:ics && npm run test:persistence && npm run test:mock && npm run test:backups && npm run test:grid-placement-lab && npm run test:grid-placement-browser && npm run test:tutorial && npm run test:workflows && npm run test:release && npm run test:copy",
     "test:release": "node --test tests/release-tools.mjs",
     "test:workflows": "node --test tests/workflows.mjs",
     "tauri": "tauri",
@@ -15,6 +15,7 @@
     "test:persistence": "node tests/persistence.mjs",
     "test:mock": "node tests/mock.mjs",
     "test:backups": "node tests/backups.mjs",
+    "test:copy": "node tests/copy-glossary.mjs",
     "test:grid-placement-lab": "node --test tests/grid-placement-lab.mjs tests/grid-placement-audit.mjs",
     "test:grid-placement-browser": "node --test tests/grid-placement-lab-browser.mjs",
     "test:tutorial": "node tests/tutorial.mjs && node tests/tutorial-e2e.mjs && node tests/tutorial-guide.mjs && node tests/tutorial-isolation.mjs && node tests/tutorial-onboarding.mjs && node tests/tutorial-settings.mjs && node tests/tutorial-welcome.mjs && node tests/tutorial-debug.mjs"

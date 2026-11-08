@@ -4,7 +4,7 @@
 // ticks, so it stays exact through sleep. Closing the app pauses it (app.js leftover).
 import { icon } from "../icons.js";
 import { fmt, beep, unlockAudio, fmtTotal } from "./timekit.js";
-import { addEntry, cutEntry, askAway } from "../timelog.js";
+import { addEntry, cutEntry, askAway, focusFields, focusMenu, watchEvents, runAnnouncer, cutRange, watchIdle } from "../timelog.js";
 
 const PHASES = ["work", "short", "long"];
 const LIMITS = { work: [1, 180], short: [1, 60], long: [1, 120], every: [1, 12] };
@@ -39,6 +39,11 @@ const css = `
     .pm-time { font-size: min(calc(108cqw / var(--len, 5)), 32cqh); font-weight: 600; line-height: 1; white-space: nowrap; flex: none;
       font-family: var(--font-num, var(--font)); font-variant-numeric: tabular-nums; }
     .pm.running.work .pm-time { color: var(--c2); }
+    /* one segment per focus block in the cycle; the current one fills as the block runs (scaleX: no relayout) */
+    .pm-steps { display: flex; gap: 3px; width: min(75%, 12em); flex: none; }
+    .pm-steps i { flex: 1; height: 4px; border-radius: 2px; overflow: hidden; background: color-mix(in srgb, var(--c3) 15%, transparent); }
+    .pm-steps i::after { content: ""; display: block; height: 100%; background: var(--c2); transform-origin: left; transform: scaleX(var(--p, 0)); }
+    @container (max-height: 8em) { .pm-steps { display: none; } }
     .pm.ringing .pm-phase { animation: pm-blink .7s steps(2) infinite; }
     body.reduce-motion .pm.ringing .pm-phase { animation: none; outline: 3px solid var(--c2); }
     @keyframes pm-blink { 50% { opacity: .3; } }
@@ -89,11 +94,13 @@ export function pomodoro(root, s, api) {
   s.auto = s.auto !== false;
   s.done = Math.max(0, Math.round(+s.done || 0));
   if (s.day !== today()) (s.day = today()), (s.done = 0);
+  if (!(s.focus && typeof s.focus === "object")) s.focus = null; // what it works on (timelog.js focusMenu)
 
   root.innerHTML = `
     <div class="pm">
       <div class="pm-top"><span class="pm-phase"></span></div>
       <div class="pm-time" role="timer"></div>
+      <div class="pm-steps" aria-hidden="true"></div>
       <div class="pm-cap" role="status" hidden></div>
       <div class="pm-ctrl">
         <button class="primary" data-a="go"></button>
@@ -113,11 +120,12 @@ export function pomodoro(root, s, api) {
   const ringing = () => box.classList.contains("ringing");
   let tick, ringTimer;
   let last = Date.now();
+  const announce = runAnnouncer(api);
 
   /** Focus time from `workFrom` up to `to` goes to the time log as one entry. */
   function credit(to = Date.now()) {
     if (s.workFrom == null) return;
-    const e = { id: s.runId ?? crypto.randomUUID(), cat: "focus", start: s.workFrom, end: Math.min(to, s.endAt ?? to), src: api.id };
+    const e = { id: s.runId ?? crypto.randomUUID(), cat: "focus", start: s.workFrom, end: Math.min(to, s.endAt ?? to), src: api.id, ...focusFields(s.focus) };
     if (s.cuts.length) e.cuts = s.cuts;
     s.workFrom = null;
     s.cuts = [];
@@ -137,7 +145,16 @@ export function pomodoro(root, s, api) {
     time.style.setProperty("--len", Math.max(5, time.textContent.length));
     const phase = t("pomo." + s.phase);
     if (q(".pm-phase").textContent !== phase) q(".pm-phase").textContent = phase;
+    // finished blocks full, the running (or paused) focus block partway; a break leaves the next one empty
+    const steps = q(".pm-steps");
+    if (steps.childElementCount !== s.every) steps.innerHTML = "<i></i>".repeat(s.every);
+    const part = s.phase === "work" ? (1 - left() / len()).toFixed(3) : "0";
+    [...steps.children].forEach((el, i) => {
+      const p = i < s.round ? "1" : i === s.round ? part : "0";
+      if (el.style.getPropertyValue("--p") !== p) el.style.setProperty("--p", p);
+    });
     box.classList.toggle("running", !!s.endAt);
+    announce(s.endAt && s.workFrom != null ? { start: s.workFrom, end: s.endAt, cat: "focus", cuts: s.cuts, ...focusFields(s.focus) } : null);
     box.classList.toggle("work", s.phase === "work");
     box.classList.toggle("brk", s.phase !== "work");
     if (ringing()) label(q("[data-a=go]"), "timer.stop", "bell-off");
@@ -151,7 +168,9 @@ export function pomodoro(root, s, api) {
   }
   // the round and today's count are the phase pill's tooltip, not text on the face
   function renderTip() {
-    q(".pm-phase").title = `${t("pomo.round", { n: Math.min(s.round, s.every), total: s.every })} · ${t("pomo.today", { n: s.done })}`;
+    q(".pm-phase").title =
+      `${t("pomo.round", { n: Math.min(s.round, s.every), total: s.every })} · ${t("pomo.today", { n: s.done })}` +
+      (s.focus?.title ? ` · ${s.focus.title}` : "");
   }
   function renderAway() {
     askAway(api, t("widget.pomodoro"), s.away, fmtTotal, answerAway);
@@ -160,7 +179,11 @@ export function pomodoro(root, s, api) {
   function answerAway(keep) {
     const a = s.away;
     s.away = null;
-    if (!keep && a) {
+    if (!keep && a?.idle) {
+      // away from the keyboard: out of the running focus block, and out of the blocks it logged in that span
+      if (s.workFrom != null) s.cuts.push([a.from, a.to]);
+      cutRange(api, api.id, a.from, a.to);
+    } else if (!keep && a) {
       const cut = [a.from, a.to];
       if (s.workFrom != null && a.id === s.runId) s.cuts.push(cut);
       else cutEntry(api, a.id, cut);
@@ -208,14 +231,18 @@ export function pomodoro(root, s, api) {
     s.workFrom = null;
     if (start) begin();
   }
+  /** A focus block ran out or was skipped: it fills its segment and counts toward today. */
+  function countBlock() {
+    s.round++;
+    if (s.day !== today()) (s.day = today()), (s.done = 0);
+    s.done++;
+  }
   function finish(sound) {
     clearInterval(tick);
     const ended = s.phase;
     if (ended === "work") {
       credit(s.endAt ?? Date.now());
-      s.round++;
-      if (s.day !== today()) (s.day = today()), (s.done = 0);
-      s.done++;
+      countBlock();
     }
     // a phase that ended while the app was closed never starts the next one by itself
     moveOn(ended, sound && s.auto);
@@ -269,11 +296,16 @@ export function pomodoro(root, s, api) {
   function skip() {
     stopRing();
     clearInterval(tick);
-    if (s.endAt && s.phase === "work") credit();
+    // skipping a focus block finishes it early (the common pomodoro app behaviour); only minutes run are logged
+    if (s.phase === "work") {
+      if (s.endAt) credit();
+      countBlock();
+    }
     moveOn(s.phase, s.auto);
     api.save();
     run();
     render();
+    renderTip();
   }
   function reset() {
     stopRing();
@@ -284,6 +316,31 @@ export function pomodoro(root, s, api) {
     api.save();
     render();
   }
+
+  /** What it works on. A running focus block logs its time so far for the old pick and goes on for the new one.
+   *  `go`: start it too (from a break at rest, a fresh focus block). */
+  function setFocus(f, go) {
+    if (s.endAt && s.phase === "work") {
+      credit();
+      Object.assign(s, { workFrom: Date.now(), runId: crypto.randomUUID(), cuts: [] });
+    }
+    s.focus = f;
+    if (go && !s.endAt) {
+      if (s.phase !== "work") (s.phase = "work"), (s.remaining = len());
+      start();
+    }
+    api.save();
+    render();
+    renderTip();
+  }
+  const events = watchEvents(api);
+  api.on?.("focus-task", (p) => p?.to === api.id && setFocus(p.focus, true)); // a checklist's "focus on this"
+  watchIdle(api, (to) => s.workFrom != null && !!s.endAt && s.workFrom < to, (from, to) => {
+    if (s.away) return;
+    s.away = { from, to, id: s.runId, idle: true };
+    api.save();
+    renderAway();
+  });
 
   // ---- settings panel
   const esc = (x) =>
@@ -375,6 +432,7 @@ export function pomodoro(root, s, api) {
     destroy() {
       clearInterval(tick);
       clearInterval(ringTimer);
+      announce(null);
     },
     // before a switch to another mode: pause (focus time so far goes to the record); an open question keeps it
     halt() {
@@ -382,7 +440,7 @@ export function pomodoro(root, s, api) {
       if (s.endAt) pause();
       if (s.away) answerAway(true);
     },
-    menu: () => [{ text: t("pomo.settings_menu"), action: openSettings }],
+    menu: () => [focusMenu(api, s.focus, events(), (f) => setFocus(f)), { text: t("pomo.settings_menu"), action: openSettings }],
     summary: () => {
       const phase = t("pomo." + s.phase);
       return s.endAt

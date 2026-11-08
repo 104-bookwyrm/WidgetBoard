@@ -6,6 +6,7 @@ import { icon } from "../icons.js";
 import { fmt, beep, unlockAudio } from "./timekit.js";
 import { stopwatch, swMode } from "./stopwatch.js";
 import { pomodoro, pmMode } from "./pomodoro.js";
+import { CATS, addEntry, focusFields, focusMenu, watchEvents, runAnnouncer } from "../timelog.js";
 
 export { fmt, beep, unlockAudio };
 
@@ -72,9 +73,12 @@ function countdown(root, s, api) {
   s.duration = Math.min(num(s.duration, 300000) || 300000, 99 * 3600000);
   s.remaining = Math.min(num(s.remaining, s.duration), s.duration);
   s.endAt = s.endAt ? num(s.endAt, null) : null;
+  if (!CATS.includes(s.cat)) s.cat = "focus";
+  if (!(s.focus && typeof s.focus === "object")) s.focus = null; // what it works on (timelog.js focusMenu)
   const left = () =>
     s.endAt ? Math.max(0, s.endAt - Date.now()) : s.remaining;
   const ringing = () => box.classList.contains("ringing");
+  const announce = runAnnouncer(api);
   function render() {
     if (!editing) {
       disp.textContent = fmt(left());
@@ -90,14 +94,23 @@ function countdown(root, s, api) {
     go.innerHTML = `<span class="ico">${icon(ringing() ? "bell-off" : s.endAt ? "pause" : "play")}</span><span class="lbl">${t(k)}</span>`;
     go.title = t(k);
     box.classList.toggle("running", !!s.endAt);
+    announce(s.endAt && s.startedAt ? { start: s.startedAt, end: s.endAt, cat: s.cat, ...focusFields(s.focus) } : null);
   }
   function run() {
     clearInterval(tick);
     if (!s.endAt) return;
     tick = setInterval(() => (left() <= 0 ? finish(true) : render()), 250);
   }
+  /** The stretch counted since `startedAt` goes to the time log (start and stop time), like a stopwatch run. */
+  function credit(to = Date.now()) {
+    if (!s.startedAt) return;
+    const e = { id: crypto.randomUUID(), cat: s.cat, start: s.startedAt, end: Math.min(to, s.endAt ?? to), src: api.id, ...focusFields(s.focus) };
+    s.startedAt = null;
+    if (e.end > e.start) addEntry(api, e);
+  }
   function finish(sound) {
     clearInterval(tick);
+    credit(s.endAt ?? Date.now());
     s.endAt = null;
     s.remaining = 0;
     api.save();
@@ -143,6 +156,7 @@ function countdown(root, s, api) {
     render();
   }
   function pause() {
+    credit();
     s.remaining = left();
     s.endAt = null;
     clearInterval(tick);
@@ -154,6 +168,7 @@ function countdown(root, s, api) {
     ms = Math.min(Math.max(ms, 1000), 99 * 3600000);
     stopRing();
     clearInterval(tick);
+    if (s.endAt) credit();
     Object.assign(s, { duration: ms, remaining: ms, endAt: null });
     api.save();
     render();
@@ -218,16 +233,27 @@ function countdown(root, s, api) {
   // Counting down when the app closed (or crashed: then at this launch): paused there with the time it had left.
   const lo = s.endAt && api.leftover?.(num(s.startedAt, 0));
   if (lo && s.endAt > lo.at) {
+    credit(lo.at);
     s.remaining = s.endAt - lo.at;
     s.endAt = null;
     api.save();
   } else if (s.endAt && s.endAt <= Date.now()) finish(false);
+  /** A running timer logs its time so far under the old pick and goes on; `go` starts a stopped one. */
+  function relog(change, go) {
+    if (s.endAt) credit(), (s.startedAt = Date.now());
+    change();
+    if (go && !s.endAt) start();
+    api.save();
+  }
+  const events = watchEvents(api);
+  api.on?.("focus-task", (p) => p?.to === api.id && relog(() => (s.focus = p.focus), true));
   run();
   render();
   return {
     destroy() {
       clearInterval(tick);
       clearInterval(ringTimer);
+      announce(null);
     },
     // before a switch to another mode: stop as the pause button would
     halt() {
@@ -236,7 +262,14 @@ function countdown(root, s, api) {
     },
     menu: () => {
       const items = presets();
-      return items.length ? [{ text: t("timer.presets_menu"), items }] : [];
+      return [
+        ...(items.length ? [{ text: t("timer.presets_menu"), items }] : []),
+        focusMenu(api, s.focus, events(), (f) => relog(() => (s.focus = f))),
+        {
+          text: t("sw.cat_menu"),
+          items: CATS.map((c) => ({ text: (s.cat === c ? "✓ " : "") + t("time." + c), action: () => relog(() => (s.cat = c)) })),
+        },
+      ];
     },
     summary: () =>
       s.endAt

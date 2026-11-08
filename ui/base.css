@@ -896,6 +896,14 @@ body.cvd-safe .widget.invalid {
 .wc-presets small {
   color: var(--text-muted);
 }
+#wc-autostart {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#wc-autostart[hidden] {
+  display: none;
+}
 #wc-blank {
   justify-self: end;
 }

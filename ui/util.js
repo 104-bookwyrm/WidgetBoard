@@ -357,8 +357,15 @@ export function tzOptions(selected, labels) {
   );
 }
 
-/** Let a horizontally scrolling chip bar scroll with the normal mouse wheel. */
+/**
+ * Let a horizontally scrolling chip bar scroll with the normal mouse wheel.
+ * Also sets `.more` on it while chips are hidden past the right edge (for the fade).
+ */
 export function wheelScrollX(el) {
+  const more = () => el.classList.toggle("more", el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  el.addEventListener("scroll", more, { passive: true });
+  new ResizeObserver(more).observe(el);
+  new MutationObserver(more).observe(el, { childList: true });
   el.addEventListener(
     "wheel",
     (e) => {

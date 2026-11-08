@@ -41,5 +41,6 @@
   "skins.follow_all": "Option on a widget-type row: use the all-widgets row's pick. Short.",
   "skins.none": "Option: no skin. 1 word.",
   "skins.open_template": "Button: opens the blank template folder that holds the skin template and an example skin.",
-  "skins.empty": "Shown when no theme folder has any skin yet; says where to put one. Full sentences."
+  "skins.empty": "Shown when no theme folder has any skin yet; says where to put one. Full sentences.",
+  "ai.policy": "Product stance shown as a small note under the AI theme controls in Settings > Appearance, the app's only AI touchpoint. Owner's wording. Formal register on purpose (Korean 합니다체, the only such string); exempt from the tone check in tools/glossary.json. Two sentences."
 }

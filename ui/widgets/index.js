@@ -11,6 +11,7 @@ import diary from "./diary.js";
 import showcase from "./showcase.js";
 import clock from "./clock.js";
 import alarm from "./alarm.js";
+import timesum from "./timesum.js";
 
 /** Retired types that saved widgets may still carry, and the widget each one opens as. */
 export const HOSTS = { audioplayer: "nowplaying", collection: "image", stopwatch: "timer", pomodoro: "timer" };
@@ -31,6 +32,7 @@ export default {
   collection: { ...image, defaults: { ...image.defaults, layout: "grid" } },
   clock,
   alarm,
+  timesum,
   // old saved Stopwatch and Pomodoro widgets keep their types; they open as the Timer widget in that mode
   stopwatch: { ...timer, size: swMode.size, min: swMode.min, defaults: { ...timer.defaults, ...swMode.defaults, mode: "stopwatch" } },
   pomodoro: { ...timer, size: pmMode.size, min: pmMode.min, defaults: { ...timer.defaults, ...pmMode.defaults, mode: "pomodoro" } },

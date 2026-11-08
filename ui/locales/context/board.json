@@ -1,7 +1,10 @@
 {
+  "toast.closed": "Toast after closing a widget that owns Library content (memo, image, showcase, timer, stopwatch, pomodoro, Now Playing). Closing is the soft delete: the content went to Recently deleted in the Widget window and can be restored from there. The toast carries an Undo button (toast.undo). Two short sentences.",
+  "toast.closed_view": "Toast after closing a widget that is a view of a shared store (calendar, checklist, D-day, diary) or a tool (clock, alarm, time summary). Nothing was deleted; only the widget left the board. Undo button (toast.undo) puts it back. One short sentence.",
+  "wc.autostart": "First-run welcome card, checkbox label under the layout choices, ticked by default. Picking a layout or the empty board turns on starting with Windows. Same wording as the Settings option set.general.autostart. A label, no full stop.",
   "menu.pin": "Widget right-click menu item. The widget leaves the board and floats in its own window above every other app until released. Same idea as Windows' \"Always on top\". 2 to 4 words, no full stop.",
   "menu.unpin": "Right-click menu item of a widget that is kept on top (menu.pin). The window closes and the widget returns to its spot on the board. 2 to 3 words, no full stop.",
-  "menu.more":"Tooltip and screen-reader name of the ⋯ button at the right end of a widget title bar. It opens the same menu as right-clicking the widget. 1 to 2 words.",
+  "menu.more": "Tooltip and screen-reader name of the ⋯ button at the right end of a widget title bar. It opens the same menu as right-clicking the widget. 1 to 2 words.",
   "demo.unavailable": "Toast in the tutorial demo, shown when the user picks a tray menu item the demo does not run (Library, Settings, Language and so on). It tells them the item works in the real app. A short phrase, no full stop in English.",
   "demo.tray_icon": "Accessible name and tooltip of the fake tray icon on the demo's fake taskbar. It stands for the real WidgetBoard tray icon; keep the product name as the app uses it. 3 to 5 words.",
   "demo.sample.ev_today": "Title of a sample calendar entry dated today on the tutorial demo's sample board. A short, everyday event name, 1 to 3 words, no full stop.",
@@ -50,7 +53,7 @@
   "look.skin": "Look panel label of the skin picker (a decorative image frame for the widget). 1 word.",
   "look.skin_follow": "First skin option: use whatever skin this widget's themes give it. Short.",
   "look.skin_none": "Skin option: no skin on this widget. 1 word.",
-  "menu.capture": "Widget right-click menu item: saves a picture of this widget as it looks on screen. 2 words.",
+  "menu.capture": "Widget right-click menu item: saves a picture of this widget as it looks on screen and copies it to the clipboard. Korean 이미지로 저장 (save as image). 2 to 3 words.",
   "export.name": "First word of the exported file names (Layout 20261031-1645 Monitor 1 screen.png). 1 word.",
   "export.screen": "Last word of the exported screenshot file name. 1 word.",
   "export.outline": "Last word of the exported transparent outline layer file name. 1 word.",
@@ -58,5 +61,9 @@
   "export.done": "Toast after the layout export; names where the files went. Full sentence.",
   "export.open": "Button on the export and capture toasts: opens the folder with the files. 2 words.",
   "capture.done": "Toast after capturing one widget: copied to the clipboard and saved to a file; names the folder. Full sentences.",
-  "capture.saved": "Toast after capturing one widget when the clipboard copy failed: saved to a file only. Full sentence."
+  "capture.saved": "Toast after capturing one widget when the clipboard copy failed: saved to a file only. Full sentence.",
+  "focus.enter": "Widget right-click menu item: hides every other widget until Esc or focus.exit. English: Focus on this widget. Korean avoids 집중 (reserved for the time-tracking category) and says 이 위젯만 보기 (show only this widget). 3 to 4 words.",
+  "focus.exit": "Menu item that ends focus.enter: every widget comes back. Korean 전체 보기 (show all). 2 words.",
+  "focus.on": "Status toast while focus.enter is active. Korean: 이 위젯만 보여요. One short sentence, no full stop.",
+  "menu.close": "Widget right-click menu item and title-bar × tooltip. It is the soft delete: the widget leaves the board and its content goes to Recently deleted in the Widget window. English keeps Close; Korean says 삭제 (delete), paired with 완전 삭제 for the permanent one. One word."
 }

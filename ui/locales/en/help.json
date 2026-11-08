@@ -97,5 +97,7 @@
   "help.hint.edit_first.title": "Edit layout is on",
   "help.hint.edit_first.body": "Drag a widget's top strip to move it. Right-click a widget to change its type or open Appearance. Click Done or press Esc to finish.",
   "help.hint.tray_pin.title": "WidgetBoard stays in the taskbar",
-  "help.hint.tray_pin.body": "Right-click its icon to add widgets or edit the layout. If you don't see it, click ^ on the taskbar and drag the WidgetBoard icon onto the taskbar."
+  "help.hint.tray_pin.body": "Right-click its icon to add widgets or edit the layout. If you don't see it, click ^ on the taskbar and drag the WidgetBoard icon onto the taskbar.",
+  "help.guide.timesum.title": "Time summary",
+  "help.guide.timesum.body": "Adds up the time from stopwatches, pomodoros and timers, including a run still going. Right-click to pick the period, category, tag and goal. The Widget menu's ‘Records’ tab shows and edits each day."
 }

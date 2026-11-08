@@ -32,8 +32,8 @@ A theme is one small CSS file. I will describe what I want below - keywords, a m
 
 - Only CSS custom properties (`--name: value;`).
 - Only inside `:root { }` and, optionally, `[data-widget="TYPE"] { }` blocks.
-  TYPE is one of: checklist, calendar, dday, diary, memo, nowplaying, timer, stopwatch, clock, image,
-  showcase, collection, audioplayer.
+  TYPE is one of: checklist, calendar, dday, diary, memo, nowplaying, timer, stopwatch, pomodoro, clock, alarm,
+  image, showcase, collection, audioplayer.
 - No other selectors or properties, no `@import`, `@font-face`, `url()` or web fonts.
 - Short `/* comments */` are fine.
 
@@ -56,6 +56,10 @@ A theme is one small CSS file. I will describe what I want below - keywords, a m
 | `--shadow`         | shadow around widgets                                                                                    | a `box-shadow` value or `none`; glows may use the accent colour                                                  |
 | `--widget-bg`      | optional: replaces the plain background with a colour or `linear-gradient(...)` / `radial-gradient(...)` | when used, `--widget-opacity` no longer applies - put transparency in the colours, e.g. `rgb(255 240 245 / .85)` |
 | `--frame-color`    | optional: colour of the decorative frames some users switch on (corner brackets, stitching…)             | defaults to `--c2`; a metallic or muted tone often looks best                                                    |
+| `--mark-1`…`--mark-6` | optional: the calendar's six day and tag colours (default red, orange, yellow, green, blue, purple)   | each ≥ 3:1 on `--c1`; keep the six easy to tell apart                                                            |
+| `--memo-1`…`--memo-6` | optional: memo paper colours (default yellow, pink, green, blue, purple, orange pastels)              | set `--memo-text` to match; keep it ≥ 4.5:1 on every paper                                                       |
+| `--memo-text`      | optional: text colour on memo paper                                                                      | default near-black                                                                                               |
+| `--stamp-c`        | optional: the checklist's "well done" stamp                                                              | a strong colour, like an ink stamp                                                                               |
 | `--font`           | font list                                                                                                | always end with `"Malgun Gothic", sans-serif` so Korean text renders                                             |
 | `--font-size`      | base text size                                                                                           | 12–18px (default 14px)                                                                                           |
 | `--font-num`       | optional font for big numbers (timer, clock, D-day)                                                      | omit to use --font; a display face suits it                                                                      |

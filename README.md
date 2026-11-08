@@ -1,48 +1,57 @@
 # WidgetBoard
 
-Grid-based desktop widgets for Windows: a checklist, calendar, D-days, diary, memos, a timer with stopwatch and
-pomodoro modes, Now Playing, pictures, a world clock and an oshi (최애) showcase card. They live on your desktop,
-snap to a grid and stay out of the way of your other windows.
-Korean by default, English available. Version 0.15.
+Desktop widgets for Windows: a checklist, calendar, D-days, diary, memos, a timer with stopwatch and pomodoro modes,
+an alarm, Now Playing, pictures, a world clock and an oshi (최애) showcase card. They live on your desktop, snap to a
+grid (or sit anywhere you put them) and stay behind your other windows.
+Korean by default, English available. Version 0.16.
 
 Built with Tauri 2: a small Rust core and a plain HTML/CSS/JS interface with no build step. One ~5 MB exe, no
 installer, nothing running in the background except the app itself.
 
 - [Features](#features) · [Run](#run) · [Everyday use](#everyday-use) · [Settings](#settings) ·
-  [Names, hiding and closed widgets](#names-hiding-and-closed-widgets) · [Backup and restore](#backup-and-restore) ·
+  [The Widget menu](#the-widget-menu) · [Backup and restore](#backup-and-restore) ·
   [Widgets](#widgets) · [Customising](#customising-the-look) · [config.json](#configjson) · [Files](#files) ·
   [When something goes wrong](#when-something-goes-wrong) · [Updates](#updates) · [Languages](#languages) ·
   [Developing](#developing)
 
 ## Features
 
-- **Ten widgets**: checklist (today / week / month, routines, carry-over), month calendar with tags and Korean
-  public holidays, D-day countdowns, a daily diary, sticky memos, a **timer** that is also a stopwatch (with a
-  lifetime total) and a pomodoro, **Now Playing** for any media app (YouTube, Spotify, Melon…) that also plays your
-  own voicelines and character songs, an **image** widget (slideshow or a thumbnail grid for goods and cards) that can
-  sit frameless on the desktop like a sticker, a world **clock** in any timezone, and an **oshi (최애) showcase**
-  card (image, name, rotating quotes, birthday countdown).
+- **Eleven widgets**: checklist (today / week / month, routines, carry-over), month calendar with tags, colours, lunar
+  dates and Korean public holidays, D-day countdowns, a daily diary, sticky memos, a **timer** that is also a
+  stopwatch (with a lifetime total) and a pomodoro, an **alarm**, **Now Playing** for any media app (YouTube, Spotify,
+  Melon…) that also plays your own voicelines and character songs, an **image** widget (slideshow or a thumbnail grid
+  for goods and cards) that can sit frameless on the desktop like a sticker, a world **clock** in any timezone, and an
+  **oshi (최애) showcase** card (image, name, rotating quotes, birthday countdown).
 - **Event reminders**: give a calendar entry a time, a timezone and a link, and it fires a desktop notification at the
-  right local moment (handy for streams in another timezone); clicking the notification opens the link. Weekly and
-  yearly repeats. Times are correct across timezones and daylight-saving changes.
-- **A grid that makes room**: drag a widget onto others and they slide aside; nothing ever overlaps. Empty space is
-  click-through, so the desktop and windows behind keep working.
+  right local moment (handy for streams in another timezone); clicking the notification opens the link. Repeats every
+  N days, weeks, months or years, on chosen weekdays, until an end date, or yearly by the lunar calendar. Times are
+  correct across timezones and daylight-saving changes.
+- **Calendar subscriptions**: add another calendar's iCal link (Google Calendar, holidays, a fandom schedule) and its
+  entries show read-only, refreshed every 3 hours.
+- **Two ways to arrange**: a grid that makes room (drag a widget onto others and they slide aside), or free placement
+  anywhere on the screen with layers, like a drawing program. Empty space is click-through, so the desktop and windows
+  behind keep working.
 - **Every monitor gets its own board**; monitors added or removed while running are picked up.
-- **One settings window** for everything: appearance, widgets and layouts, timer and calendar, accessibility,
-  backups and updates. Changes apply instantly on every monitor.
-- **Name, hide and recover widgets**: give widgets your own names, find one on screen from the settings list, hide it
-  without losing anything, and bring back closed widgets from a bin.
+- **Pin to front**: one widget can float above every other window (a timer while you study, a memo while you work).
+- **One settings window** for appearance, widgets, accessibility, backups and updates, plus a guide and a tutorial.
+  Changes apply instantly on every monitor.
+- **The Widget menu** keeps everything you have made: name, find, hide and close widgets without losing their content,
+  search memos, diary and calendar, switch layouts, and browse widgets to add.
 - **Backups** as plain folders, on demand or daily/weekly, with one-click restore. An optional **memo archive** keeps
   the history of every memo, even after the memo is erased.
 - **Layouts**: Work and Study presets, saved arrangements across all monitors, undo for every switch.
-- **Themes**: colours, font, corner radius, opacity, cell size and decorative frames; per-widget overrides; let any
-  AI write a theme from a few words; or edit `theme.css` by hand.
+- **Themes and skins**: colours, font, corner radius, opacity and decorative frames; theme folders you paint as a
+  colour sheet in any art program and share as a picture or a short text code; nine-slice **skins** that frame a
+  widget with your own art; a theme for the whole board, one widget type or a single widget; let any AI write a
+  theme from a few words; or edit `theme.css` by hand.
+- **Layout export and capture**: save each monitor's screen with the widget outlines (for painting wallpaper or skins
+  to fit), or capture one widget to the clipboard.
 - **Accessible by design**: keyboard mode, dwell clicking, click-to-carry, zoom to 200%, high contrast, colour-blind
   safe palette, readable fonts, visual and Windows-notification alerts, screen-reader names. All off until you turn
   them on.
 - **Reduced motion** respected everywhere, and switched on automatically when Windows animations are off.
-- **Your data stays local** in `%APPDATA%`, as readable JSON and Markdown files. The only network access is the
-  optional signed update check.
+- **Your data stays local** in `%APPDATA%`, as readable JSON and Markdown files. The app only goes online for the
+  signed update check and for calendar links you subscribe to; _오류 신고_ opens a form in your browser.
 
 ## Run
 
@@ -54,12 +63,12 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
 
 **Tray icon** (bottom-right, maybe under `^`)
 
-- right-click → **위젯 추가 / Add widget ›** grouped as 일정 · Planning (Checklist, Calendar, D-day), 기록 · Notes
-  (Memo, Diary), 시간 · Time (Clock, Timer), 이미지 · Images (Image, Showcase) and Now Playing, **레이아웃 편집 / Edit layout**, **테마 / Theme…**,
-  **설정창 / Settings**, **레이아웃 / Layouts…**, **언어 / Language ›**, show/hide, open data folder,
-  **설정 파일 열기 / Open settings file** (config.json), check for updates, quit.
-  _Theme colours…_ and _Layouts…_ open the matching page of the settings window.
-- left-click → bring all widgets to the front (hide them from the menu)
+- right-click → **위젯 추가 / Add widget ›** grouped as 플래너 · Planning (Checklist, Calendar, D-day), 노트 · Notes
+  (Memo, Diary), 시간 · Time (Clock, Alarm, Timer, Stopwatch, Pomodoro), 이미지 · Images (Image, Showcase) and
+  Now Playing; **편집 모드 / Edit layout**; **위젯 전체 보이기/숨기기 / Show/hide all widgets**;
+  **보드 캡처 저장 / Export layout**; **위젯 보관함… / Widget menu…**; **설정… / Settings…**; **종료 / Quit**.
+  When an update is waiting, _업데이트 있음_ appears at the bottom.
+- left-click → bring all widgets in front of other windows
 
 **Moving and sizing**
 
@@ -71,42 +80,54 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
   **완료** ends it.
 - Empty space is click-through: the desktop (or the windows behind) keep working.
 
-**Free placement** (Settings → 일반 → 배치 방식 → 자유 배치) is for arranging widgets like furniture or around your
-wallpaper art. The grid and push-aside stay the default (칸에 맞춤).
+**Free placement** (Settings → 일반 → 위젯 배치 방식 → 자유 배치) is for arranging widgets like furniture or around your
+wallpaper art. The grid and push-aside stay the default (격자 맞춤).
 
 - Widgets go anywhere, right up to the screen edges, at any size (down to each widget's minimum), and may overlap.
 - While you drag, a widget sticks to the screen edges and margins, the screen centre, other widgets' edges and centres,
   and the spacing already used between neighbours; dashed guides show what it's sticking to. Hold **Alt** to place it
   exactly.
 - Widgets stack in layers, as in a drawing program: moving or clicking a widget leaves the order alone. Change it with
-  right-click → **앞으로 / 뒤로 / 맨 앞으로 / 맨 뒤로**, or Ctrl+] / Ctrl+[ (with Shift: to the front / back) on a
+  right-click → **한 층 앞으로 / 한 층 뒤로 / 맨 앞으로 / 맨 뒤로**, or Ctrl+] / Ctrl+[ (with Shift: to the front / back) on a
   selected widget.
 - **레이어 (Layers)** (right-click, or the button in the edit bar) lists every widget front first: drag a row to
   reorder, the eye hides or shows, the lock fixes its position, and clicking a name selects the widget so the arrow
-  keys move it, even when it is covered. Right-click → **아래 위젯 선택** selects a widget under the pointer.
+  keys move it, even when it is covered. Right-click → **겹친 위젯 선택** selects a widget under the pointer.
 - A widget with one of its own panels open (a pomodoro's settings, a calendar entry) sits on top while it is open.
 - Keyboard: arrows move 10 px (Alt: 1 px), Shift+arrows resize.
 - Each mode keeps its own arrangement: switching back to 칸에 맞춤 shows the grid layout again (widgets added while
   free get a free cell, or overlap with a notice when the grid is full), and switching to free again restores it.
 
-**Layer** - widgets behave like any other window. Click a widget and that monitor's widgets come forward; click
-another program and it covers them. Edit layout and keyboard mode bring them to the front while they're on.
+**Layer** - the widgets stay behind your other windows, like desktop icons. Clicking or typing in a widget uses it
+without bringing it forward, so it never jumps over the program you're working in. Tray left-click brings them to the
+front until you switch to another program; Edit layout and keyboard mode keep them on top while they're on. To keep
+one widget above everything, pin it (below).
 
-**Transparent pictures** - without _액자 없이_, a widget always has its tinted surface, so transparent parts of a
+**Transparent pictures** - without _프레임 없음_, a widget always has its tinted surface, so transparent parts of a
 picture show that surface (not the desktop). This applies to the image widget, background images (_배경 이미지_,
 which also get a light tint for readability) and D-day icons (transparent parts show the accent colour inside the
 circle). Clicks are caught by the whole widget rectangle, including transparent areas.
 
-**Right-click a widget** opens its own options, **Appearance…**, **Focus on this widget**, **Hide** and **Close**.
-**Read summary** appears when its accessibility setting is enabled. Inside a text box you get the normal
-copy/paste menu; right-click the widget's header or edge to open the widget menu.
+**Right-click a widget** (or its ⋯ button at the right of the top strip) opens its own options, **꾸미기 / Appearance…**,
+**이미지로 저장 / Capture widget**, **이 위젯만 보기 / Focus**, **항상 위에 / Keep on top**, **숨기기 / Hide**,
+**삭제 / Close**, and shortcuts to the **위젯 보관함 / Widget menu** and its **메모·일정 검색 / Search**. **Read summary**
+appears when its accessibility setting is enabled. Inside a text box you get the
+normal copy/paste menu; right-click the widget's header or edge to open the widget menu.
+
+**Keep on top (항상 위에)** moves the widget into its own small window that floats above every other program,
+and keeps its spot on the board free for it. Move and resize it like any window. **보드로 돌려놓기 / Back to board**
+in its right-click menu (or Alt+F4) puts it back. Quitting the app returns every pinned widget to its board.
+
+**Capture widget (이미지로 저장)** copies a picture of the widget, as it looks on screen, to the clipboard and also saves
+it to `Pictures\WidgetBoard`.
 
 **In Edit layout**, that menu also offers background image set/remove, **Move to display** and
 **Change widget type ›**. Changing type keeps the widget's position and appearance. Each type retains its own
 content, so switching back restores the memo text, timer settings or photo list. A larger type may need more grid space.
 Timer, Stopwatch and Pomodoro switch in place; a running one stops first and its time stays in the record.
 
-Closing shows **Undo** for 7 seconds. The widget also goes to the [closed widgets bin](#names-hiding-and-closed-widgets).
+Closing is a soft delete and shows **Undo** for 7 seconds. What the widget held goes to _최근 삭제_ in the [Widget menu](#the-widget-menu), where _복구_ puts it
+back on the board.
 
 **Monitors** - every monitor gets its own board. New widgets go to the primary monitor; right-click → _Move to display_.
 Monitors plugged in, removed or changed while running are picked up after a few seconds. If a monitor disappears, its
@@ -115,59 +136,66 @@ widgets show on the primary one until it returns. If the screen gets smaller, wi
 **Reduce motion** - widgets jump into place instead of sliding; no blinking, scaling or page-slide animations. Fades stay, kept short.
 Also switches on by itself when Windows' _Accessibility → Visual effects → Animation effects_ is off.
 
-**Fonts** - Settings → 모양 sets one font and text size for everything; right-click → _Appearance…_ overrides them for a
+**Fonts** - Settings → 테마 sets one font and text size for everything; right-click → _Appearance…_ overrides them for a
 single widget (installed fonts are suggested, any name can be typed; _초기화_ removes every override).
 
-**Layouts (레이아웃)** - tray → _레이아웃…_ or Settings → 위젯 · 배치.
+**Layouts (위젯 프리셋)** - tray → _위젯 보관함…_ → **위젯 프리셋** tab.
 
 - **업무용 / Work desk**: big writable calendar, to-dos, memo, timer, D-days, Now Playing.
 - **공부용 / Study**: focus timer, stopwatch (study-time total), to-dos, diary (study log), D-days (exams), month calendar.
 - Presets fill **this monitor** from the top-right corner (desktop icons live top-left). A widget of the same type is
-  reused with its contents; widgets the preset doesn't include are put on a **shelf** and come back - text, photos and
-  all - when you switch to a layout that has them. If the screen is too small, what doesn't fit is left out (you're told).
-- **현재 배치 저장 / Save current** stores every monitor's arrangement under a name (up to 20). Applying one restores
-  positions, sizes, monitors, colours and frames, but never rolls back what's _inside_ a widget (a memo keeps today's text).
-- Every change can be undone: the toast after switching, or _배치 되돌리기_ in settings.
+  reused with its contents; widgets the preset doesn't include leave the board, and their memos and photos stay in the
+  Widget menu. If the screen is too small, what doesn't fit is left out (you're told).
+- **현재 배치를 프리셋으로 저장 / Save current** stores every monitor's arrangement under a name (up to 20). Applying one
+  restores positions, sizes, monitors, colours and frames, but never rolls back what's _inside_ a widget (a memo keeps
+  today's text).
+- Every change can be undone: the toast after switching, or _이전 프리셋으로_ on the same tab.
 
 ## Settings
 
-Tray → **설정창** opens the settings window: a normal window with a page list on the left (a drop-down when the
+Tray → **설정…** opens the settings window: a normal window with a page list on the left (a drop-down when the
 window is narrow). Changes apply instantly on every monitor and show a short _저장됨_; there is no Save button.
 `Esc` closes it; `Ctrl+Tab`, `Ctrl+PgDn` and `Ctrl+PgUp` switch pages. The window follows the app's own zoom,
 contrast, font and motion settings.
 
-| page                    | what's there                                                                                                                                                                                                          |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 일반 · General          | language, start with Windows, week start (default Sunday · Sunday · Monday; one week for the calendar and checklist), your timezone (for reminders; defaults to this computer's) |
-| 모양 · Appearance       | theme colours, font, text size, corner radius, outline, opacity, cell size with live preview; top strip (on hover · always · hidden), spacing, default frame; reset theme; AI theme copy/paste/undo; open `theme.css` |
-| 위젯 · 배치 · Widgets   | every widget on every monitor (name, hide/show, move to another monitor, close); add a widget; lock layout; edit layout; Work/Study presets; saved layouts; the closed widgets bin; the memo archive                  |
-| 타이머 · 달력 · Timer   | timer sound, volume and repeats; timer presets (label + time, reorder); holiday country, your own holidays, days that aren't holidays                                                                                 |
-| 접근성 · Accessibility  | everything in [Accessibility](#accessibility), plus reduce motion                                                                                                                                                     |
-| 백업 · 데이터 · Backup  | back up now, automatic backups, restore, open the backups folder, open `config.json`                                                                                                                                  |
-| 정보 · 업데이트 · About | version, update schedule and status, check now, install and restart, font licences                                                                                                                                    |
+| page                    | what's there                                                                                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 일반 · General          | language, start with Windows, layout mode (grid or free placement), lock layout, your timezone (for reminders; defaults to this computer's), time format (12-hour, 24-hour, 12-hour without AM/PM) and date format for every widget |
+| 테마 · Appearance       | theme folders (pick, save the current look, copy or paste a theme code, open the folder); skins for all widgets and per type; theme colours, font, text size, corner radius, outline, opacity, cell size; top strip, spacing, default frame; reset; AI theme copy/paste/undo; open `theme.css` |
+| 위젯 · Widgets          | alarm sound, volume and repeats (timer, alarm, pomodoro); away check for stopwatches and pomodoros; timer quick-start presets; week start (one week for the calendar and checklist); holidays (country, your own days, days that aren't holidays); calendar subscriptions (iCal links); memo archive on/off |
+| 접근성 · Accessibility  | everything in [Accessibility](#accessibility), plus reduce motion                                                                                                                                                                                     |
+| 튜토리얼 · Tutorial     | what's new in each version, and the tutorial to replay                                                                                                                                                                                               |
+| 가이드 · Guide          | how each widget works                                                                                                                                                                                                                                 |
+| 백업 · 데이터 · Backup  | back up now, automatic backups, restore, open the backups folder, open the data folder, open `config.json`                                                                                                                                           |
+| 업데이트 · 정보 · About | version, update schedule and status, check now, install and restart, _오류 신고_ (report a problem through an anonymous form), font licences                                                                                                           |
 
 **Lock layout** stops accidental drags and resizes; widgets then move only in edit mode.
 
-## Names, hiding and closed widgets
+## The Widget menu
 
-- **Names** - in Settings → 위젯 · 배치, type a name into a widget's field (up to 40 characters). The name replaces
-  the type in the widget's top strip, in screen-reader labels and in messages. Leave it empty for the type name.
-- **Find a widget** - clicking or tabbing into a name makes the real widget's outline pulse, on whichever monitor it
-  is (a steady outline with reduced motion).
-- **Hide** - _숨기기_ in the settings list or the widget's right-click menu. A hidden widget keeps its content, its
-  place on the grid and anything it is doing (a hidden timer still rings). It isn't drawn; in edit mode it shows as a
-  faint dashed ghost so you know what's holding that space. _보이기_ or right-click → _보이기_ brings it back.
-- **Closed widgets bin** - every closed widget (✕, Delete, or ✕ in settings) waits in the bin with its content, the
-  latest 50. _복원_ puts it back in its old spot if that spot is free, otherwise in the nearest free one.
-  _영구 삭제_ and _모두 영구 삭제_ ask first; erasing also deletes images that only that widget used.
+Tray → **위젯 보관함…** (or right-click a widget → _위젯 보관함…_) opens a window with everything you have made, whether
+or not it is on the board.
+
+- **내 위젯 · My widgets** lists every memo, image set, timer, showcase and so on, marked _보드에 표시 중_ or
+  _숨긴 위젯_. _보드에 보이기_ puts one back on the board with its content; _화면에서 찾기_ makes the widget's outline
+  pulse on whichever monitor it is; _이름 바꾸기_ gives it your own name (shown in the top strip, screen-reader labels
+  and messages).
+- **Closing** a widget only takes it off the board: its content waits here. _삭제_ moves an item to
+  _최근 삭제_, where _복구_ brings it back and _완전 삭제_ erases it for good (asked first; images only it used
+  are deleted too).
+- **검색 · Search** finds text in memos, the diary and the calendar.
+- **위젯 프리셋 · Layouts** holds the presets, your saved layouts and undo (see [Layouts](#everyday-use)).
+- **위젯 추가 · Browse** shows every widget type with a short how-to; _보드에 추가_ adds one.
+- **Hide** - right-click a widget → _숨기기_. A hidden widget keeps its content, its place and anything it is doing (a
+  hidden timer still rings). It isn't drawn; in edit mode it shows as a faint dashed ghost so you know what's holding
+  that space. Right-click it in edit mode → _보이기_ brings it back.
 - **What closing does not delete** - checklist tasks, calendar entries and diary pages are shared by every widget of
-  that type, so closing or erasing a widget leaves them alone. Every widget has a unique id, so a restored widget
-  never collides with one you added later.
-- **Memo archive** (opt-in, off by default) - _메모 기록 보관_ at the bottom of the widgets page. When on, memo
-  text is saved as it changes: at most once a minute while you type, and at once when a memo is closed or mostly
-  deleted. Unchanged text isn't saved twice. The archive survives the bin, erasing and restoring backups; turning it
-  off keeps what is already saved. The list groups versions by memo, newest first, each with a copy button.
-  Typical use adds a few MB a year (about 40 MB at the extreme of an hour's memo typing every day).
+  that type, so closing or erasing a widget leaves them alone.
+- **Memo archive** (opt-in, off by default) - Settings → 위젯 → _메모 변경 기록_. When on, memo text is saved as it
+  changes: at most once a minute while you type, and at once when a memo is closed or mostly deleted. Unchanged text
+  isn't saved twice. Each memo's versions are under _변경 기록_ in the Widget menu, newest first, each with a copy button.
+  The archive survives erasing and restoring backups; turning it off keeps what is already saved. Typical use adds a
+  few MB a year (about 40 MB at the extreme of an hour's memo typing every day).
 
 ## Backup and restore
 
@@ -196,7 +224,7 @@ screen-reader names and announcements, and a focus ring that only appears when y
 | Low vision             | 전체 확대 (`zoom`: 100–200%)                                                      | zooms every board; the grid and click-through follow                                                                                                                                                                                                                     |
 |                        | 고대비 (`highContrast`)                                                           | solid backgrounds, strong 2px outlines, no faded text, every button visible, ✓/✕ on filters, holidays underlined                                                                                                                                                         |
 |                        | 글자 간격 넓게 (`wideText`)                                                       | wider letter/word spacing and line height                                                                                                                                                                                                                                |
-|                        | 모든 위젯 내용을 글로 보기 (keyboard mode **L**)                                  | a text list of every widget with its summary; pick one to jump to it. Settings → 위젯 · 배치 lists every widget too                                                                                                                                                      |
+|                        | 모든 위젯 내용을 글로 보기 (keyboard mode **L**)                                  | a text list of every widget with its summary; pick one to jump to it. The Widget menu lists every widget too                                                                                                                                                      |
 | Deaf / hard of hearing | 화면 테두리 번쩍임 (`flashAlert`)                                                 | when the timer ends: the screen edge flashes 3 times (steady with reduced motion) with the message on top; clicks still pass through                                                                                                                                     |
 |                        | Windows 알림 (`notifyAlert`)                                                      | the same alert as a Windows notification (Action Center keeps it)                                                                                                                                                                                                        |
 |                        | 소리 자막 (`soundCaptions`)                                                       | while an alarm rings the timer shows "🔔 알람이 울리는 중 (3/10)" - or "소리 꺼짐" if sound is off                                                                                                                                                                       |
@@ -206,7 +234,7 @@ screen-reader names and announcements, and a focus ring that only appears when y
 |                        | 줄 길이 짧게 (`shortLines`)                                                       | memo and diary lines stop at ~60 characters                                                                                                                                                                                                                              |
 |                        | 남은 할 일 알려주기 (`reminderTime`, e.g. `"18:00"`)                              | once a day at that time: "오늘 남은 할 일 3개" (toast; also a Windows notification if that's on)                                                                                                                                                                         |
 |                        | 요약 읽기 메뉴 (`announceSummary`)                                               | adds _요약 읽기 / Read summary_ to a widget's normal right-click menu (off by default; summaries are always available by keyboard **S**)                                                                                                                                  |
-|                        | 집중 모드 (right-click)                                                           | hides every other widget until you press Esc or _집중 모드 종료_                                                                                                                                                                                                         |
+|                        | 이 위젯만 보기 (right-click)                                                           | hides every other widget until you press Esc or _전체 보기_                                                                                                                                                                                                         |
 
 Always available:
 
@@ -239,7 +267,7 @@ Your to-dos, in three tabs. A bar shows each tab's progress; hover a tab or the 
   month's last day; they untick on the 1st.
 - 📅 (on by default) lists **calendar entries and D-days** in every tab, on the day they fall. Ticking one here ticks it
   in the calendar, and the other way round. An entry that repeats as often as the tab's period or more (daily in a
-  week, weekly in a month) stays out of that tab. Right-click → _숨길 태그 / Hide tags_ keeps tagged entries out of
+  week, weekly in a month) stays out of that tab. Right-click → _태그 숨기기 / Hide tags_ keeps tagged entries out of
   this checklist only.
 - To-dos are calendar entries too: they show on their day in the calendar and count down in the D-day list.
   Daily routines stay in the checklist.
@@ -249,19 +277,29 @@ Your to-dos, in three tabs. A bar shows each tab's progress; hover a tab or the 
 - Right-click: hide/show completed, clear completed, calendar entries on/off. Every checklist widget shows the same
   tasks; each remembers which tab it is on. (D-day countdowns stay out of this list - they live in the D-day widget.)
 
-### 달력 · Calendar (4×5 / 3×3)
+### 캘린더 · Calendar (4×5 / 3×3)
 
 A month calendar for to-dos and appointments, in two views (switch with ▦ / ☰ or right-click):
 
-- **작은 달력 · Small** - just the month. A **dot** marks days that have entries (hollow dot = all done); empty days
-  have none. **Click a day** to open its list: add with Enter, tick when done, double-click to edit, ✕ to delete,
-  ‹ › step to the previous/next day, Esc or ✕ closes.
-- **큰 칸 · Big squares** - every day is a writable square showing its entries. Click a square and type (Enter adds and
-  keeps the box open for the next line, Esc closes); click an entry to edit it (erase the text to delete); tick its box
-  when done. When a day is full the rest collapse into **+N개 더**, which opens the whole list. Switching to this view
-  enlarges a small widget, pushing neighbours aside.
-- **Typing**: `14:00 회의 #업무` → time 14:00, title "회의", tag #업무. Time and tags are optional.
-- **Repeat**: an entry can repeat **weekly** (same weekday) or **yearly** (same date); repeating entries show ↻.
+- **월간 보기 · Small** - just the month. A **dot** marks days that have entries (hollow dot = all done); empty days
+  have none.
+- **큰 칸 · Big squares** - every day is a square showing its entries. **Double-click** a square and type (Enter adds
+  and keeps the box open for the next line, Esc closes); click an entry to edit it (erase the text to delete); tick its
+  box when done. When a day is full the rest collapse into **+N개 더**. Switching to this view enlarges a small widget,
+  pushing neighbours aside.
+- In both views **one click on a day** opens its list: add with Enter, tick when done, double-click to edit, ✕ to
+  delete, ‹ › step to the previous/next day, Esc or ✕ closes. Today has a circle.
+- **표시 범위 · Rows shown** (right-click): the whole month, or 1 to 6 weeks rolling from this week.
+- **Search** (the 🔍 button): dims every entry that doesn't match a title or `#tag`.
+- **Typing**: `14:00 회의 #업무` → time 14:00, title "회의", tag #업무. Time and tags are optional; they show as
+  chips while you type.
+- **Repeat** (⚙ on an entry): daily, weekly, monthly or yearly, every N of them, on chosen weekdays, until an end
+  date, or yearly by the **lunar** calendar (for 음력 birthdays). Repeating entries show ↻.
+- **Lunar dates** (right-click → _음력 날짜 표시_) show under the day numbers.
+- **Colours**: give a day or a tag one of six colours (색 1-6). Themes can repaint the six.
+- **Subscriptions** (Settings → 위젯 → _캘린더 구독_): paste another calendar's iCal link (in Google Calendar: the
+  calendar's settings → _캘린더 통합_ → _iCal 형식의 비공개 주소_). Its entries show read-only, tagged with the
+  subscription's name, and refresh every 3 hours.
 - **Reminders & links** (⚙ on an entry): set a time, a timezone, a link (URL) and a lead time, and tick _remind me_.
   The app fires a desktop notification at that local moment and clicking it opens the link. Entries show 🔔 when a
   reminder is set and 🔗 when a link is set. Useful for a stream in another timezone.
@@ -282,7 +320,7 @@ Countdowns, listed like a Discord member list: round icon, name, date and tag, a
 - **Icons**: click the circle to pick any image you've uploaded before (several D-days can share one; it's stored once),
   upload a new one, or use none (the first letter of the name is shown).
 - **Everything coming up**: below your D-days, every upcoming calendar entry and checklist to-do counts down
-  (D-x), soonest first. Past ones, daily routines and ticked entries stay out. Right-click → _달력 일정 표시 / Show
+  (D-x), soonest first. Past ones, daily routines and ticked entries stay out. Right-click → _캘린더 일정 보이기 / Show
   calendar entries_ turns this off.
 - **매년 반복** (every year): a birthday or anniversary counts down to its next occurrence. A Showcase's birthday is
   listed here on its own; change its name and date in the Showcase.
@@ -297,20 +335,20 @@ One page per day, saved automatically as you type.
 
 - ‹ › flick to the previous / next day that has a page (› stops at today); **오늘** jumps back; click the date to pick
   any day. A sideways touchpad swipe also flicks pages. Arrow keys only move the text cursor.
-- Lined paper; background image via right-click → _배경 이미지 설정_. Character count at the bottom.
+- Lined paper; background image via right-click → _배경 이미지…_. Character count at the bottom.
 - Pages are plain text files (`diary/2026-09-26.md`) - easy to back up or read elsewhere.
 
 ### 타이머 · Timer (3×2 / 2×2)
 
 **타이머 (timer)**, **스톱워치 (stopwatch)** and **포모도로 (pomodoro)** are listed as three widgets. In Edit layout,
-_다른 위젯으로 바꾸기_ switches between them in place; a running one stops first, and its time stays in the record. The faces show
+_위젯 종류 바꾸기_ switches between them in place; a running one stops first, and its time stays in the record. The faces show
 only the time and icon buttons (hover a button for its name); everything else is in the right-click menu.
 
 #### Timer mode
 
 Counts down and rings (sound + blinking) when done.
 
-- Right-click → **빠른 시작** sets a preset time and starts it (set your own in Settings → 타이머 · 달력), or click the
+- Right-click → **빠른 시작** sets a preset time and starts it (set your own in Settings → 위젯), or click the
   digits and type: `25` = 25 min, `1:30`, `1:00:00`.
 - Scroll over the digits to add/subtract a minute. ▶ start, ❚❚ pause, ↺ reset. Up to 99 hours.
 - Keeps correct time through sleep. Quitting the app (or Windows shutting down) pauses it with the time it had left.
@@ -318,14 +356,14 @@ Counts down and rings (sound + blinking) when done.
 #### Stopwatch mode
 
 Counts up in whole seconds. Every run is kept in one shared time record, under a category: **집중 (focus)** or
-**그외 (other)**; right-click → _분류_ switches it.
+**기타 (other)**; right-click → _분류_ switches it.
 
-- ▶ start / ❚❚ stop. While running, ⚑ records a lap (right-click → _랩 기록_ lists them); when stopped, ↺ clears
+- ▶ start / ❚❚ stop. While running, ⚑ records a lap (right-click → _랩_ lists them); when stopped, ↺ clears
   this run - the total is kept.
 - **총 시간 (total)** is all the time in the stopwatch's category, from every stopwatch and pomodoro; hover the time to
   see it. Two focus stopwatches show the same focus total.
-- Right-click → _총 시간 새로 세기_ counts the total from now on. Nothing is deleted from the record.
-- Keeps counting through sleep. If the PC slept for a while (Settings → 타이머 · 달력 → 자리 비움 확인, 30 min by
+- Right-click → _총 시간 초기화_ counts the total from now on. Nothing is deleted from the record.
+- Keeps counting through sleep. If the PC slept for a while (Settings → 위젯 → 자리 비움 확인, 30 min by
   default) it asks whether that time counts: **포함** keeps it, **빼기** takes it out.
 - Quitting the app (or Windows shutting down) stops it at that moment. If the app crashed while it ran, the next
   start asks whether that run counts.
@@ -344,13 +382,24 @@ The pill shows the phase; hover it for the round and today's count.
 - Keeps correct time through sleep, and asks about long sleeps during a focus block like the stopwatch does.
   Quitting the app (or Windows shutting down) pauses it.
 
+### 알람 · Alarm (2×2 / 2×1)
+
+Rings at a time you set, once or on chosen days.
+
+- Click the time to set it; that turns the alarm on. The bell button (or right-click → _알람 켜기_) turns it off and
+  on again.
+- Right-click → _반복_: 한 번만 (once), 매일 (every day), 평일 (weekdays), 주말 (weekends).
+- It uses the timer's sound, volume and repeats (Settings → 위젯). Click the widget to stop the ringing.
+- The time follows Settings → 일반 → _시간 형식_ (12- or 24-hour).
+
 ### 메모 · Memo (3×3 / 2×2)
 
 A sticky note that keeps whatever you write - no daily reset. Each memo widget is its own note, saved as you type.
 
-- Paper colour: hover and click a colour dot (bottom-right), or right-click → _메모 색_: yellow, pink, green, blue,
-  purple, orange, or _테마_ (the normal widget look). The theme's opacity slider also applies to the paper.
-- Font and size per memo: right-click → _글꼴…_.
+- Paper colour: hover and click a colour dot (bottom-right), or right-click → _메모지 색_: 종이 1-6 (yellow, pink, green,
+  blue, purple and orange unless a theme repaints them), or _테마_ (the normal widget look). The theme's opacity
+  slider also applies to the paper. A memo wearing a [skin](#skins) shows the skin instead of the paper colour.
+- Font and size per memo: right-click → _꾸미기…_.
 
 ### 지금 재생 중 · Now Playing (4×2 / 3×1)
 
@@ -367,11 +416,11 @@ Player app, VLC - using Windows' own media controls (the same source as the volu
   (mp3, wav, ogg, flac, m4a…, up to 30 MB each) onto it or use right-click → _트랙 추가_; files are kept in the shared
   assets folder. The list has shuffle, loop (off / all / one) and volume. Your own files show in the player like any
   other app, so ⏮ ⏯ ⏭ and the progress bar work on them too.
-- Right-click → _액자 없이_ (frameless) for a narrow strip on the desktop.
+- Right-click → _프레임 없음_ (frameless) for a narrow strip on the desktop.
 
 ### 이미지 · Image (2×2 / 1×1)
 
-Your pictures in two layouts. Right-click → _레이아웃_ switches between **슬라이드쇼 (slideshow)** and **갤러리 (grid)**.
+Your pictures in two layouts. Right-click → _미리보기 방식_ switches between **슬라이드쇼 (slideshow)** and **갤러리 (grid)**.
 
 #### Slideshow
 
@@ -379,9 +428,9 @@ One picture, or a slideshow of many.
 
 - Click or drop images onto it - several at once. Hover for controls: ‹ ❚❚ › (previous / pause / next), `3/12`,
   **＋** add more, **🗑** take the current one out of the list, _맞춤 / 채우기_ (fit / fill).
-- Right-click: _슬라이드쇼 전환 간격_ (5 s – 30 min, default 10 s), _무작위_ (shuffle), _모든 사진 제거_.
+- Right-click: _전환 간격_ (5 s – 30 min, default 10 s), _셔플_ (shuffle), _이미지 모두 삭제_.
 - Photos crossfade (a short fade with _Reduce motion_); the slideshow pauses while the widgets are hidden.
-- **Transparent images**: right-click → **액자 없이** (frameless). The widget's background and outline disappear and the
+- **Transparent images**: right-click → **프레임 없음** (frameless). The widget's background and outline disappear and the
   picture switches to _fit_, so a transparent PNG / WebP / GIF / SVG sits directly on the desktop like a sticker.
   A faint dashed outline shows the widget's edge only while you hover or edit the layout.
 
@@ -399,6 +448,8 @@ The time and date in any timezone - "what time is it for my oshi right now".
 
 - Right-click → _시간대_ to pick this computer's zone or one of the common zones (KST, JST, UTC, New York, Los Angeles,
   London, Paris); _초 표시_ shows seconds.
+- Right-click → _시간 형식_ and _날짜 형식_ set this clock apart from the rest (12-hour, 24-hour, 12-hour without
+  오전/오후); _설정과 같게_ follows Settings → 일반.
 - The date rolls over correctly when a zone is a day ahead or behind, and daylight-saving is handled automatically.
 
 ### 쇼케이스 · Showcase (3×4 / 2×2)
@@ -415,29 +466,78 @@ Image widget in the matching mode. Nothing is lost.
 
 ## Customising the look
 
-Three ways, from easiest to most flexible:
+From easiest to most flexible:
 
-1. **Settings → 모양** (or tray → _테마…_): 3 colours, font, text size, corner radius, outline width, opacity, cell size -
-   live preview. Right-click any widget → **모양 / Appearance…** for that widget only: font and size, its own surface /
-   accent / text colours and opacity (unset = follow the theme; text on the accent picks black or white for contrast),
-   and a **frame**. Also per-widget background images, frameless images, memo paper colours.
+1. **Settings → 테마**: pick a **theme** card (see [Theme folders](#theme-folders)), or set 3 colours, font, text
+   size, corner radius, outline width, opacity and cell size by hand, with live preview. Right-click any widget →
+   **꾸미기 / Appearance…** for that widget only: font and size, its own surface / accent / text colours and opacity
+   (unset = follow the theme; text on the accent picks black or white for contrast), a **frame**, a theme for this
+   widget or for every widget of its type, and a [skin](#skins). Also per-widget background images, frameless images,
+   memo paper colours.
    - **Frames** are SVG decorations drawn over the widget's edge in the frame colour (default: the accent):
-     corners, double line, stitched, beads, ornate, pixel, washi tape. Settings → _기본 테두리 장식_ sets one for every
+     corners, double line, stitched, beads, ornate, pixel, washi tape. Settings → _기본 장식 프레임_ sets one for every
      widget; a widget's own choice wins. **SVG 테두리 불러오기…** takes any SVG (≤ 100 KB): it's used as a 9-slice
      mask - the outer 30% on each side are the corners, the middle stretches - and only its shape matters, the colour
      comes from _장식 색_. Frames hide in high-contrast mode and on frameless images.
 2. **AI themes** - describe a look in words and let any AI write the theme:
    _AI용 프롬프트 복사_ → paste into ChatGPT / Claude / Gemini and add keywords (`벚꽃, 파스텔, 둥글게`) →
    copy the whole answer → _테마 붙여넣기…_ → _테마 적용_. The app extracts the CSS, rejects answers that aren't themes,
-   warns about low contrast or unsupported rules, and _테마 되돌리기_ restores the previous theme (even after a restart).
-   The prompt is also in `AI_THEME_PROMPT.md` to share with others.
-3. **theme.css by hand** (_테마 설정 파일…_): saving applies it instantly. Copy the file to share a theme.
+   warns about low contrast or unsupported rules, and _이전 테마로_ restores the previous theme (even after a restart).
+   The prompt is also in `AI_THEME_PROMPT.md` to share with others. WidgetBoard itself uses no generative-AI
+   assets; letting an AI write your theme is your choice, and this is the app's only AI touchpoint.
+3. **theme.css by hand** (Settings → 테마 → _테마 파일 열기…_): saving applies it instantly. Copy the file to share
+   a theme.
+
+### Theme folders
+
+A theme is a folder in `themes\` inside the data folder (Settings → 테마 → _테마 폴더 열기_):
+
+| file                | what                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `palette.png`       | the **colour sheet**: one row of squares for the board and one per widget type, labelled in the margins     |
+| `theme.txt`         | optional settings, one per line: `font = Pretendard`, `size = 14`, `corners = 14`, `outline = 1`, `opacity = 0.85`, `edge = 24` (skin corner size), and [skin](#skins) lines |
+| `skins\*.png`       | optional [skins](#skins)                                                                                   |
+
+- **Paint a theme** in Clip Studio, Photoshop or any art program: open `palette.png` (or the empty sheets in
+  _빈 템플릿_: `palette.png` is the short Basic sheet with the board, calendar and memo, `full.png` adds every widget),
+  fill the squares and save. The board changes within a second. A checkered square means "not set": it uses the
+  board's colour (or, on the board row, the app's default). Only the inside of each square is read, so the labels
+  don't matter, and a sheet that went through a chat app as a JPEG still works.
+- **Any picture works as a theme**: a sheet named anything, in PNG, JPG or WebP, inside a folder or dropped straight
+  into `themes\`.
+- **Three levels**: the board's theme (Settings → 테마), a theme for every widget of one type and a theme for a single
+  widget (both in the widget's _꾸미기…_). The most specific one wins, and squares left empty fall through to the next.
+  Themes are linked by name: repaint the sheet and every widget using it changes.
+- **Share** the sheet as a picture, or as a **theme code** (_테마 코드 복사_): one line starting with `WB1:` that fits
+  in a chat message. _테마 코드 붙여넣기…_ finds the code anywhere in pasted text and makes a new theme from it.
+- _지금 모습을 테마로 저장…_ turns the current look into a new theme folder. First run adds _기본_ (the built-in
+  colours), _내 테마_ (a copy of your look, to edit) and _빈 템플릿_ (empty sheets and the skin template).
+- While a theme folder is active its colours win over the colour pickers below it in Settings.
+
+### Skins
+
+A skin is a picture that frames a widget, cut into a 3 × 3 grid (**nine-slice**): the corners keep their size and the
+edges and middle stretch with the widget. Put PNGs in a theme's `skins\` folder; start from `skin-template.png` in
+_빈 템플릿_ (Settings → 테마 → 스킨 → _템플릿 폴더 열기_). A transparent middle makes a frame-only skin.
+
+- **Which skin a widget wears**, first match wins: its own pick (_꾸미기…_ → _스킨_), Settings → 테마 → 스킨 (one row
+  per widget type, then _모든 위젯_), then its themes. Inside a theme: a `skin.<type or group> = name` line in
+  `theme.txt`, a skin file named after the type or group (`memo.png` or `메모.png`, `time.png` or `시간.png`), then
+  `skin = name`.
+- A skin replaces the widget's surface, outline, rounded corners and frame decoration, and shows instead of memo paper
+  colours. `edge = N` in `theme.txt` sets how big the corners are on screen (24 px by default).
+
+### Layout export
+
+Tray → **보드 캡처 저장** saves three pictures per monitor to `Pictures\WidgetBoard`, at the screen's real
+resolution: _화면_ (a screenshot with the widgets in front), _윤곽_ (a transparent layer with each widget's outline,
+name, size and position) and _합본_ (both together). Use them to paint wallpaper or skins that fit your layout exactly.
 
 ### Theme format (contract v1)
 
 Only CSS custom properties, in `:root { }` and optional `[data-widget="TYPE"] { }` blocks
-(TYPE: checklist, calendar, dday, diary, memo, nowplaying, timer, stopwatch, pomodoro, image, clock, showcase, audioplayer,
-collection). This set is kept stable across versions.
+(TYPE: checklist, calendar, dday, diary, memo, nowplaying, timer, stopwatch, pomodoro, image, clock, alarm, showcase,
+audioplayer, collection). This set is kept stable across versions; new variables are only ever added.
 
 | variable                                     | controls                                                                     |
 | -------------------------------------------- | ---------------------------------------------------------------------------- |
@@ -449,6 +549,9 @@ collection). This set is kept stable across versions.
 | `--widget-bg`                                | optional colour or gradient replacing the plain surface                      |
 | `--font` `--font-size`                       | font list (end with `"Malgun Gothic", sans-serif`), base size                |
 | `--frame-color`                              | optional: colour of the frame decorations (default = `--c2`)                 |
+| `--mark-1` … `--mark-6`                      | optional: the calendar's six day and tag colours                             |
+| `--memo-1` … `--memo-6` `--memo-text`        | optional: memo paper colours 1-6 and the text on paper                       |
+| `--stamp-c`                                  | optional: the checklist's all-done stamp                                     |
 | `--cell` `--gap`                             | grid (changing them moves widgets)                                           |
 
 ```css
@@ -480,13 +583,16 @@ collection). This set is kept stable across versions.
 
 ## config.json
 
-Everything the settings window changes lives here, so you rarely need to open it. Open it from the tray
-(_설정 파일 열기_) or Settings → 백업 · 데이터; saving applies it immediately.
+Everything the settings window changes lives here, so you rarely need to open it. Open it from Settings →
+백업 · 데이터 → _config.json 열기_; saving applies it immediately.
 
 ```json
 {
   "app": { "lang": "ko", "reduce_motion": false },
-  "ui": { "weekStart": "mon", "lockLayout": false }, // appearance & accessibility keys
+  "ui": { "weekStart": "mon", "lockLayout": false, "layoutMode": "grid", "timeFormat": "24" }, // appearance, layout & accessibility keys
+  "themes": { "board": "내 테마", "types": { "clock": "Night" } }, // theme folders per level (by folder name)
+  "skins": { "board": "빈 템플릿/예시", "types": { "memo": "-" } }, // Settings skin picks ("-" = none)
+  "calendar": { "subscriptions": [{ "id": "…", "name": "공휴일", "url": "webcal://…" }] },
   "timer": {
     "presets": [
       { "label": "", "time": "1" }, // empty label = automatic ("1분")
@@ -515,15 +621,17 @@ All in `%APPDATA%\app.widgetboard.desktop\`:
 
 | file                  | what                                                                                                                                       |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `layout.json`         | widgets: id, type, name, hidden, monitor, x, y, w, h (grid cells), free (x, y, w, h px) and z (free placement), settings (memo text, slideshow list…), background, font, colours, frame |
-| `config.json`         | `app` (language, reduce motion), `ui` (appearance & accessibility), timer presets, holidays, `backup`, `archive`, `update`                 |
+| `layout.json`         | widgets on the board: id, type, name, hidden, monitor, x, y, w, h (grid cells), free (x, y, w, h px) and z (free placement), background, font, colours, frame, theme, skin |
+| `config.json`         | `app` (language, reduce motion), `ui` (appearance, layout & accessibility), timer presets, holidays, `calendar`, `themes`, `skins`, `backup`, `archive`, `update` |
 | `settings.json`       | legacy app settings (pre-0.12); read once and merged into `config.json`                                                                    |
-| `theme.css`           | the theme                                                                                                                                  |
+| `theme.css`           | the theme set in Settings → 테마 (theme folders are applied on top)                                                                        |
+| `themes\<name>\`      | [theme folders](#theme-folders): colour sheet, `theme.txt`, `skins\`                                                                       |
+| `data/content.json`   | what every widget holds (memo text, photo lists, timers, showcase cards…), on the board or not; the Widget menu's list and its recently deleted items |
 | `data/time.json`      | the time record: one entry per stopwatch run or pomodoro focus stretch (category, start, end, time taken out) |
 | `data/closed.json`    | when the app last quit properly; timers, stopwatches and pomodoros still running then stop at that moment |
 | `data/events.json`    | every entry: calendar entries, D-days, showcase birthdays and checklist to-dos (shared by the calendar, checklist and D-day); holds any time, timezone, link and reminder on an entry. An older `checklist.json` is merged in once at startup (a pre-migration backup is taken first) |
-| `data/bin.json`       | closed widgets waiting to be restored or erased                                                                                            |
-| `data/layouts.json`   | saved layouts; `layouts_shelf.json` widgets put away by a layout; `layouts_undo.json` the arrangement before the last switch               |
+| `data/calsubs.json`   | calendar subscriptions' entries, as last fetched                                                                                           |
+| `data/layouts.json`   | saved layouts; `layouts_undo.json` the arrangement before the last switch                                                                  |
 | `diary/YYYY-MM-DD.md` | diary pages                                                                                                                                |
 | `assets/`             | uploaded images, named by content hash (the same image is stored once)                                                                     |
 | `archive/memos.jsonl` | the memo archive (only when turned on): one JSON line per saved version                                                                    |
@@ -534,8 +642,9 @@ Backups go to `Documents\WidgetBoard\Backups\WidgetBoard-backup-YYYYMMDD-HHMM[-a
 ## When something goes wrong
 
 - A save that fails (disk full, folder locked) shows a message; the diary keeps your text and retries.
-- A widget that can't load, or an unknown widget type, shows a note instead of breaking the board - right-click → 닫기.
-- Closed something by mistake: _되돌리기_ in the message, or Settings → 위젯 · 배치 → closed widgets.
+- A widget that can't load, or an unknown widget type, shows a note instead of breaking the board - right-click → 삭제.
+- Closed something by mistake: _실행 취소_ in the message, or 위젯 보관함 → _최근 삭제_ → _복구_ (content left off the
+  board by older versions sits under 내 위젯 as _숨긴 위젯_, with _보드에 보이기_).
 - Lost more than that: Settings → 백업 · 데이터 → restore a backup (your current state is snapshotted first).
 - Damaged or hand-edited `layout.json` / `events.json` values are repaired on load; a broken
   `theme.css` value such as `--cell: abc` falls back to a safe default.
@@ -543,12 +652,12 @@ Backups go to `Documents\WidgetBoard\Backups\WidgetBoard-backup-YYYYMMDD-HHMM[-a
 
 ## Updates
 
-WidgetBoard looks for a new version **once a week** (Settings → 정보 · 업데이트: weekly · daily · off; or
-_지금 확인_, or tray → _업데이트 확인_). The first look is 3 minutes after start, never during startup.
+WidgetBoard looks for a new version **once a week** (Settings → 업데이트 · 정보: weekly · daily · off; or
+_지금 확인_). The first look is 3 minutes after start, never during startup.
 
 - A check reads only a small `latest.json`. Nothing is downloaded or installed until you choose to.
 - When there is a new version, a toast appears on the board and _업데이트 있음_ shows at the bottom of the tray menu.
-  Both open Settings → 정보 · 업데이트 with the release notes and three choices:
+  Both open Settings → 업데이트 · 정보 with the release notes and three choices:
   - _v… 설치 및 재시작_ backs up your data, downloads the new exe, checks it, and restarts into it.
   - _나중에_ closes the window. You're reminded at the next check.
   - _이 버전 건너뛰기_ stays quiet about that version. A newer one is shown again.
@@ -578,7 +687,13 @@ pickImage(s), uploadImage, assetUrl, listAssets, requestSize, size, reduceMotion
 setFrameless, on(event), media.subscribe/control, announce, alert(title, body)` (`alert` = the user's opted-in
    flash / Windows notification; sound stays the widget's job). Shared parts: `icon(name)` from `ui/icons.js`,
    `dropZone` from `ui/util.js`, and the tokens on `.widget` in `base.css` (`--text-muted`, `--space-*`, `--fs-*`).
-2. Register it in `REGISTRY` (`ui/app.js`) and `WIDGETS` (`src-tauri/src/main.rs`); add `widget.<name>` to `native.json` and its other strings to `widgets/<name>.json`, in both languages.
+   A module may also export `palette: [{ short, v, default }]`: its own theme colours (CSS variable `v`), added to its
+   row of the colour sheet after the six shared ones. Append only; never reorder.
+2. Register it in three places: the import and exported object in `ui/widgets/index.js` (the board's `REGISTRY`), its
+   group in `ui/widgets/groups.json` (the one widget list: add menus, tray, mock and tests read it), and a new row at
+   the end of `BLOCKS` in `ui/palette.js` if it should have its own colour-sheet row. Add `widget.<name>` to
+   `native.json` and its other strings to `widgets/<name>.json` in both languages, with a note for each new key in
+   `ui/locales/context/`.
 
 **Build (Windows)**
 
@@ -612,8 +727,10 @@ back: every widget type mounts, a save survives a reload, grid and free moves, t
 the timer ringing, the Settings and widget menu windows opening, and both languages having the same keys. It never
 checks displayed text, so copy can change freely. Anything else is debugged when it breaks.
 Run `npm install`, `npx playwright install chromium`, then `npm test`. The tests serve UI files through Playwright
-without a background server. Set `PW_CHROMIUM` to use another Chromium executable. Rust unit tests (`cargo test`
-in `src-tauri`): backup/restore round trip, the v0.12 config migration, and image clean-up when erasing from the bin.
+without a background server. Set `PW_CHROMIUM` to use another Chromium executable. `npm test` also runs the
+recurrence, iCal, persistence, mock, backup, grid-placement and tutorial suites. Rust unit tests (`cargo test` in
+`src-tauri`): backup/restore round trip, the config and content migrations, the board z-order rule, and image clean-up
+when erasing permanently.
 
 `tests/persistence.mjs` covers layout content preservation, editor flushes, shared checklist edits and diary save
 failures. Both pages use `ui/mock-tauri.js` in browser tests. The runner reads the version and default config from

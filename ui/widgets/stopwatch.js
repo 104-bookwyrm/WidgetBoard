@@ -5,7 +5,7 @@
 //   session: this run (reset with the reset button when stopped); laps belong to the session
 //   total: the category's logged time since "reset total", which counts from then on and deletes nothing
 import { icon } from "../icons.js";
-import { CATS, spent, total as logTotal, readLog, addEntry, cutEntry, askAway } from "../timelog.js";
+import { CATS, spent, total as logTotal, readLog, addEntry, cutEntry, askAway, focusFields, focusMenu, watchEvents, runAnnouncer, cutRange, watchIdle } from "../timelog.js";
 import { p2, fmtTotal } from "./timekit.js";
 
 export { fmtTotal };
@@ -46,6 +46,7 @@ export function stopwatch(root, s, api) {
   s.cuts = Array.isArray(s.cuts) ? s.cuts.filter((c) => Array.isArray(c) && c[1] > c[0]) : [];
   if (s.startedAt && !s.runId) s.runId = crypto.randomUUID();
   if (!(s.away && s.away.to > s.away.from)) s.away = null;
+  if (!(s.focus && typeof s.focus === "object")) s.focus = null; // what it works on (timelog.js focusMenu)
 
   root.innerHTML = `
     <div class="sw">
@@ -59,6 +60,7 @@ export function stopwatch(root, s, api) {
   const box = root.firstElementChild;
   const q = (c) => box.querySelector(c);
   let log = []; // the shared time log, re-read when another widget adds to it
+  const announce = runAnnouncer(api);
   const running = () => ({ start: s.startedAt, end: Date.now(), cuts: s.cuts });
   const run = () => (s.startedAt ? spent(running()) : 0);
   const session = () => s.elapsed + run();
@@ -80,8 +82,9 @@ export function stopwatch(root, s, api) {
       main.style.setProperty("--len", Math.max(5, shown.length));
     }
     // the category's total is a tooltip, not text on the face
-    main.title = `${t("time." + s.cat)} · ${t("sw.total")} ${fmtTotal(total())}`;
+    main.title = `${t("time." + s.cat)} · ${t("sw.total")} ${fmtTotal(total())}` + (s.focus?.title ? ` · ${s.focus.title}` : "");
     box.classList.toggle("running", !!s.startedAt);
+    announce(s.startedAt ? { start: s.startedAt, cat: s.cat, cuts: s.cuts, ...focusFields(s.focus) } : null);
     const go = q("[data-a=go]");
     label(go, s.startedAt ? "sw.stop" : session() ? "sw.resume" : "sw.start", s.startedAt ? "pause" : "play");
     const lap = q("[data-a=lap]");
@@ -122,7 +125,7 @@ export function stopwatch(root, s, api) {
   }
   /** End this run at `at`: it goes to the session and, as one entry, to the time log. */
   function stop(at = Date.now()) {
-    const e = { id: s.runId, cat: s.cat, start: s.startedAt, end: Math.max(at, s.startedAt), src: api.id };
+    const e = { id: s.runId, cat: s.cat, start: s.startedAt, end: Math.max(at, s.startedAt), src: api.id, ...focusFields(s.focus) };
     if (s.cuts.length) e.cuts = s.cuts;
     s.elapsed += spent(e);
     Object.assign(s, { startedAt: null, runId: null, cuts: [] });
@@ -138,7 +141,11 @@ export function stopwatch(root, s, api) {
   function answerAway(keep) {
     const a = s.away;
     s.away = null;
-    if (!keep && a) {
+    if (!keep && a?.idle) {
+      // away from the keyboard: out of the running run, and out of what it logged in that span
+      if (s.startedAt) s.cuts.push([a.from, a.to]);
+      cutRange(api, api.id, a.from, a.to).then(load); // ponytail: the session digits keep stopped runs' idle time
+    } else if (!keep && a) {
       const cut = [a.from, a.to];
       if (s.startedAt && a.id === s.runId) s.cuts.push(cut);
       else {
@@ -166,6 +173,24 @@ export function stopwatch(root, s, api) {
     api.save();
     render();
   }
+
+  /** What it works on; a running stopwatch splits its run like a category change. `go`: start it too. */
+  function setFocus(f, go) {
+    const was = !!s.startedAt;
+    if (was) stop();
+    s.focus = f;
+    if (was || go) start();
+    api.save();
+    render();
+  }
+  const events = watchEvents(api);
+  api.on?.("focus-task", (p) => p?.to === api.id && setFocus(p.focus, true)); // a checklist's "focus on this"
+  watchIdle(api, (to) => s.startedAt && s.startedAt < to, (from, to) => {
+    if (s.away) return;
+    s.away = { from, to, id: s.runId, idle: true };
+    api.save();
+    renderAway();
+  });
 
   box.addEventListener("pointerdown", () => s.away && renderAway()); // another toast replaced the question: ask again
   box.addEventListener("click", (e) => {
@@ -223,13 +248,14 @@ export function stopwatch(root, s, api) {
   loop();
   load();
   return {
-    destroy: () => clearInterval(tick),
+    destroy: () => (clearInterval(tick), announce(null)),
     // before a switch to another mode: the run ends and goes to the record; an open keep / take-out question keeps it
     halt() {
       if (s.startedAt) stop();
       if (s.away) answerAway(true);
     },
     menu: () => [
+      focusMenu(api, s.focus, events(), (f) => setFocus(f)),
       {
         text: t("sw.cat_menu"),
         items: CATS.map((c) => ({ text: (s.cat === c ? "✓ " : "") + t("time." + c), action: () => setCat(c) })),

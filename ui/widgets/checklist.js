@@ -1,11 +1,14 @@
-// Checklist with three tabs, all over the shared entry store (data/events.json, the calendar's and D-day's too):
+// Checklist with five tabs, all over the shared entry store (data/events.json, the calendar's and D-day's too):
 //  • 오늘 (today)  - one-off to-dos (unfinished ones carry over, ↪), daily routines (🔁)
+//  • 어제 / 내일 (yesterday / tomorrow) - the same for that day, without the carry-over
 //  • 이번 주 (week) - one-off to-dos dated this week, and weekly quotas: due on the week's last day, ticked once a week
 //  • 이번 달 (month)- the same for this month, with monthly quotas
 // Every tab also lists the shared entries (calendar, d-days) dated in its period (📅, ticked in both places),
 // unless 달력 연동 is off; tags in `hideTags` keep entries out of this widget only.
 // Entries added here carry `todo: true` (only they carry over); quotas carry `quota: true`.
 // Week start: Settings → 한 주 시작 (util.js weekFirstDay; 기본 = Sunday). Each widget remembers its own tab.
+// Right-click a row: 이 할 일에 집중 hands it to a pomodoro / stopwatch (api.focus). With 할 일별 시간 on (showTime),
+// a row's tooltip and menu show the time logged for it in the tab's period; the face stays as it is.
 import {
   esc,
   ymd,
@@ -22,8 +25,11 @@ import {
   dateOpts,
 } from "../util.js";
 import { icon } from "../icons.js";
+import { taskTotal } from "../timelog.js";
+import { fmtTotal } from "./timekit.js";
 
-const TABS = ["today", "week", "month"];
+const TABS = ["week", "month", "yesterday", "today", "tomorrow"];
+const DAY_TABS = { yesterday: -1, today: 0, tomorrow: 1 }; // offset from today
 const REPEAT_OF_TAB = { week: "weekly", month: "monthly" };
 const TILTS = ["tilt", "random", "straight"];
 // stable per-day angle for the "random" tilt so it doesn't jump on every render
@@ -44,13 +50,16 @@ export default {
     stamp: false, // "day well done" stamp when every Today item is finished
     stampTilt: "tilt", // tilt | random | straight
     stampImg: "", // optional custom stamp image (asset name); empty = drawn default
+    showTime: false, // time logged per to-do, in its tooltip and menu
   },
   css: `
     .ck { position: absolute; inset: 0; padding: var(--head-h) var(--pad) var(--pad); box-sizing: border-box;
       display: flex; flex-direction: column; gap: var(--space-3); }
-    .ck-tabs { display: flex; gap: var(--space-2); flex: none; }
-    .ck-tabs button { flex: 1; min-width: 0; padding: 1px 4px; font-size: var(--fs-meta); white-space: nowrap; overflow: hidden;
+    /* two rows: week | month, then yesterday | today | tomorrow */
+    .ck-tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--space-2); flex: none; }
+    .ck-tabs button { grid-column: span 2; min-width: 0; padding: 1px 4px; font-size: var(--fs-meta); white-space: nowrap; overflow: hidden;
       text-overflow: ellipsis; color: var(--text-muted); }
+    .ck-tabs [data-tab=week], .ck-tabs [data-tab=month] { grid-column: span 3; }
     .ck-tabs button.on { background: var(--c2); border-color: var(--c2); color: var(--on-accent); opacity: 1; }
     .ck-head { display: flex; align-items: baseline; gap: var(--space-3); flex: none; min-width: 0; }
     .ck-date { flex: 1; min-width: 0; font-weight: 600; text-wrap: balance; word-break: keep-all; } /* a week range with its year wraps, never cut */
@@ -90,6 +99,7 @@ export default {
     s.hideTags = Array.isArray(s.hideTags) ? s.hideTags.filter((g) => typeof g === "string") : [];
     if (!TABS.includes(s.tab)) s.tab = "today";
     let events = []; // the whole shared store; checklist rows are its `todo` entries plus today's entries
+    let log = []; // the time log, read only while showTime is on
 
     root.innerHTML = `
       <div class="ck">
@@ -105,6 +115,8 @@ export default {
     const box = root.firstElementChild;
     const q = (c) => box.querySelector(c);
     const today = () => ymd();
+    const isDayTab = (tab) => tab in DAY_TABS;
+    const dayOf = (tab) => addDays(today(), DAY_TABS[tab]);
     const fmt = (opts, d) =>
       new Intl.DateTimeFormat(lang, dateOpts(opts, api.config?.ui?.dateFormat)).format(parseYmd(d));
 
@@ -117,10 +129,10 @@ export default {
     // first day in it), unless 달력 연동 is off or a hidden tag is on it. A repeat as short as the period or
     // shorter (daily in a week, daily/weekly in a month) would be there all the time, so it stays out.
     const hidden = (e) => (e.tags || []).some((g) => s.hideTags.includes(g));
-    const TOO_OFTEN = { today: [], week: ["daily"], month: ["daily", "weekly"] };
+    const TOO_OFTEN = { yesterday: [], today: [], tomorrow: [], week: ["daily"], month: ["daily", "weekly"] };
     function period(tab) {
       const d = today();
-      if (tab === "today") return [d, d];
+      if (isDayTab(tab)) return [dayOf(tab), dayOf(tab)];
       if (tab === "week") return [weekFirstDay(d), addDays(weekFirstDay(d), 6)];
       const first = d.slice(0, 8) + "01";
       return [first, addDays(addDays(first, 31).slice(0, 8) + "01", -1)];
@@ -144,16 +156,18 @@ export default {
           (a.item.time ? 0 : 1) - (b.item.time ? 0 : 1) ||
           (a.item.time || "").localeCompare(b.item.time || ""),
       );
-      if (tab === "today") {
+      if (isDayTab(tab)) {
+        // unfinished earlier to-dos carry over into Today only; a daily shows its tick for the tab's day
+        const x = from;
         const own = todos()
           .filter(
             (i) =>
               !hidden(i) &&
               (i.repeat === "daily" ||
                 (!i.repeat &&
-                  (i.date === d || i.doneOn === d || (!i.done && i.date < d)))),
+                  (i.date === x || i.doneOn === x || (tab === "today" && !i.done && i.date < d)))),
           )
-          .map((i) => ({ kind: "own", item: i, done: isDone(i) }));
+          .map((i) => ({ kind: "own", item: i, done: i.repeat ? eventDone(i, x) : isDone(i) }));
         return [...cal, ...own];
       }
       // one-off to-dos dated in the period, then this period's quotas
@@ -166,10 +180,18 @@ export default {
         .map((i) => ({ kind: "own", item: i, done: isDone(i) }));
       return [...cal, ...own, ...quotas];
     }
+    /** Time logged for entry `id` in the tab's period, as text ("" when none or the option is off). */
+    function timeOf(id) {
+      if (!s.showTime) return "";
+      const [from, to] = period(s.tab);
+      const ms = taskTotal(log, id, parseYmd(from).getTime(), parseYmd(addDays(to, 1)).getTime());
+      return ms >= 1000 ? t("ck.time_logged", { t: fmtTotal(ms) }) : "";
+    }
+    const withTime = (tip, id) => (timeOf(id) ? `${tip} · ${timeOf(id)}` : tip);
     function periodLabel(tab) {
       const d = today();
       const day = (x) => fmt({ month: "long", day: "numeric", weekday: "short" }, x);
-      if (tab === "today") return day(d);
+      if (isDayTab(tab)) return day(dayOf(tab));
       if (tab === "week") {
         const a = weekFirstDay(d);
         const nb = (x) => day(x).replace(/ /g, "\u00a0"); // a wrapped range breaks between the two dates only
@@ -205,11 +227,11 @@ export default {
           .map(({ kind, item, done, day }) => {
             // week / month rows say which day they fall on
             const when =
-              day && s.tab !== "today"
+              day && !isDayTab(s.tab)
                 ? `<span class="ck-meta">${esc(fmt({ day: "numeric", weekday: "short" }, day))}</span>`
                 : "";
             if (kind === "cal")
-              return `<div class="ck-row ck-cal ${done ? "done" : ""}" data-cal="${esc(item.id)}" data-day="${esc(day)}" title="${esc(t("ck.from_calendar"))}">
+              return `<div class="ck-row ck-cal ${done ? "done" : ""}" data-cal="${esc(item.id)}" data-day="${esc(day)}" title="${esc(withTime(t("ck.from_calendar"), item.id))}">
               <input type="checkbox" ${done ? "checked" : ""}>
               ${item.time ? `<span class="ck-time">${esc(item.time)}</span>` : ""}
               <span class="ck-cal-ico">${icon("calendar")}</span><span class="ck-title">${esc(item.title)}</span>${when}</div>`;
@@ -220,7 +242,7 @@ export default {
                 : "";
             return `<div class="ck-row ${done ? "done" : ""}" data-id="${esc(item.id)}">
               <input type="checkbox" ${done ? "checked" : ""}>
-              <span class="ck-title" title="${esc(item.title)} - ${esc(t("cal.edit_hint"))}">${esc(item.title)}</span>
+              <span class="ck-title" title="${esc(withTime(`${item.title} - ${t("cal.edit_hint")}`, item.id))}">${esc(item.title)}</span>
               ${carried ? `<span class="ck-meta" title="${esc(t("ck.carried"))}">${icon("carried")} ${esc(fmt({ month: "numeric", day: "numeric" }, item.date))}</span>` : ""}
               ${when}${repeatBtn}
               <button class="ck-btn" data-a="del" title="${esc(t("dday.delete"))}">${icon("x")}</button></div>`;
@@ -265,12 +287,14 @@ export default {
       }
       const it = own(e.target);
       if (!it) return;
+      // a day tab ticks its own day (yesterday's routine, a to-do finished for tomorrow)
+      const day = isDayTab(s.tab) ? dayOf(s.tab) : today();
       if (it.repeat) {
-        setEventDone(it, tickDay(it, today()), on);
+        setEventDone(it, it.repeat === "daily" ? day : tickDay(it, today()), on);
         it.doneDates = it.doneDates.slice(-60);
       } else {
         it.done = on;
-        it.doneOn = on ? today() : undefined;
+        it.doneOn = on ? day : undefined;
       }
       saveEvents();
       render();
@@ -345,7 +369,7 @@ export default {
       const title = e.target.value.trim().slice(0, 300);
       if (!title) return;
       const repeat = REPEAT_OF_TAB[s.tab] ?? null;
-      const base = { id: uid(), title, date: today(), todo: true, tags: [] };
+      const base = { id: uid(), title, date: isDayTab(s.tab) ? dayOf(s.tab) : today(), todo: true, tags: [] };
       events.push(
         repeat
           ? { ...base, repeat, quota: true, doneDates: [] }
@@ -366,11 +390,19 @@ export default {
       renderLater();
     }
     api.onStore("events", loadEvents);
+    async function loadLog() {
+      if (!s.showTime) return;
+      const d = await api.store.get("time").catch(() => null);
+      log = Array.isArray(d) ? d : [];
+      renderLater();
+    }
+    api.onStore("time", loadLog);
     api.onConfig(renderLater); // week start may change
 
     api.onDayChange(renderLater); // new day / week / month: recurring items untick
     render();
     loadEvents();
+    loadLog();
 
     const menuToggle = (k, on, off) => ({
       text: t(s[k] ? on : off),
@@ -427,6 +459,18 @@ export default {
           : []),
       ],
     });
+    // the row right-clicked: focus on it, and its logged time when that option is on
+    function rowMenu(target) {
+      const row = target?.closest?.(".ck-row");
+      const it = row && (own(row) ?? cal(row));
+      if (!it) return [];
+      const time = timeOf(it.id);
+      return [
+        { text: t("ck.menu_focus"), action: () => api.focus?.({ task: it.id, title: it.title, tags: it.tags ?? [] }) },
+        ...(time ? [{ text: time, enabled: false }] : []),
+        { item: "Separator" },
+      ];
+    }
     return {
       destroy: () => {},
       summary: () => {
@@ -444,7 +488,8 @@ export default {
             : "")
         );
       },
-      menu: () => [
+      menu: (target) => [
+        ...rowMenu(target),
         menuToggle("sync", "ck.menu_sync_off", "ck.menu_sync_on"),
         menuToggle("hideDone", "ck.menu_show_done", "ck.menu_hide_done"),
         ...tagMenu(),
@@ -457,6 +502,10 @@ export default {
           },
         },
         stampMenu(),
+        {
+          text: (s.showTime ? "✓ " : "") + t("ck.menu_show_time"),
+          action: () => ((s.showTime = !s.showTime), api.save(), s.showTime ? loadLog() : render()),
+        },
       ],
     };
   },
