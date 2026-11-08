@@ -109,7 +109,7 @@ which also get a light tint for readability) and D-day icons (transparent parts 
 circle). Clicks are caught by the whole widget rectangle, including transparent areas.
 
 **Right-click a widget** (or its ⋯ button at the right of the top strip) opens its own options, **꾸미기 / Appearance…**,
-**위젯 캡처 / Capture widget**, **집중 모드 / Focus**, **항상 위에 표시 / Keep on top**, **숨기기 / Hide**,
+**위젯 캡처 / Capture widget**, **이 위젯만 보기 / Focus**, **항상 위에 표시 / Keep on top**, **숨기기 / Hide**,
 **삭제 / Close**, and shortcuts to the **위젯 보관함 / Widget menu** and its **메모·일정 검색 / Search**. **Read summary**
 appears when its accessibility setting is enabled. Inside a text box you get the
 normal copy/paste menu; right-click the widget's header or edge to open the widget menu.
@@ -234,7 +234,7 @@ screen-reader names and announcements, and a focus ring that only appears when y
 |                        | 줄 길이 짧게 (`shortLines`)                                                       | memo and diary lines stop at ~60 characters                                                                                                                                                                                                                              |
 |                        | 남은 할 일 알려주기 (`reminderTime`, e.g. `"18:00"`)                              | once a day at that time: "오늘 남은 할 일 3개" (toast; also a Windows notification if that's on)                                                                                                                                                                         |
 |                        | 요약 읽기 메뉴 (`announceSummary`)                                               | adds _요약 읽기 / Read summary_ to a widget's normal right-click menu (off by default; summaries are always available by keyboard **S**)                                                                                                                                  |
-|                        | 집중 모드 (right-click)                                                           | hides every other widget until you press Esc or _집중 모드 종료_                                                                                                                                                                                                         |
+|                        | 이 위젯만 보기 (right-click)                                                           | hides every other widget until you press Esc or _전체 보기_                                                                                                                                                                                                         |
 
 Always available:
 
