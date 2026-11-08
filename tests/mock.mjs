@@ -10,7 +10,7 @@ try {
   await board.goto("http://localhost:8765/index.html?lang=en");
   await ready(board);
   const settings = await ctx.newPage();
-  await settings.goto("http://localhost:8765/settings.html?lang=en");
+  await settings.goto("http://localhost:8765/settings.html?lang=en&page=about");
   await settings.waitForTimeout(300);
   const state = await board.evaluate(() => __mock.invoke("load_state"));
   const config = await settings.evaluate(() => __mock.invoke("get_settings"));
@@ -31,6 +31,30 @@ try {
   console.log(
     "PASS shared version, config and widget types match native sources",
   );
+  await settings.evaluate(() => {
+    window.__mockUpdate = { found: "99.0.0", notes: "Signed release notes" };
+    return __mock.invoke("update_check");
+  });
+  await settings.waitForFunction(
+    () => document.querySelector("#about-update-notes").textContent === "Signed release notes",
+  );
+  assert.equal(await settings.locator("#about-update-offer").isVisible(), true);
+  await settings.locator("#about-update-skip").click();
+  await settings.waitForFunction(
+    () => document.querySelector("#about-update-offer").hidden,
+  );
+  console.log("PASS updater offer notes render and Skip hides the offered version");
+  await settings.evaluate(() => {
+    window.__mockUpdate = { found: "99.0.0", notes: "Install me" };
+    return __mock.invoke("update_check");
+  });
+  await settings.waitForFunction(
+    () => document.querySelector("#about-update-apply").textContent.includes("99.0.0"),
+  );
+  await settings.locator("#about-update-apply").click();
+  assert.equal(await settings.evaluate(() => window.__installed), true);
+  assert.equal(await settings.evaluate(() => window.__installedCommand), "update_install");
+  console.log("PASS updater Install invokes update_install");
   await board.evaluate(() =>
     __mock.invoke("save_config", {
       patch: { holidays: { add: { "2030-01-01": "custom" } } },

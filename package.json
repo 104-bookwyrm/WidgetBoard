@@ -5,7 +5,10 @@
   "description": "Dev-only harness for WidgetBoard UI tests. The app itself has no build step.",
   "scripts": {
     "serve": "python -m http.server 8765 --directory ui",
-    "test": "npm run test:smoke && npm run test:recurrence && npm run test:ics && npm run test:persistence && npm run test:mock && npm run test:backups && npm run test:grid-placement-lab && npm run test:grid-placement-browser && npm run test:tutorial && npm run test:copy",
+    "test": "npm run test:smoke && npm run test:recurrence && npm run test:ics && npm run test:persistence && npm run test:mock && npm run test:backups && npm run test:grid-placement-lab && npm run test:grid-placement-browser && npm run test:tutorial && npm run test:workflows && npm run test:release && npm run test:copy",
+    "test:release": "node --test tests/release-tools.mjs",
+    "test:workflows": "node --test tests/workflows.mjs",
+    "tauri": "tauri",
     "test:smoke": "node tests/smoke.mjs",
     "test:recurrence": "node tests/recurrence.mjs",
     "test:ics": "node tests/ics.mjs",
@@ -18,6 +21,7 @@
     "test:tutorial": "node tests/tutorial.mjs && node tests/tutorial-e2e.mjs && node tests/tutorial-guide.mjs && node tests/tutorial-isolation.mjs && node tests/tutorial-onboarding.mjs && node tests/tutorial-settings.mjs && node tests/tutorial-welcome.mjs && node tests/tutorial-debug.mjs"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "2.11.4",
     "playwright": "^1.55.0"
   }
 }
