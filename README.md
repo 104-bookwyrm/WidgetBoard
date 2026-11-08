@@ -66,7 +66,7 @@ To start it with Windows, tick Settings → 일반 → _컴퓨터 시작 시 자
 - right-click → **위젯 추가 / Add widget ›** grouped as 일정 · Planning (Checklist, Calendar, D-day), 기록 · Notes
   (Memo, Diary), 시간 · Time (Clock, Alarm, Timer, Stopwatch, Pomodoro), 이미지 · Images (Image, Showcase) and
   Now Playing; **편집 모드 / Edit layout**; **모든 위젯 숨기기/보이기 / Show/hide all widgets**;
-  **보드 캡처 저장 / Export layout**; **위젯 메뉴… / Widget menu…**; **설정… / Settings…**; quit.
+  **보드 캡처 저장 / Export layout**; **위젯 보관함… / Widget menu…**; **설정… / Settings…**; quit.
   When an update is waiting, _업데이트 있음_ appears at the bottom.
 - left-click → bring all widgets in front of other windows
 
@@ -110,7 +110,7 @@ circle). Clicks are caught by the whole widget rectangle, including transparent 
 
 **Right-click a widget** (or its ⋯ button at the right of the top strip) opens its own options, **모양 / Appearance…**,
 **위젯 캡처 / Capture widget**, **집중 모드 / Focus**, **항상 위에 표시 / Keep on top**, **숨기기 / Hide**,
-**닫기 / Close**, and shortcuts to the **위젯 메뉴 / Widget menu** and its **검색 / Search**. **Read summary**
+**삭제 / Close**, and shortcuts to the **위젯 보관함 / Widget menu** and its **메모·일정 검색 / Search**. **Read summary**
 appears when its accessibility setting is enabled. Inside a text box you get the
 normal copy/paste menu; right-click the widget's header or edge to open the widget menu.
 
@@ -126,7 +126,7 @@ it to `Pictures\WidgetBoard`.
 content, so switching back restores the memo text, timer settings or photo list. A larger type may need more grid space.
 Timer, Stopwatch and Pomodoro switch in place; a running one stops first and its time stays in the record.
 
-Closing shows **Undo** for 7 seconds. What the widget held stays in the [Widget menu](#the-widget-menu), ready to put
+Closing is a soft delete and shows **Undo** for 7 seconds. What the widget held goes to _최근 삭제_ in the [Widget menu](#the-widget-menu), where _복구_ puts it
 back on the board.
 
 **Monitors** - every monitor gets its own board. New widgets go to the primary monitor; right-click → _Move to display_.
@@ -139,7 +139,7 @@ Also switches on by itself when Windows' _Accessibility → Visual effects → A
 **Fonts** - Settings → 모양 sets one font and text size for everything; right-click → _Appearance…_ overrides them for a
 single widget (installed fonts are suggested, any name can be typed; _초기화_ removes every override).
 
-**Layouts (위젯 프리셋)** - tray → _위젯 메뉴…_ → **위젯 프리셋** tab.
+**Layouts (위젯 프리셋)** - tray → _위젯 보관함…_ → **위젯 프리셋** tab.
 
 - **업무용 / Work desk**: big writable calendar, to-dos, memo, timer, D-days, Now Playing.
 - **공부용 / Study**: focus timer, stopwatch (study-time total), to-dos, diary (study log), D-days (exams), month calendar.
@@ -173,27 +173,27 @@ contrast, font and motion settings.
 
 ## The Widget menu
 
-Tray → **위젯 메뉴…** (or right-click a widget → _위젯 메뉴…_) opens a window with everything you have made, whether
+Tray → **위젯 보관함…** (or right-click a widget → _위젯 보관함…_) opens a window with everything you have made, whether
 or not it is on the board.
 
-- **내 위젯 · My widgets** lists every memo, image set, timer, showcase and so on, marked _보드에 있음_ or
-  _보드에 없음_. _보드에 표시_ puts one back on the board with its content; _위치 보기_ makes the widget's outline
+- **내 위젯 · My widgets** lists every memo, image set, timer, showcase and so on, marked _보드에 표시 중_ or
+  _숨긴 위젯_. _보드에 보이기_ puts one back on the board with its content; _화면에서 찾기_ makes the widget's outline
   pulse on whichever monitor it is; _이름 바꾸기_ gives it your own name (shown in the top strip, screen-reader labels
   and messages).
 - **Closing** a widget only takes it off the board: its content waits here. _삭제_ moves an item to
-  _최근 삭제된 항목_, where _복원_ brings it back and _영구 삭제_ erases it for good (asked first; images only it used
+  _최근 삭제_, where _복구_ brings it back and _완전 삭제_ erases it for good (asked first; images only it used
   are deleted too).
 - **검색 · Search** finds text in memos, the diary and the calendar.
 - **위젯 프리셋 · Layouts** holds the presets, your saved layouts and undo (see [Layouts](#everyday-use)).
-- **둘러보기 · Browse** shows every widget type with a short how-to; _보드에 추가_ adds one.
+- **위젯 추가 · Browse** shows every widget type with a short how-to; _보드에 추가_ adds one.
 - **Hide** - right-click a widget → _숨기기_. A hidden widget keeps its content, its place and anything it is doing (a
   hidden timer still rings). It isn't drawn; in edit mode it shows as a faint dashed ghost so you know what's holding
   that space. Right-click it in edit mode → _보이기_ brings it back.
 - **What closing does not delete** - checklist tasks, calendar entries and diary pages are shared by every widget of
   that type, so closing or erasing a widget leaves them alone.
-- **Memo archive** (opt-in, off by default) - Settings → 위젯 → _메모 보관함_. When on, memo text is saved as it
+- **Memo archive** (opt-in, off by default) - 설정 > 위젯 > _메모 변경 기록_. When on, memo text is saved as it
   changes: at most once a minute while you type, and at once when a memo is closed or mostly deleted. Unchanged text
-  isn't saved twice. Each memo's versions are under _기록_ in the Widget menu, newest first, each with a copy button.
+  isn't saved twice. Each memo's versions are under _변경 기록_ in the Widget menu, newest first, each with a copy button.
   The archive survives erasing and restoring backups; turning it off keeps what is already saved. Typical use adds a
   few MB a year (about 40 MB at the extreme of an hour's memo typing every day).
 
@@ -341,7 +341,7 @@ One page per day, saved automatically as you type.
 ### 타이머 · Timer (3×2 / 2×2)
 
 **타이머 (timer)**, **스톱워치 (stopwatch)** and **포모도로 (pomodoro)** are listed as three widgets. In Edit layout,
-_다른 위젯으로 바꾸기_ switches between them in place; a running one stops first, and its time stays in the record. The faces show
+_위젯 종류 바꾸기_ switches between them in place; a running one stops first, and its time stays in the record. The faces show
 only the time and icon buttons (hover a button for its name); everything else is in the right-click menu.
 
 #### Timer mode
@@ -641,9 +641,9 @@ Backups go to `Documents\WidgetBoard\Backups\WidgetBoard-backup-YYYYMMDD-HHMM[-a
 ## When something goes wrong
 
 - A save that fails (disk full, folder locked) shows a message; the diary keeps your text and retries.
-- A widget that can't load, or an unknown widget type, shows a note instead of breaking the board - right-click → 닫기.
-- Closed something by mistake: _되돌리기_ in the message, or 위젯 메뉴 → 내 위젯 → _보드에 표시_ (or
-  _최근 삭제된 항목_ → _복원_ for something you deleted there).
+- A widget that can't load, or an unknown widget type, shows a note instead of breaking the board - right-click → 삭제.
+- Closed something by mistake: _실행 취소_ in the message, or 위젯 보관함 → _최근 삭제_ → _복구_ (content left off the
+  board by older versions sits under 내 위젯 as _숨긴 위젯_, with _보드에 보이기_).
 - Lost more than that: Settings → 백업 · 데이터 → restore a backup (your current state is snapshotted first).
 - Damaged or hand-edited `layout.json` / `events.json` values are repaired on load; a broken
   `theme.css` value such as `--cell: abc` falls back to a safe default.
