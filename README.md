@@ -66,7 +66,7 @@ To start it with Windows, tick Settings → 일반 → _Windows 시작 시 자�
 - right-click → **위젯 추가 / Add widget ›** grouped as 플래너 · Planning (Checklist, Calendar, D-day), 노트 · Notes
   (Memo, Diary), 시간 · Time (Clock, Alarm, Timer, Stopwatch, Pomodoro), 이미지 · Images (Image, Showcase) and
   Now Playing; **편집 모드 / Edit layout**; **위젯 전체 보이기/숨기기 / Show/hide all widgets**;
-  **보드 캡처 저장 / Export layout**; **위젯 보관함… / Widget menu…**; **설정… / Settings…**; quit.
+  **보드 캡처 저장 / Export layout**; **위젯 보관함… / Widget menu…**; **설정… / Settings…**; **종료 / Quit**.
   When an update is waiting, _업데이트 있음_ appears at the bottom.
 - left-click → bring all widgets in front of other windows
 
